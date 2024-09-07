@@ -22,7 +22,7 @@ class PLCControlApp:
         self.ip_entry.grid(row=1, column=1, padx=10, pady=10)
         
         # Connection Button
-        self.connect_button = tk.Button(root, text="Connect", command=self.connect_to_plc, width=10, bg='blue', fg='white')
+        self.connect_button = ttk.Button(root, text="Connect", command=self.connect_to_plc)
         self.connect_button.grid(row=2, column=0, padx=10, pady=10)
         
         # Connection Status Label
@@ -30,13 +30,13 @@ class PLCControlApp:
         self.status_label.grid(row=2, column=1, padx=10, pady=10)
 
         # Control Buttons (Initially disabled)
-        self.reset_button = tk.Button(root, text="Reset", command=self.reset_plc, width=10, bg='gray', state=tk.DISABLED)
+        self.reset_button = ttk.Button(root, text="Reset", command=self.reset_plc, state=tk.DISABLED)
         self.reset_button.grid(row=3, column=0, padx=10, pady=10)
         
-        self.run_button = tk.Button(root, text="Run", command=self.run_plc, width=10, bg='gray', state=tk.DISABLED)
+        self.run_button = ttk.Button(root, text="Run", command=self.run_plc, state=tk.DISABLED)
         self.run_button.grid(row=3, column=1, padx=10, pady=10)
         
-        self.stop_button = tk.Button(root, text="Stop", command=self.stop_plc, width=10, bg='gray', state=tk.DISABLED)
+        self.stop_button = ttk.Button(root, text="Stop", command=self.stop_plc, state=tk.DISABLED)
         self.stop_button.grid(row=3, column=2, padx=10, pady=10)
         
         # Initialize connection variables
@@ -98,12 +98,6 @@ class PLCControlApp:
                 print("PLC connection not open")
         except Exception as e:
             print(f"Error writing to PLC: {e}")
-    
-    def update_button_color(self, button, status):
-        if status:
-            button.config(bg="green")
-        else:
-            button.config(bg="red")
 
 # Create the Tkinter root window
 root = tk.Tk()
