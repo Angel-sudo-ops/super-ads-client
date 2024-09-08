@@ -5,8 +5,15 @@ import re
 import os
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
+import pyads
+import sys
 
-__version__ = '1.0.1'
+__version__ = '1.1.2'
+__icon__ = 'ads.ico'
+
+####################################################################################################################################################################
+########################################################## Initial data reading from db3 file ######################################################################
+####################################################################################################################################################################
 
 def read_db3_file(db3_file_path, table_name):
     try:
@@ -42,8 +49,8 @@ def read_db3_file(db3_file_path, table_name):
         messagebox.showerror("Error", f"An error occurred: {e}")
         return None
 
+
 def populate_table_from_db3():
-    
     db3_path = filedialog.askopenfilename(title="Select config.db3 file", 
                                           initialdir="C:\\Program Files (x86)\\Elettric80",
                                           filetypes=[("DB3 files", "*.db3")])
@@ -100,11 +107,12 @@ def populate_table_from_db3():
     for item in routes_data:
         treeview.insert("", "end", values=item)
 
+    # Save data to custom xml to avoid reloading .db3 everytime app is open
     save_table_data_to_xml(treeview)
 
 
 # Save data to XML
-def save_table_data_to_xml(tree, filename="table_data.xml"):
+def save_table_data_to_xml(tree, filename="lgv_data.xml"):
     lgv_list = ET.Element("LGVData")
     for row in tree.get_children():
         lgv = ET.SubElement(lgv_list, "LGV")
@@ -121,7 +129,7 @@ def save_table_data_to_xml(tree, filename="table_data.xml"):
         f.write(xmlstr)
 
 # Load data from XML
-def load_table_data_from_xml(tree, filename="table_data.xml"):
+def load_table_data_from_xml(tree, filename="lgv_data.xml"):
     if os.path.exists(filename):
         tree_xml = ET.parse(filename)
         root = tree_xml.getroot()
@@ -134,7 +142,9 @@ def load_table_data_from_xml(tree, filename="table_data.xml"):
         print("No saved XML data found, loading default table.")
 
 
-################################## Sorting ################################################
+####################################################################################################################################################################
+############################################################## Treeview setup and sorting ##########################################################################
+####################################################################################################################################################################
 
 # Dictionary to maintain custom headings
 headings = {
@@ -171,11 +181,38 @@ def natural_keys(text):
     return [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', text)]
 
 
+####################################################################################################################################################################
+####################################################################### Create UI ##################################################################################
+####################################################################################################################################################################
 
 # Create the root window
 root = tk.Tk()
 root.title(f"Super ADS Client {__version__}")
 # root.geometry("600x400")  # Adjust the window size
+
+# Check if running as a script or frozen executable
+if getattr(sys, 'frozen', False):
+    icon_path = os.path.join(sys._MEIPASS, __icon__)
+else:
+    icon_path = os.path.abspath(__icon__)
+# root.iconbitmap(icon_path)
+
+def set_icon():
+    if os.path.exists(icon_path):
+        root.iconbitmap(icon_path)
+    else:
+        print("Icon file not found.")
+
+# Apply the icon after the window is initialized
+root.after(100, set_icon)
+
+style = ttk.Style()
+style.configure("LGV.TButton", 
+                focuscolor="white", 
+                padding=4, 
+                focusthickness=1, 
+                font=("Segoe UI", 13))
+                # font = ("Tahoma", 12))
 
 # Create a frame for the table (Treeview)
 table_frame = ttk.Frame(root)
@@ -185,14 +222,12 @@ table_frame.grid(row=1, rowspan=4, column=0, padx=15, pady=10)
 columns = ("Name", "NetId", "Type")
 treeview = ttk.Treeview(table_frame, columns=columns, show="headings")
 
-for col in columns:
-        treeview.heading(col, text=col)
-        treeview.column(col, width=150)
-setup_treeview()
+# Define the column widths
+treeview.column("Name", width=80, anchor='w')
+treeview.column("NetId", width=120, anchor='w')
+treeview.column("Type", width=50, anchor='w')
 
-# Insert sample data
-# treeview.insert("", "end", values=("LGV021", "1.1.1.1.1.1", "TC2"))
-# treeview.insert("", "end", values=("PLC 2", "1.1.1.2.1.1", "Stopped"))
+setup_treeview()
 
 # Add the treeview to the table frame
 treeview.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -210,14 +245,35 @@ button_frame = ttk.Frame(root)
 button_frame.grid(row=0, column=1, padx=10, pady=10)
 
 # Add some buttons to the right frame
-start_button = ttk.Button(button_frame, text="Start PLC", command=lambda: print("Start clicked"))
-start_button.pack(pady=5)
+reset_button = ttk.Button(button_frame, 
+                          text="Reset", 
+                          style='LGV.TButton',
+                          command=lambda: print("Reset clicked"))
+reset_button.pack(pady=5)
 
-stop_button = ttk.Button(button_frame, text="Stop PLC", command=lambda: print("Stop clicked"))
+run_button = ttk.Button(button_frame, 
+                        text="Run",
+                        style='LGV.TButton', 
+                        command=lambda: print("Run clicked"))
+run_button.pack(pady=5)
+
+stop_button = ttk.Button(button_frame, 
+                         text="Stop", 
+                         style='LGV.TButton',
+                         command=lambda: print("Stop clicked"))
 stop_button.pack(pady=5)
 
-reset_button = ttk.Button(button_frame, text="Reset PLC", command=lambda: print("Reset clicked"))
-reset_button.pack(pady=5)
+man_auto_button = ttk.Button(button_frame, 
+                             text="Man/Auto",
+                             style='LGV.TButton',
+                             command=lambda: print("Man/Auto clicked"))
+man_auto_button.pack(pady=5)
+
+dis_horn_button = ttk.Button(button_frame, 
+                             text="Disable Horn", 
+                             style='LGV.TButton',
+                             command=lambda: print("Disable Horn clicked"))
+dis_horn_button.pack(pady=5)
 
 load_table_data_from_xml(treeview)
 
