@@ -11,6 +11,9 @@ import sys
 __version__ = '1.1.2'
 __icon__ = 'ads.ico'
 
+# Variable to hold the current ads connection
+current_ads_connection = None
+
 ####################################################################################################################################################################
 ########################################################## Initial data reading from db3 file ######################################################################
 ####################################################################################################################################################################
@@ -143,6 +146,56 @@ def load_table_data_from_xml(tree, filename="lgv_data.xml"):
 
 
 ####################################################################################################################################################################
+################################################################# ADS connection setup #############################################################################
+####################################################################################################################################################################
+
+def check_plc_status(ads_connection):
+    status = ads_connection.read_state()[0]
+    if status == 5:
+        return True
+    return False
+
+# Close the current connection if it exists
+def close_current_connection():
+    global current_ads_connection
+    if current_ads_connection:
+        current_ads_connection.close()
+        current_ads_connection = None
+
+# Attempt to connect to the selected PLC
+def connect_to_plc(tree, label):
+    global current_ads_connection
+    # Get the selected PLC data
+    selected_item = tree.selection()
+    if not selected_item:
+        messagebox.showerror("Error", "No PLC selected")
+        return
+
+    plc_data = tree.item(selected_item)["values"]
+    plc_name, ams_net_id, plc_type = plc_data
+
+    # Close any previous connection
+    close_current_connection()
+
+    try:
+        # Attempt to open a new connection
+        current_ads_connection = pyads.Connection(ams_net_id, 851)  # Assuming port 851
+        current_ads_connection.open()
+
+        # Check PLC status
+        if check_plc_status(current_ads_connection):
+            label.config(text="Connected", fg="green")
+        else:
+            raise Exception("PLC not in a valid state")
+
+    except Exception as e:
+        current_ads_connection = None
+        messagebox.showerror("Connection Error", f"Failed to connect to {plc_name}: {str(e)}")
+        label.config(text="Disconnected", foreground="red")
+
+
+
+####################################################################################################################################################################
 ############################################################## Treeview setup and sorting ##########################################################################
 ####################################################################################################################################################################
 
@@ -214,9 +267,23 @@ style.configure("LGV.TButton",
                 font=("Segoe UI", 13))
                 # font = ("Tahoma", 12))
 
+
+load_config_button = ttk.Button(root, text="Load Config.db3", command=populate_table_from_db3)
+load_config_button.grid(row=0, column=0, padx=5, pady=5)
+
+# Add a button to connect to the PLC
+connect_button = ttk.Button(root, text="Connect", command=lambda: connect_to_plc(treeview, status_label))
+connect_button.grid(row=0, column=1, padx=5, pady=5)
+
+# Connection status label
+status_label = ttk.Label(root, text="Disconnected", foreground="red")
+status_label.grid(row=0, column=2, padx=5, pady=5)
+
+
+
 # Create a frame for the table (Treeview)
 table_frame = ttk.Frame(root)
-table_frame.grid(row=1, rowspan=4, column=0, padx=15, pady=10)
+table_frame.grid(row=1, column=0, padx=15, pady=10)
 
 # Create the Treeview (table)
 columns = ("Name", "NetId", "Type")
@@ -237,12 +304,12 @@ scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=treeview.yview
 treeview.configure(yscroll=scrollbar.set)
 scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-load_config_button = ttk.Button(root, text="Load Config.db3", command=populate_table_from_db3)
-load_config_button.grid(row=0, column=0, padx=5, pady=5)
+
+
 
 # Create a frame for the buttons
 button_frame = ttk.Frame(root)
-button_frame.grid(row=0, column=1, padx=10, pady=10)
+button_frame.grid(row=1, column=1, padx=10, pady=10)
 
 # Add some buttons to the right frame
 reset_button = ttk.Button(button_frame, 
