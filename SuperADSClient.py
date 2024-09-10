@@ -491,6 +491,17 @@ disable_control_buttons()
 
 load_table_data_from_xml(treeview)
 
+
+
+def on_closing():
+    close_current_connection()  # Close connection before exiting
+    root.destroy()  # Close the application
+    
+# Bind the window close event to custom close function
+root.protocol("WM_DELETE_WINDOW", on_closing)
+
+
+
 root.mainloop()
 
 
