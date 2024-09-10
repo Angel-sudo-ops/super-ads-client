@@ -7,9 +7,10 @@ import xml.etree.ElementTree as ET
 from xml.dom import minidom
 import pyads
 import sys
+import threading
 
-__version__ = '1.1.2'
-__icon__ = 'ads.ico'
+__version__ = '1.3.3'
+__icon__ = 'agv.ico'
 
 # Variable to hold the current ads connection
 current_ads_connection = None
@@ -135,12 +136,12 @@ def save_table_data_to_xml(tree, filename="lgv_data.xml"):
 def load_table_data_from_xml(tree, filename="lgv_data.xml"):
     if os.path.exists(filename):
         tree_xml = ET.parse(filename)
-        root = tree_xml.getroot()
-        for plc in root.findall("LGV"):
-            plc_name = plc.find("Name").text
-            ams_net_id = plc.find("AMSNetId").text
-            plc_type = plc.find("Type").text
-            tree.insert("", "end", values=(plc_name, ams_net_id, plc_type))
+        lgv_list = tree_xml.getroot()
+        for lgv in lgv_list.findall("LGV"):
+            lgv_name = lgv.find("Name").text
+            ams_net_id = lgv.find("AMSNetId").text
+            tc_type = lgv.find("Type").text
+            tree.insert("", "end", values=(lgv_name, ams_net_id, tc_type))
     else:
         print("No saved XML data found, loading default table.")
 
@@ -162,37 +163,177 @@ def close_current_connection():
         current_ads_connection.close()
         current_ads_connection = None
 
-# Attempt to connect to the selected PLC
-def connect_to_plc(tree, label):
+# Background connection handler (runs in a separate thread)
+def background_connect(plc_data, label):
     global current_ads_connection
-    # Get the selected PLC data
-    selected_item = tree.selection()
-    if not selected_item:
-        messagebox.showerror("Error", "No PLC selected")
-        return
+    
+    lgv_name, ams_net_id, tc_type = plc_data
 
-    plc_data = tree.item(selected_item)["values"]
-    plc_name, ams_net_id, plc_type = plc_data
+    port = 851 if tc_type == 'TC3' else 801
 
     # Close any previous connection
     close_current_connection()
 
+    update_ui_connection_status("Connecting...", "orange", label)
+
     try:
         # Attempt to open a new connection
-        current_ads_connection = pyads.Connection(ams_net_id, 851)  # Assuming port 851
+        current_ads_connection = pyads.Connection(ams_net_id, port)
         current_ads_connection.open()
 
         # Check PLC status
         if check_plc_status(current_ads_connection):
-            label.config(text="Connected", fg="green")
+            update_ui_connection_status("Connected", "green", label)
+            enable_control_buttons()
         else:
             raise Exception("PLC not in a valid state")
 
     except Exception as e:
         current_ads_connection = None
-        messagebox.showerror("Connection Error", f"Failed to connect to {plc_name}: {str(e)}")
-        label.config(text="Disconnected", foreground="red")
+        update_ui_connection_status("Disconnected", "red", label)
+        messagebox.showerror("Connection Error", f"Failed to connect to {lgv_name}: {str(e)}")
 
+# Update the UI status label (called from the main thread)
+def update_ui_connection_status(text, color, label):
+    label.config(text=text, foreground=color)
+
+# Attempt to connect to the selected PLC (starts in a new thread)
+def connect_to_plc(tree, label):
+    # Get the selected PLC data
+    selected_item = tree.selection()
+    if not selected_item:
+        messagebox.showerror("Error", "No LGV selected")
+        return
+
+    lgv_data = tree.item(selected_item)["values"]
+
+    # Start the connection in a new thread
+    connection_thread = threading.Thread(target=background_connect, args=(lgv_data, label))
+    connection_thread.start()
+
+
+# Close the current connection when selection changes
+def on_treeview_select(event):
+    global current_ads_connection
+    # Close any existing connection when the selection changes
+    if current_ads_connection:
+        close_current_connection()
+        update_ui_connection_status("Disconnected", "red", status_label)
+
+    disable_control_buttons()
+
+# Enable control buttons after a successful connection
+def enable_control_buttons():
+    reset_button.config(state='normal')
+    run_button.config(state='normal')
+    stop_button.config(state='normal')
+    man_auto_button.config(state='normal')
+    dis_horn_button.config(state='normal')
+
+def disable_control_buttons():
+    # You can disable the control buttons here as well, until a new connection is established
+    reset_button.config(state='disabled')
+    run_button.config(state='disabled')
+    stop_button.config(state='disabled')
+    man_auto_button.config(state='disabled')
+    dis_horn_button.config(state='disabled')
+
+def on_core_check():
+    if is_core.get():
+        print("Core library present")
+    else:
+        print("Normal library")
+
+
+####################################################################################################################################################################
+#################################################################### Write variables ###############################################################################
+####################################################################################################################################################################
+# Dictionary to map variable names for each action based on conditions
+variable_mapping = {
+    'reset': {
+        'TC2': ".ADS_Reset",
+        ('TC3', False): "ADS_Reset",
+        ('TC3', True): "CoreGVL.ADS_Reset"
+    },
+    'run': {
+        'TC2': ".ADS_Run",
+        ('TC3', False): "ADS_Run",
+        ('TC3', True): "CoreGVL.ADS_Run"
+    },
+    'stop': {
+        'TC2': ".ADS_Stop",
+        ('TC3', False): "ADS_Stop",
+        ('TC3', True): "CoreGVL.ADS_Stop"
+    },
+    'man_auto': {
+        'TC2': ".ADS_MCD_Mode",
+        ('TC3', False): "ADS_MCD_Mode",
+        ('TC3', True): "CoreGVL.ADS_MCD_Mode"
+    },
+    'dis_horn': {
+        'TC2': ".ADS_DisableHorn",
+        ('TC3', False): "ADS_DisableHorn",
+        ('TC3', True): "CoreGVL.ADS_DisableHorn"
+    }
+}
+
+
+def write_variable(action, tc_type, is_core, value):
+    global current_ads_connection
+
+    # Select the appropriate variable name for the action, based on tc_type and is_core
+    if tc_type == 'TC2':
+        variable_name = variable_mapping[action]['TC2']  # For TC2, ignore is_core
+    else:
+        variable_name = variable_mapping[action][('TC3', is_core)]  # For TC3, consider is_core
+
+    if current_ads_connection is not None:
+        try:
+            # Write the value to the PLC
+            current_ads_connection.write_by_name(variable_name, value, pyads.PLCTYPE_BOOL)
+            print(f"Successfully wrote {value} to {variable_name} for action: {action}")
+        except Exception as e:
+            messagebox.showerror("Write Error", f"Failed to write to {variable_name}: {str(e)}")
+    else:
+        messagebox.showerror("Connection Error", "No active connection to write to.")
+    
+
+# Variable to track toggle state for dis_horn
+dis_horn_state = False
+
+def on_dis_horn_button_click():
+    global dis_horn_state
+    selected_item = treeview.selection()
+    if not selected_item:
+        messagebox.showerror("Error", "No LGV selected")
+        return
+
+    lgv_data = treeview.item(selected_item)["values"]
+    tc_type = lgv_data[2]
+
+    # Toggle the state of dis_horn
+    dis_horn_state = not dis_horn_state
+    write_variable('dis_horn', tc_type, is_core.get(), dis_horn_state)
+    print("Disable Horn pressed")
+
+
+def on_button_action(action, value):
+    selected_item = treeview.selection()
+    if not selected_item:
+        messagebox.showerror("Error", "No LGV selected")
+        return
+
+    lgv_data = treeview.item(selected_item)["values"]
+    tc_type = lgv_data[2]
+
+    # Write the value (True or False) for the specific action
+    write_variable(action, tc_type, is_core.get(), value)
+
+
+def bind_button_actions(button, action, press_value=True, release_value=False):
+    # Bind press and release actions with custom values
+    button.bind("<ButtonPress>", lambda event: on_button_action(action, press_value))
+    button.bind("<ButtonRelease>", lambda event: on_button_action(action, release_value))
 
 
 ####################################################################################################################################################################
@@ -279,7 +420,9 @@ connect_button.grid(row=0, column=1, padx=5, pady=5)
 status_label = ttk.Label(root, text="Disconnected", foreground="red")
 status_label.grid(row=0, column=2, padx=5, pady=5)
 
-
+is_core = tk.IntVar()
+core_check = ttk.Checkbutton(root, text="IsCore", variable=is_core, command=on_core_check)
+core_check.grid(row=0, column=3, padx=5, pady=5)
 
 # Create a frame for the table (Treeview)
 table_frame = ttk.Frame(root)
@@ -299,6 +442,8 @@ setup_treeview()
 # Add the treeview to the table frame
 treeview.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
+treeview.bind("<<TreeviewSelect>>", on_treeview_select)
+
 # Create a vertical scrollbar for the table
 scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=treeview.yview)
 treeview.configure(yscroll=scrollbar.set)
@@ -314,33 +459,35 @@ button_frame.grid(row=1, column=1, padx=10, pady=10)
 # Add some buttons to the right frame
 reset_button = ttk.Button(button_frame, 
                           text="Reset", 
-                          style='LGV.TButton',
-                          command=lambda: print("Reset clicked"))
+                          style='LGV.TButton')
 reset_button.pack(pady=5)
+bind_button_actions(reset_button, 'reset')
 
 run_button = ttk.Button(button_frame, 
                         text="Run",
-                        style='LGV.TButton', 
-                        command=lambda: print("Run clicked"))
+                        style='LGV.TButton')
 run_button.pack(pady=5)
+bind_button_actions(run_button, 'run')
 
 stop_button = ttk.Button(button_frame, 
                          text="Stop", 
-                         style='LGV.TButton',
-                         command=lambda: print("Stop clicked"))
+                         style='LGV.TButton')
 stop_button.pack(pady=5)
+bind_button_actions(stop_button, 'stop', press_value=False, release_value=True)
 
 man_auto_button = ttk.Button(button_frame, 
                              text="Man/Auto",
-                             style='LGV.TButton',
-                             command=lambda: print("Man/Auto clicked"))
+                             style='LGV.TButton')
 man_auto_button.pack(pady=5)
+bind_button_actions(man_auto_button, 'man_auto')
 
 dis_horn_button = ttk.Button(button_frame, 
                              text="Disable Horn", 
                              style='LGV.TButton',
-                             command=lambda: print("Disable Horn clicked"))
+                             command=on_dis_horn_button_click)
 dis_horn_button.pack(pady=5)
+
+disable_control_buttons()
 
 load_table_data_from_xml(treeview)
 
