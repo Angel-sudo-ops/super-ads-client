@@ -9,7 +9,7 @@ import pyads
 import sys
 import threading
 
-__version__ = '1.4.5'
+__version__ = '1.5.6'
 __icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
@@ -166,13 +166,13 @@ def close_current_connection():
 # Background connection handler (runs in a separate thread)
 def background_connect(plc_data, label):
     global current_ads_connection
+
+    # If already connected, don't try to reconnect
+    if current_ads_connection is not None:
+        return
     
     lgv_name, ams_net_id, tc_type = plc_data
-
     port = 851 if tc_type == 'TC3' else 801
-
-    # Close any previous connection
-    close_current_connection()
 
     update_ui_connection_status("Connecting...", "orange", label)
 
@@ -185,6 +185,10 @@ def background_connect(plc_data, label):
         if check_plc_status(current_ads_connection):
             update_ui_connection_status("Connected", "green", label)
             enable_control_buttons()
+
+            # Call update_buttons once to start the loop
+            update_buttons()
+
         else:
             raise Exception("PLC not in a valid state")
 
@@ -202,7 +206,8 @@ def connect_to_plc(tree, label):
     # Get the selected PLC data
     selected_item = tree.selection()
     if not selected_item:
-        messagebox.showerror("Error", "No LGV selected")
+        # messagebox.showinfo("Attention", "Select LGV")
+        print("No LGV selected")
         return
 
     lgv_data = tree.item(selected_item)["values"]
@@ -212,12 +217,26 @@ def connect_to_plc(tree, label):
     connection_thread.start()
 
 
+previous_selection = None #track previous connection
+
 # Close the current connection when selection changes
 def on_treeview_select(event):
-    global current_ads_connection
+    global current_ads_connection, previous_selection
+    # Get the currently selected LGV
+    selected_item = treeview.selection()
+    if not selected_item:
+        return
+
+    # If the same item is selected, do nothing
+    if previous_selection == selected_item:
+        return
+
+    previous_selection = selected_item  # Update the previously selected item
+
     # Close any existing connection when the selection changes
     if current_ads_connection:
         close_current_connection()
+        disable_control_buttons()
         update_ui_connection_status("Disconnected", "red", status_label)
 
     tc_type = get_lgv_data()[2]
@@ -226,8 +245,6 @@ def on_treeview_select(event):
         core_check.config(state='normal')
     else:
         core_check.config(state='disabled')
-
-    disable_control_buttons()
 
 # Enable control buttons after a successful connection
 def enable_control_buttons():
@@ -284,33 +301,6 @@ variable_write = {
     }
 }
 
-variable_read = {
-    'reset': {
-        'TC2': ".ADS_Reset",
-        ('TC3', False): "Button.reset.isPressed",
-        ('TC3', True): "CoreGVL.ADS_Reset"
-    },
-    'run': {
-        'TC2': ".ADS_Run",
-        ('TC3', False): "Light.runButton.isTurnedOn",
-        ('TC3', True): "CoreGVL.ADS_Run"
-    },
-    'stop': {
-        'TC2': ".ADS_Stop",
-        ('TC3', False): "Button.stop.isPressed",
-        ('TC3', True): "CoreGVL.ADS_Stop"
-    },
-    'man_auto': {
-        'TC2': ".ADS_MCD_Mode",
-        ('TC3', False): "LGV.Status.MCD_Mode",
-        ('TC3', True): "CoreGVL.ADS_MCD_Mode"
-    },
-    'dis_horn': {
-        'TC2': ".ADS_DisableHorn",
-        ('TC3', False): "Output.DisableHorn",
-        ('TC3', True): "Output.disableHorn"
-    }
-}
 
 
 def write_variable(action, tc_type, is_core, value):
@@ -357,6 +347,88 @@ def bind_button_actions(button, action, press_value=True, release_value=False):
     # Bind press and release actions with custom values
     button.bind("<ButtonPress>", lambda event: on_button_action(action, press_value))
     button.bind("<ButtonRelease>", lambda event: on_button_action(action, release_value))
+
+
+####################################################################################################################################################################
+##################################################################### Read variables ###############################################################################
+####################################################################################################################################################################
+variable_read = {
+    'reset': {
+        'TC2': ".IN_Button_Reset",
+        ('TC3', False): "Button.reset.isPressed",
+        ('TC3', True): "CoreGVL.ADS_Reset"
+    },
+    'run': {
+        'TC2': ".OUT_Lamp_Top_Auto",
+        ('TC3', False): "Light.runButton.isTurnedOn",
+        ('TC3', True): "CoreGVL.ADS_Run"
+    },
+    'stop': {
+        'TC2': ".IN_Button_Stop",
+        ('TC3', False): "Button.stop.isPressed",
+        ('TC3', True): "CoreGVL.ADS_Stop"
+    },
+    'man_auto': {
+        'TC2': ".Sys_Mcd_Mode",
+        ('TC3', False): "LGV.Status.MCD_Mode",
+        ('TC3', True): "CoreGVL.ADS_MCD_Mode"
+    },
+    'dis_horn': {
+        'TC2': ".ADS_DisableHorn",
+        ('TC3', False): "Output.DisableHorn",
+        ('TC3', True): "Output.disableHorn"
+    }
+}
+
+def read_variable(action):
+    lgv_data = get_lgv_data()
+    tc_type = lgv_data[2]
+    is_core_value = is_core.get()
+
+    # Fetch the variable name based on the TC type and is_core flag
+    var_name = variable_read[action].get(tc_type) if tc_type == "TC2" else variable_read[action].get((tc_type, is_core_value))
+
+    if var_name and current_ads_connection is not None:
+        # Read the value from the PLC
+        try:
+            return current_ads_connection.read_by_name(var_name, pyads.PLCTYPE_BOOL)
+        except Exception as e:
+            print(f"Error reading variable {var_name}: {e}")
+            return None
+    return None
+
+def update_button_color(action, button, read_value):
+    if read_value is None:
+        return
+    # Change the button's foreground color based on the read_value
+    if read_value:  # If the PLC variable is True
+        button.config(foreground="green")
+    else:  # If the PLC variable is False
+        button.config(foreground="red")
+
+def update_buttons():
+    if current_ads_connection is None:
+        return
+    # Read variables and update button colors for all actions
+    actions = ['reset', 'run', 'stop', 'man_auto', 'dis_horn']
+    
+    # Mapping actions to buttons
+    button_mapping = {
+        'reset': reset_button,
+        'run': run_button,
+        'stop': stop_button,
+        'man_auto': man_auto_button,
+        'dis_horn': dis_horn_button
+    }
+    
+    for action in actions:
+        read_value = read_variable(action)  # Read value from PLC
+        button = button_mapping[action]
+        update_button_color(action, button, read_value)
+    
+    # Schedule the function to run again after 1 second
+    root.after(700, update_buttons)
+
 
 
 ####################################################################################################################################################################
@@ -441,42 +513,62 @@ style.configure("LGV.TButton",
                 focuscolor="white", 
                 padding=4, 
                 focusthickness=1, 
-                font=("Segoe UI", 13))
+                font=("Segoe UI", 18))
                 # font = ("Tahoma", 12))
 
 style.configure("Connect.TButton",
                 padding=2,
-                focusthickness=4,
-                font=("Segoe UI", 12))
+                focusthickness=1,
+                font=("Segoe UI", 13))
 
 
-menu_bar = tk.Menu(root)
-file_menu = tk.Menu(menu_bar, 
-                    tearoff=0)
-file_menu.add_command(label="Load Config.db3", command=populate_table_from_db3)
-menu_bar.add_cascade(label="File", menu=file_menu)
-root.config(menu=menu_bar)
-# load_config_button = ttk.Button(root, text="Load Config.db3", command=populate_table_from_db3, padding=3)
+# menu_bar = tk.Menu(root)
+# file_menu = tk.Menu(menu_bar, 
+#                     tearoff=0)
+# file_menu.add_command(label="Load Config.db3", command=populate_table_from_db3)
+# menu_bar.add_cascade(label="File", menu=file_menu)
+# root.config(menu=menu_bar)
+
+
+# load_config_button = ttk.Button(root, text="Load Config.db3", command=populate_table_from_db3)
 # load_config_button.grid(row=0, column=0, padx=5, pady=5)
 
+footer_frame = ttk.Frame(root)
+footer_frame.grid(row=0, column=0, sticky='nsw', padx=5, pady=5)
+load_config_button = ttk.Button(footer_frame, text="     Load \nconfig.db3", command=populate_table_from_db3)
+load_config_button.pack()
+
+separator = ttk.Separator(root, orient='vertical')
+separator.grid(row=0, column=0, sticky='ns', pady=10)
+
+frame_connect = ttk.Frame(root)
+frame_connect.grid(row=0, column=0, padx=0, pady=0, sticky='e')
+# Add a button to connect to the PLC
+connect_button = ttk.Button(frame_connect, text="Connect", command=lambda: connect_to_plc(treeview, status_label), style='Connect.TButton')
+connect_button.grid(row=0, column=1, padx=5, ipady=4, sticky='e')
+
 is_core = tk.IntVar()
-core_check = ttk.Checkbutton(root, text="IsCore", variable=is_core, command=on_core_check)
-core_check.grid(row=0, column=1, padx=5, pady=5)
+core_check = ttk.Checkbutton(frame_connect, text="IsCore", variable=is_core, command=on_core_check)
+core_check.grid(row=0, column=0, padx=0, pady=0)
 core_check.config(state='disabled')
 
-# Add a button to connect to the PLC
-connect_button = ttk.Button(root, text="Connect", command=lambda: connect_to_plc(treeview, status_label), style='Connect.TButton')
-connect_button.grid(row=0, column=2, padx=5, pady=5)
+
 
 # Connection status label
-status_label = ttk.Label(root, text="Disconnected", foreground="red", font=("Segoe UI", 12))
-status_label.grid(row=0, column=3, padx=5, pady=5)
+status_label = ttk.Label(root, text="Disconnected", foreground="red", font=("Segoe UI", 13))
+status_label.grid(row=0, column=1, padx=5, pady=5)
+
 
 
 
 # Create a frame for the table (Treeview)
 table_frame = ttk.Frame(root)
-table_frame.grid(row=1, column=0, columnspan=3, padx=15, pady=10)
+table_frame.grid(row=1, column=0, padx=10, pady=10, sticky='ew')
+
+treeview_style = ttk.Style()
+treeview_style.configure("Treeview", rowheight=23)  # Increase row height for more space between items
+treeview_style.configure("Treeview", font=("Segoe UI", 10))  # Adjust font size if necessary
+treeview_style.configure("Treeview", padding=(5, 5))  # Add padding to rows (optional)
 
 # Create the Treeview (table)
 columns = ("Name", "NetId", "Type")
@@ -504,7 +596,7 @@ scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
 # Create a frame for the buttons
 button_frame = ttk.Frame(root)
-button_frame.grid(row=1, column=3, padx=10, pady=10)
+button_frame.grid(row=1, column=1, padx=10, pady=10, sticky='ew')
 
 # Add some buttons to the right frame
 reset_button = ttk.Button(button_frame, 
@@ -537,15 +629,11 @@ dis_horn_button = ttk.Button(button_frame,
                              command=on_dis_horn_button_click)
 dis_horn_button.pack(pady=5)
 
-# footer_frame = ttk.Frame(root)
-# footer_frame.grid(row=2, column=0, columnspan=3, sticky='ew', padx=5, pady=5)
-# load_config_button = ttk.Button(footer_frame, text="Load Config.db3", command=populate_table_from_db3)
-# load_config_button.pack()
+
 
 disable_control_buttons()
 
 load_table_data_from_xml(treeview)
-
 
 
 def on_closing():
