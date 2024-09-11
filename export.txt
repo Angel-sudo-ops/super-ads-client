@@ -1,0 +1,1 @@
+pyinstaller --onefile --icon=route.ico --windowed --add-data "agv.ico;." SiperADSClient.py

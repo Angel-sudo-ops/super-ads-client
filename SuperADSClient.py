@@ -9,8 +9,8 @@ import pyads
 import sys
 import threading
 
-__version__ = '1.3.3'
-__icon__ = 'agv.ico'
+__version__ = '1.4.5'
+__icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
 current_ads_connection = None
@@ -220,6 +220,13 @@ def on_treeview_select(event):
         close_current_connection()
         update_ui_connection_status("Disconnected", "red", status_label)
 
+    tc_type = get_lgv_data()[2]
+
+    if tc_type == 'TC3':
+        core_check.config(state='normal')
+    else:
+        core_check.config(state='disabled')
+
     disable_control_buttons()
 
 # Enable control buttons after a successful connection
@@ -249,7 +256,7 @@ def on_core_check():
 #################################################################### Write variables ###############################################################################
 ####################################################################################################################################################################
 # Dictionary to map variable names for each action based on conditions
-variable_mapping = {
+variable_write = {
     'reset': {
         'TC2': ".ADS_Reset",
         ('TC3', False): "ADS_Reset",
@@ -272,8 +279,36 @@ variable_mapping = {
     },
     'dis_horn': {
         'TC2': ".ADS_DisableHorn",
-        ('TC3', False): "ADS_DisableHorn",
-        ('TC3', True): "CoreGVL.ADS_DisableHorn"
+        ('TC3', False): "Output.DisableHorn",
+        ('TC3', True): "Output.disableHorn"
+    }
+}
+
+variable_read = {
+    'reset': {
+        'TC2': ".ADS_Reset",
+        ('TC3', False): "Button.reset.isPressed",
+        ('TC3', True): "CoreGVL.ADS_Reset"
+    },
+    'run': {
+        'TC2': ".ADS_Run",
+        ('TC3', False): "Light.runButton.isTurnedOn",
+        ('TC3', True): "CoreGVL.ADS_Run"
+    },
+    'stop': {
+        'TC2': ".ADS_Stop",
+        ('TC3', False): "Button.stop.isPressed",
+        ('TC3', True): "CoreGVL.ADS_Stop"
+    },
+    'man_auto': {
+        'TC2': ".ADS_MCD_Mode",
+        ('TC3', False): "LGV.Status.MCD_Mode",
+        ('TC3', True): "CoreGVL.ADS_MCD_Mode"
+    },
+    'dis_horn': {
+        'TC2': ".ADS_DisableHorn",
+        ('TC3', False): "Output.DisableHorn",
+        ('TC3', True): "Output.disableHorn"
     }
 }
 
@@ -283,9 +318,9 @@ def write_variable(action, tc_type, is_core, value):
 
     # Select the appropriate variable name for the action, based on tc_type and is_core
     if tc_type == 'TC2':
-        variable_name = variable_mapping[action]['TC2']  # For TC2, ignore is_core
+        variable_name = variable_write[action]['TC2']  # For TC2, ignore is_core
     else:
-        variable_name = variable_mapping[action][('TC3', is_core)]  # For TC3, consider is_core
+        variable_name = variable_write[action][('TC3', is_core)]  # For TC3, consider is_core
 
     if current_ads_connection is not None:
         try:
@@ -294,8 +329,8 @@ def write_variable(action, tc_type, is_core, value):
             print(f"Successfully wrote {value} to {variable_name} for action: {action}")
         except Exception as e:
             messagebox.showerror("Write Error", f"Failed to write to {variable_name}: {str(e)}")
-    else:
-        messagebox.showerror("Connection Error", "No active connection to write to.")
+    # else:
+        # messagebox.showerror("Connection Error", "No active connection to write to.")
     
 
 # Variable to track toggle state for dis_horn
@@ -303,13 +338,7 @@ dis_horn_state = False
 
 def on_dis_horn_button_click():
     global dis_horn_state
-    selected_item = treeview.selection()
-    if not selected_item:
-        messagebox.showerror("Error", "No LGV selected")
-        return
-
-    lgv_data = treeview.item(selected_item)["values"]
-    tc_type = lgv_data[2]
+    tc_type = get_lgv_data()[2] #get tc_type from the current selection
 
     # Toggle the state of dis_horn
     dis_horn_state = not dis_horn_state
@@ -318,13 +347,7 @@ def on_dis_horn_button_click():
 
 
 def on_button_action(action, value):
-    selected_item = treeview.selection()
-    if not selected_item:
-        messagebox.showerror("Error", "No LGV selected")
-        return
-
-    lgv_data = treeview.item(selected_item)["values"]
-    tc_type = lgv_data[2]
+    tc_type = get_lgv_data()[2] #get tc_type from the current selection
 
     # Write the value (True or False) for the specific action
     write_variable(action, tc_type, is_core.get(), value)
@@ -340,13 +363,24 @@ def bind_button_actions(button, action, press_value=True, release_value=False):
 ############################################################## Treeview setup and sorting ##########################################################################
 ####################################################################################################################################################################
 
+# Read the tc_type from the current selection
+def get_lgv_data():
+    selected_item = treeview.selection()
+    if not selected_item:
+        messagebox.showerror("Error", "No LGV selected")
+        return
+
+    lgv_data = treeview.item(selected_item)["values"]
+    # tc_type = lgv_data[2]
+    return lgv_data
+
+
 # Dictionary to maintain custom headings
 headings = {
     'Name': 'Name',
     'NetId': 'AMS Net Id',
     'Type': 'Type'
 }
-
 
 def setup_treeview():
     for col in treeview['columns']:
@@ -379,6 +413,14 @@ def natural_keys(text):
 ####################################################################### Create UI ##################################################################################
 ####################################################################################################################################################################
 
+############################# Set GUI icon ##########################
+def set_icon():
+    if os.path.exists(icon_path):
+        root.iconbitmap(icon_path)
+    else:
+        print("Icon file not found.")
+
+
 # Create the root window
 root = tk.Tk()
 root.title(f"Super ADS Client {__version__}")
@@ -391,12 +433,6 @@ else:
     icon_path = os.path.abspath(__icon__)
 # root.iconbitmap(icon_path)
 
-def set_icon():
-    if os.path.exists(icon_path):
-        root.iconbitmap(icon_path)
-    else:
-        print("Icon file not found.")
-
 # Apply the icon after the window is initialized
 root.after(100, set_icon)
 
@@ -408,25 +444,39 @@ style.configure("LGV.TButton",
                 font=("Segoe UI", 13))
                 # font = ("Tahoma", 12))
 
+style.configure("Connect.TButton",
+                padding=2,
+                focusthickness=4,
+                font=("Segoe UI", 12))
 
-load_config_button = ttk.Button(root, text="Load Config.db3", command=populate_table_from_db3)
-load_config_button.grid(row=0, column=0, padx=5, pady=5)
 
-# Add a button to connect to the PLC
-connect_button = ttk.Button(root, text="Connect", command=lambda: connect_to_plc(treeview, status_label))
-connect_button.grid(row=0, column=1, padx=5, pady=5)
-
-# Connection status label
-status_label = ttk.Label(root, text="Disconnected", foreground="red")
-status_label.grid(row=0, column=2, padx=5, pady=5)
+menu_bar = tk.Menu(root)
+file_menu = tk.Menu(menu_bar, 
+                    tearoff=0)
+file_menu.add_command(label="Load Config.db3", command=populate_table_from_db3)
+menu_bar.add_cascade(label="File", menu=file_menu)
+root.config(menu=menu_bar)
+# load_config_button = ttk.Button(root, text="Load Config.db3", command=populate_table_from_db3, padding=3)
+# load_config_button.grid(row=0, column=0, padx=5, pady=5)
 
 is_core = tk.IntVar()
 core_check = ttk.Checkbutton(root, text="IsCore", variable=is_core, command=on_core_check)
-core_check.grid(row=0, column=3, padx=5, pady=5)
+core_check.grid(row=0, column=1, padx=5, pady=5)
+core_check.config(state='disabled')
+
+# Add a button to connect to the PLC
+connect_button = ttk.Button(root, text="Connect", command=lambda: connect_to_plc(treeview, status_label), style='Connect.TButton')
+connect_button.grid(row=0, column=2, padx=5, pady=5)
+
+# Connection status label
+status_label = ttk.Label(root, text="Disconnected", foreground="red", font=("Segoe UI", 12))
+status_label.grid(row=0, column=3, padx=5, pady=5)
+
+
 
 # Create a frame for the table (Treeview)
 table_frame = ttk.Frame(root)
-table_frame.grid(row=1, column=0, padx=15, pady=10)
+table_frame.grid(row=1, column=0, columnspan=3, padx=15, pady=10)
 
 # Create the Treeview (table)
 columns = ("Name", "NetId", "Type")
@@ -454,7 +504,7 @@ scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
 # Create a frame for the buttons
 button_frame = ttk.Frame(root)
-button_frame.grid(row=1, column=1, padx=10, pady=10)
+button_frame.grid(row=1, column=3, padx=10, pady=10)
 
 # Add some buttons to the right frame
 reset_button = ttk.Button(button_frame, 
@@ -487,6 +537,11 @@ dis_horn_button = ttk.Button(button_frame,
                              command=on_dis_horn_button_click)
 dis_horn_button.pack(pady=5)
 
+# footer_frame = ttk.Frame(root)
+# footer_frame.grid(row=2, column=0, columnspan=3, sticky='ew', padx=5, pady=5)
+# load_config_button = ttk.Button(footer_frame, text="Load Config.db3", command=populate_table_from_db3)
+# load_config_button.pack()
+
 disable_control_buttons()
 
 load_table_data_from_xml(treeview)
@@ -496,7 +551,7 @@ load_table_data_from_xml(treeview)
 def on_closing():
     close_current_connection()  # Close connection before exiting
     root.destroy()  # Close the application
-    
+
 # Bind the window close event to custom close function
 root.protocol("WM_DELETE_WINDOW", on_closing)
 
@@ -509,6 +564,11 @@ root.mainloop()
 # changing lgv drops previous connection
 
 
-# two inputs, table or manual entry. In manual add just ip
+# two inputs, table or manual entry. In manual add just ip, maybe not needed now that table is updated since the beginning
 
 # reset, run, stop, manual/auto and disable horn only needed
+
+# Avoid to enable connection when the user click connect more than once
+
+# Add colors to the buttons, at least for the horn, and reset that variable whenever there's a new connection
+
