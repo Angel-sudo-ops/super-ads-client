@@ -9,7 +9,7 @@ import pyads
 import sys
 import threading
 
-__version__ = '1.5.6'
+__version__ = '1.6.6'
 __icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
@@ -149,7 +149,26 @@ def load_table_data_from_xml(tree, filename="lgv_data.xml"):
 ####################################################################################################################################################################
 ################################################################# ADS connection setup #############################################################################
 ####################################################################################################################################################################
+def monitor_connection_status():
+    global current_ads_connection
 
+    if current_ads_connection is None:
+        return
+    
+    try:
+        if check_plc_status(current_ads_connection):
+            update_ui_connection_status("Connected", "green", status_label)
+        else:
+            raise Exception("PLC not in valid state")
+    except Exception as e:
+        # assume connection is lost if not status 5 is read
+        update_ui_connection_status("Disconnected", "red", status_label)
+        close_current_connection()
+
+    # monitor connection every 2s
+    root.after(2000, monitor_connection_status)    
+
+    
 def check_plc_status(ads_connection):
     status = ads_connection.read_state()[0]
     if status == 5:
@@ -158,10 +177,11 @@ def check_plc_status(ads_connection):
 
 # Close the current connection if it exists
 def close_current_connection():
-    global current_ads_connection
+    global current_ads_connection, dis_horn_state
     if current_ads_connection:
         current_ads_connection.close()
         current_ads_connection = None
+        dis_horn_state = False #reset horn state
 
 # Background connection handler (runs in a separate thread)
 def background_connect(plc_data, label):
@@ -188,6 +208,9 @@ def background_connect(plc_data, label):
 
             # Call update_buttons once to start the loop
             update_buttons()
+
+            # Start monitoring the connection after connecting
+            monitor_connection_status()
 
         else:
             raise Exception("PLC not in a valid state")
@@ -354,24 +377,24 @@ def bind_button_actions(button, action, press_value=True, release_value=False):
 ####################################################################################################################################################################
 variable_read = {
     'reset': {
-        'TC2': ".IN_Button_Reset",
-        ('TC3', False): "Button.reset.isPressed",
-        ('TC3', True): "CoreGVL.ADS_Reset"
+        'TC2': ".Button_Reset",
+        ('TC3', False): "LGV.Status.manReset",
+        ('TC3', True): "LGV.Status.manReset"
     },
     'run': {
         'TC2': ".OUT_Lamp_Top_Auto",
         ('TC3', False): "Light.runButton.isTurnedOn",
-        ('TC3', True): "CoreGVL.ADS_Run"
+        ('TC3', True): "SafetyControls.alert.out.lampRunButton"
     },
     'stop': {
-        'TC2': ".IN_Button_Stop",
-        ('TC3', False): "Button.stop.isPressed",
-        ('TC3', True): "CoreGVL.ADS_Stop"
+        'TC2': "Input.Button_Stop",
+        ('TC3', False): "LGV.Status.ButtonStop",
+        ('TC3', True): "LGV.Status.ButtonStop"
     },
     'man_auto': {
         'TC2': ".Sys_Mcd_Mode",
         ('TC3', False): "LGV.Status.MCD_Mode",
-        ('TC3', True): "CoreGVL.ADS_MCD_Mode"
+        ('TC3', True): "LGV.Status.MCD_Mode"
     },
     'dis_horn': {
         'TC2': ".ADS_DisableHorn",
@@ -402,9 +425,9 @@ def update_button_color(action, button, read_value):
         return
     # Change the button's foreground color based on the read_value
     if read_value:  # If the PLC variable is True
-        button.config(foreground="green")
+        button.configure(style='LGV.Connected.TButton')
     else:  # If the PLC variable is False
-        button.config(foreground="red")
+        button.configure(style='LGV.Disconnected.TButton')
 
 def update_buttons():
     if current_ads_connection is None:
@@ -426,8 +449,8 @@ def update_buttons():
         button = button_mapping[action]
         update_button_color(action, button, read_value)
     
-    # Schedule the function to run again after 1 second
-    root.after(700, update_buttons)
+    # Schedule the function to run again after 2s
+    root.after(2000, update_buttons)
 
 
 
@@ -509,12 +532,62 @@ else:
 root.after(100, set_icon)
 
 style = ttk.Style()
+
 style.configure("LGV.TButton", 
                 focuscolor="white", 
-                padding=4, 
+                padding=4,
+                foreground='black', 
                 focusthickness=1, 
                 font=("Segoe UI", 18))
-                # font = ("Tahoma", 12))
+
+style.configure("LGV.Connected.TButton", 
+                focuscolor="white", 
+                padding=4,
+                foreground='green', 
+                focusthickness=1, 
+                font=("Segoe UI", 18))
+
+style.configure("LGV.Disconnected.TButton", 
+                focuscolor="white", 
+                padding=4,
+                foreground='red', 
+                focusthickness=1, 
+                font=("Segoe UI", 18))
+
+style.configure("LGV.Reset.TButton", 
+                focuscolor="white", 
+                padding=4,
+                foreground='black', 
+                focusthickness=1, 
+                font=("Segoe UI", 18))
+
+style.configure("LGV.Run.TButton", 
+                focuscolor="white", 
+                padding=4,
+                foreground='black',
+                focusthickness=1, 
+                font=("Segoe UI", 18))
+
+style.configure("LGV.Stop.TButton", 
+                focuscolor="white", 
+                padding=4,
+                foreground='black', 
+                focusthickness=1, 
+                font=("Segoe UI", 18))
+
+style.configure("LGV.ManAuto.TButton", 
+                focuscolor="white", 
+                padding=4,
+                foreground='black', 
+                focusthickness=1, 
+                font=("Segoe UI", 18))
+
+style.configure("LGV.DisHorn.TButton", 
+                focuscolor="white", 
+                padding=4,
+                foreground='black', 
+                focusthickness=1, 
+                font=("Segoe UI", 18))
 
 style.configure("Connect.TButton",
                 padding=2,
@@ -628,7 +701,6 @@ dis_horn_button = ttk.Button(button_frame,
                              style='LGV.TButton',
                              command=on_dis_horn_button_click)
 dis_horn_button.pack(pady=5)
-
 
 
 disable_control_buttons()
