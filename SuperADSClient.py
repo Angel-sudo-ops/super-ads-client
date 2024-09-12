@@ -10,7 +10,7 @@ import sys
 import threading
 import time
 
-__version__ = '1.7.6'
+__version__ = '1.8.6'
 __icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
@@ -163,6 +163,7 @@ def monitor_connection_status():
             raise Exception("PLC not in valid state")
     except Exception as e:
         # assume connection is lost if not status 5 is read
+        disable_control_buttons()
         root.after(0, update_ui_connection_status, "Disconnected", "red", status_label)
         close_current_connection()
 
@@ -210,7 +211,7 @@ def background_connect(plc_data, label):
 
             # Call update_buttons once to start the loop
             # update_buttons()
-            update_buttons_thread()
+            update_buttons_from_plc_thread()
 
             # Start monitoring the connection after connecting
             monitor_connection_status()
@@ -220,6 +221,7 @@ def background_connect(plc_data, label):
 
     except Exception as e:
         current_ads_connection = None
+        disable_control_buttons()
         update_ui_connection_status("Disconnected", "red", label)
         messagebox.showerror("Connection Error", f"Failed to connect to {lgv_name}: {str(e)}")
 
@@ -274,19 +276,17 @@ def on_treeview_select(event):
 
 # Enable control buttons after a successful connection
 def enable_control_buttons():
-    reset_button.config(state='normal')
-    run_button.config(state='normal')
-    stop_button.config(state='normal')
-    man_auto_button.config(state='normal')
-    dis_horn_button.config(state='normal')
+    lgv_buttons = (reset_button, run_button, stop_button, man_auto_button, dis_horn_button)
+
+    for button in lgv_buttons:
+        button.config(state="normal")
 
 def disable_control_buttons():
-    # You can disable the control buttons here as well, until a new connection is established
-    reset_button.config(state='disabled')
-    run_button.config(state='disabled')
-    stop_button.config(state='disabled')
-    man_auto_button.config(state='disabled')
-    dis_horn_button.config(state='disabled')
+    lgv_buttons = (reset_button, run_button, stop_button, man_auto_button, dis_horn_button)
+    
+    for button in lgv_buttons:
+        button.config(style="LGV.TButton")
+        button.config(state="disabled")
 
 def on_core_check():
     if is_core.get():
@@ -362,17 +362,32 @@ def on_dis_horn_button_click():
     print("Disable Horn pressed")
 
 
-def on_button_action(action, value):
+def on_button_action(action, value, button):
     tc_type = get_lgv_data()[2] #get tc_type from the current selection
+
+    # if tc_type is None:
+    #     return
 
     # Write the value (True or False) for the specific action
     write_variable(action, tc_type, is_core.get(), value)
 
+    # Change button color only for reset, stop, and man_auto actions
+    if action in ['reset', 'stop', 'man_auto']:
+        # Change button color based on press/release value
+        if value:  # If pressed (True)
+            button.config(style="LGV.Pressed.TButton")
+        else:  # If released (False)
+            button.config(style="LGV.TButton")
+
 
 def bind_button_actions(button, action, press_value=True, release_value=False):
+    # selected_item = treeview.selection()
+    # if not selected_item:
+    #     # messagebox.showerror("Error", "No LGV selected")
+    #     return
     # Bind press and release actions with custom values
-    button.bind("<ButtonPress>", lambda event: on_button_action(action, press_value))
-    button.bind("<ButtonRelease>", lambda event: on_button_action(action, release_value))
+    button.bind("<ButtonPress>", lambda event: on_button_action(action, press_value, button))
+    button.bind("<ButtonRelease>", lambda event: on_button_action(action, release_value, button))
 
 
 ####################################################################################################################################################################
@@ -455,21 +470,22 @@ def update_buttons():
     # Schedule the function to run again after 2s
     root.after(50, update_buttons)
 
-def update_buttons_thread():
+def update_buttons_from_plc_thread():
     global current_ads_connection
 
     if current_ads_connection is None:
         return
         
     # Read variables and update button colors for all actions
-    actions = ['reset', 'run', 'stop', 'man_auto', 'dis_horn']
+    # actions = ['reset', 'run', 'stop', 'man_auto', 'dis_horn']
+    actions = ['run', 'dis_horn']
     
     # Mapping actions to buttons
     button_mapping = {
-        'reset': reset_button,
+        # 'reset': reset_button,
         'run': run_button,
-        'stop': stop_button,
-        'man_auto': man_auto_button,
+        # 'stop': stop_button,
+        # 'man_auto': man_auto_button,
         'dis_horn': dis_horn_button
     }
     
@@ -480,7 +496,7 @@ def update_buttons_thread():
         root.after(0, update_button_color, action, button, read_value)
     
 
-    t = threading.Timer(0.1, update_buttons_thread)
+    t = threading.Timer(0.1, update_buttons_from_plc_thread)
     t.daemon = True 
     t.start()
 
@@ -492,8 +508,8 @@ def update_buttons_thread():
 def get_lgv_data():
     selected_item = treeview.selection()
     if not selected_item:
-        messagebox.showerror("Error", "No LGV selected")
-        return
+        # messagebox.showerror("Error", "No LGV selected")
+        return None
 
     lgv_data = treeview.item(selected_item)["values"]
     # tc_type = lgv_data[2]
@@ -570,12 +586,17 @@ style.configure("LGV.TButton",
                 focusthickness=1, 
                 font=("Segoe UI", 18))
 
+style.configure("LGV.Pressed.TButton", 
+                padding=4,
+                foreground='blue', 
+                font=("Segoe UI", 18, "bold"))
+
 style.configure("LGV.Connected.TButton", 
                 focuscolor="white", 
                 padding=4,
                 foreground='green', 
                 focusthickness=1, 
-                font=("Segoe UI", 18))
+                font=("Segoe UI", 18, "bold"))
 
 style.configure("LGV.Disconnected.TButton", 
                 focuscolor="white", 
@@ -705,32 +726,32 @@ button_frame.grid(row=1, column=1, padx=10, pady=10, sticky='ew')
 reset_button = ttk.Button(button_frame, 
                           text="Reset", 
                           style='LGV.TButton')
-reset_button.pack(pady=5)
+reset_button.pack(pady=5, fill='both', ipady=5, ipadx=5)
 bind_button_actions(reset_button, 'reset')
 
 run_button = ttk.Button(button_frame, 
                         text="Run",
                         style='LGV.TButton')
-run_button.pack(pady=5)
+run_button.pack(pady=5, fill='both', ipady=5, ipadx=5)
 bind_button_actions(run_button, 'run')
 
 stop_button = ttk.Button(button_frame, 
                          text="Stop", 
-                         style='LGV.TButton')
-stop_button.pack(pady=5)
+                         style='LGV.Pressed.TButton')
+stop_button.pack(pady=5, fill='both', ipady=5, ipadx=5)
 bind_button_actions(stop_button, 'stop', press_value=False, release_value=True)
 
 man_auto_button = ttk.Button(button_frame, 
                              text="Man/Auto",
                              style='LGV.TButton')
-man_auto_button.pack(pady=5)
+man_auto_button.pack(pady=5, fill='both', ipady=5, ipadx=5)
 bind_button_actions(man_auto_button, 'man_auto')
 
 dis_horn_button = ttk.Button(button_frame, 
                              text="Disable Horn", 
                              style='LGV.TButton',
                              command=on_dis_horn_button_click)
-dis_horn_button.pack(pady=5)
+dis_horn_button.pack(pady=5, fill='both', ipady=5, ipadx=5)
 
 
 disable_control_buttons()
