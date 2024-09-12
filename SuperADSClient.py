@@ -8,6 +8,7 @@ from xml.dom import minidom
 import pyads
 import sys
 import threading
+import time
 
 __version__ = '1.6.6'
 __icon__ = "./plc.ico"
@@ -166,7 +167,7 @@ def monitor_connection_status():
         close_current_connection()
 
     # monitor connection every 2s
-    root.after(2000, monitor_connection_status)    
+    # root.after(2000, monitor_connection_status)    
 
     
 def check_plc_status(ads_connection):
@@ -207,7 +208,8 @@ def background_connect(plc_data, label):
             enable_control_buttons()
 
             # Call update_buttons once to start the loop
-            update_buttons()
+            # update_buttons()
+            start_variable_reading_thread()
 
             # Start monitoring the connection after connecting
             monitor_connection_status()
@@ -379,7 +381,7 @@ variable_read = {
     'reset': {
         'TC2': ".Button_Reset",
         ('TC3', False): "LGV.Status.manReset",
-        ('TC3', True): "LGV.Status.manReset"
+        ('TC3', True): "LibraryInterfaces.LGV.Status.manReset"
     },
     'run': {
         'TC2': ".OUT_Lamp_Top_Auto",
@@ -389,12 +391,12 @@ variable_read = {
     'stop': {
         'TC2': "Input.Button_Stop",
         ('TC3', False): "LGV.Status.ButtonStop",
-        ('TC3', True): "LGV.Status.ButtonStop"
+        ('TC3', True): "LibraryInterfaces.LGV.Status.ButtonStop"
     },
     'man_auto': {
         'TC2': ".Sys_Mcd_Mode",
         ('TC3', False): "LGV.Status.MCD_Mode",
-        ('TC3', True): "LGV.Status.MCD_Mode"
+        ('TC3', True): "LibraryInterfaces.LGV.Status.MCD_Mode"
     },
     'dis_horn': {
         'TC2': ".ADS_DisableHorn",
@@ -450,7 +452,34 @@ def update_buttons():
         update_button_color(action, button, read_value)
     
     # Schedule the function to run again after 2s
-    root.after(2000, update_buttons)
+    root.after(50, update_buttons)
+
+def update_buttons_thread():
+    while current_ads_connection is not None:
+        
+        # Read variables and update button colors for all actions
+        actions = ['reset', 'run', 'stop', 'man_auto', 'dis_horn']
+        
+        # Mapping actions to buttons
+        button_mapping = {
+            'reset': reset_button,
+            'run': run_button,
+            'stop': stop_button,
+            'man_auto': man_auto_button,
+            'dis_horn': dis_horn_button
+        }
+        
+        for action in actions:
+            read_value = read_variable(action)  # Read value from PLC
+            button = button_mapping[action]
+        
+            # Schedule the function to run again after 2s
+            root.after(0, update_button_color, action, button, read_value)
+    time.sleep(0.1)
+
+def start_variable_reading_thread():
+    reading_thread = threading.Thread(target=update_buttons_thread, daemon=True)
+    reading_thread.start()
 
 
 
