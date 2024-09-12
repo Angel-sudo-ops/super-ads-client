@@ -10,7 +10,7 @@ import sys
 import threading
 import time
 
-__version__ = '1.6.6'
+__version__ = '1.7.6'
 __icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
@@ -158,16 +158,17 @@ def monitor_connection_status():
     
     try:
         if check_plc_status(current_ads_connection):
-            update_ui_connection_status("Connected", "green", status_label)
+            root.after(0, update_ui_connection_status, "Connected", "green", status_label)
         else:
             raise Exception("PLC not in valid state")
     except Exception as e:
         # assume connection is lost if not status 5 is read
-        update_ui_connection_status("Disconnected", "red", status_label)
+        root.after(0, update_ui_connection_status, "Disconnected", "red", status_label)
         close_current_connection()
 
-    # monitor connection every 2s
-    # root.after(2000, monitor_connection_status)    
+    t = threading.Timer(1.0, monitor_connection_status)
+    t.daemon = True
+    t.start()  
 
     
 def check_plc_status(ads_connection):
@@ -209,7 +210,7 @@ def background_connect(plc_data, label):
 
             # Call update_buttons once to start the loop
             # update_buttons()
-            start_variable_reading_thread()
+            update_buttons_thread()
 
             # Start monitoring the connection after connecting
             monitor_connection_status()
@@ -455,33 +456,33 @@ def update_buttons():
     root.after(50, update_buttons)
 
 def update_buttons_thread():
-    while current_ads_connection is not None:
-        
-        # Read variables and update button colors for all actions
-        actions = ['reset', 'run', 'stop', 'man_auto', 'dis_horn']
-        
-        # Mapping actions to buttons
-        button_mapping = {
-            'reset': reset_button,
-            'run': run_button,
-            'stop': stop_button,
-            'man_auto': man_auto_button,
-            'dis_horn': dis_horn_button
-        }
-        
-        for action in actions:
-            read_value = read_variable(action)  # Read value from PLC
-            button = button_mapping[action]
-        
-            # Schedule the function to run again after 2s
-            root.after(0, update_button_color, action, button, read_value)
-    time.sleep(0.1)
+    global current_ads_connection
 
-def start_variable_reading_thread():
-    reading_thread = threading.Thread(target=update_buttons_thread, daemon=True)
-    reading_thread.start()
+    if current_ads_connection is None:
+        return
+        
+    # Read variables and update button colors for all actions
+    actions = ['reset', 'run', 'stop', 'man_auto', 'dis_horn']
+    
+    # Mapping actions to buttons
+    button_mapping = {
+        'reset': reset_button,
+        'run': run_button,
+        'stop': stop_button,
+        'man_auto': man_auto_button,
+        'dis_horn': dis_horn_button
+    }
+    
+    for action in actions:
+        read_value = read_variable(action)  # Read value from PLC
+        button = button_mapping[action]
+    
+        root.after(0, update_button_color, action, button, read_value)
+    
 
-
+    t = threading.Timer(0.1, update_buttons_thread)
+    t.daemon = True 
+    t.start()
 
 ####################################################################################################################################################################
 ############################################################## Treeview setup and sorting ##########################################################################
