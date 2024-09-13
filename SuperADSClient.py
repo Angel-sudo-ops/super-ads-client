@@ -10,7 +10,7 @@ import sys
 import threading
 import time
 
-__version__ = '1.9.6'
+__version__ = '2.0.6'
 __icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
@@ -181,6 +181,7 @@ def check_plc_status(ads_connection):
 # Close the current connection if it exists
 def close_current_connection():
     global current_ads_connection, dis_horn_state
+    # with read_lock:
     if current_ads_connection:
         current_ads_connection.close()
         current_ads_connection = None
@@ -286,7 +287,8 @@ def disable_control_buttons():
     lgv_buttons = (reset_button, run_button, stop_button, man_auto_button, dis_horn_button)
     
     for button in lgv_buttons:
-        button.config(state="disabled", style="LGV.TButton")
+        button.config(style="LGV.TButton")
+        button.config(state="disabled")
 
 def on_core_check():
     if is_core.get():
@@ -343,10 +345,12 @@ def write_variable(action, tc_type, is_core, value):
             # Write the value to the PLC
             current_ads_connection.write_by_name(variable_name, value, pyads.PLCTYPE_BOOL)
             print(f"Successfully wrote {value} to {variable_name} for action: {action}")
+            return True
         except Exception as e:
             messagebox.showerror("Write Error", f"Failed to write to {variable_name}: {str(e)}")
     else:
         print("Connection Error", "No active connection to write to.")
+    return False
     
 
 # Variable to track toggle state for dis_horn
@@ -369,9 +373,8 @@ press_successful = False
 
 def on_button_action(action, value, button):
     global press_successful
-
-    button_enabled = button.cget("state") == "normal"
-    if not button_enabled:
+    button_state = button.cget("state").string
+    if  button_state != 'normal':
         return
     
     lgv_data = get_lgv_data()
@@ -383,9 +386,9 @@ def on_button_action(action, value, button):
     tc_type = lgv_data[2]
 
     # Write the value (True or False) for the specific action
-    write_variable(action, tc_type, is_core.get(), value)
+    press_successful = write_variable(action, tc_type, is_core.get(), value)
 
-    press_successful = True
+    # press_successful = True
 
     # Change button color only for reset, stop, and man_auto actions
     if action in ['reset', 'stop', 'man_auto']:
@@ -404,7 +407,7 @@ def bind_button_actions(button, action, press_value=True, release_value=False):
     
     def on_button_release(event):
         if press_successful:
-            on_button_action(action, press_value, button)
+            on_button_action(action, release_value, button)
 
     button.bind("<ButtonPress>", on_button_press)
     button.bind("<ButtonRelease>", on_button_release)
@@ -490,6 +493,8 @@ def update_buttons():
     # Schedule the function to run again after 2s
     root.after(50, update_buttons)
 
+read_lock = threading.Lock()
+
 def update_buttons_from_plc_thread():
     global current_ads_connection
 
@@ -509,6 +514,7 @@ def update_buttons_from_plc_thread():
         'dis_horn': dis_horn_button
     }
     
+    # with read_lock:
     for action in actions:
         read_value = read_variable(action)  # Read value from PLC
         button = button_mapping[action]
