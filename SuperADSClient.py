@@ -10,7 +10,7 @@ import sys
 import threading
 import time
 
-__version__ = '1.8.6'
+__version__ = '1.9.6'
 __icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
@@ -280,13 +280,13 @@ def enable_control_buttons():
 
     for button in lgv_buttons:
         button.config(state="normal")
+    stop_button.config(style="LGV.Pressed.TButton")
 
 def disable_control_buttons():
     lgv_buttons = (reset_button, run_button, stop_button, man_auto_button, dis_horn_button)
     
     for button in lgv_buttons:
-        button.config(style="LGV.TButton")
-        button.config(state="disabled")
+        button.config(state="disabled", style="LGV.TButton")
 
 def on_core_check():
     if is_core.get():
@@ -345,8 +345,8 @@ def write_variable(action, tc_type, is_core, value):
             print(f"Successfully wrote {value} to {variable_name} for action: {action}")
         except Exception as e:
             messagebox.showerror("Write Error", f"Failed to write to {variable_name}: {str(e)}")
-    # else:
-        # messagebox.showerror("Connection Error", "No active connection to write to.")
+    else:
+        print("Connection Error", "No active connection to write to.")
     
 
 # Variable to track toggle state for dis_horn
@@ -354,22 +354,38 @@ dis_horn_state = False
 
 def on_dis_horn_button_click():
     global dis_horn_state
-    tc_type = get_lgv_data()[2] #get tc_type from the current selection
+    lgv_data = get_lgv_data()
+    
+    if lgv_data is None:
+        return
+    tc_type = lgv_data[2]
 
     # Toggle the state of dis_horn
     dis_horn_state = not dis_horn_state
     write_variable('dis_horn', tc_type, is_core.get(), dis_horn_state)
-    print("Disable Horn pressed")
+    print(f"Disable Horn pressed, value:{dis_horn_state}")
 
+press_successful = False
 
 def on_button_action(action, value, button):
-    tc_type = get_lgv_data()[2] #get tc_type from the current selection
+    global press_successful
 
-    # if tc_type is None:
-    #     return
+    button_enabled = button.cget("state") == "normal"
+    if not button_enabled:
+        return
+    
+    lgv_data = get_lgv_data()
+    
+    if lgv_data is None:
+        # messagebox.showerror("Error", "No LGV selected or invalid data.")
+        press_successful = False
+        return
+    tc_type = lgv_data[2]
 
     # Write the value (True or False) for the specific action
     write_variable(action, tc_type, is_core.get(), value)
+
+    press_successful = True
 
     # Change button color only for reset, stop, and man_auto actions
     if action in ['reset', 'stop', 'man_auto']:
@@ -381,13 +397,17 @@ def on_button_action(action, value, button):
 
 
 def bind_button_actions(button, action, press_value=True, release_value=False):
-    # selected_item = treeview.selection()
-    # if not selected_item:
-    #     # messagebox.showerror("Error", "No LGV selected")
-    #     return
-    # Bind press and release actions with custom values
-    button.bind("<ButtonPress>", lambda event: on_button_action(action, press_value, button))
-    button.bind("<ButtonRelease>", lambda event: on_button_action(action, release_value, button))
+    global press_successful
+
+    def on_button_press(event):
+        on_button_action(action, press_value, button)
+    
+    def on_button_release(event):
+        if press_successful:
+            on_button_action(action, press_value, button)
+
+    button.bind("<ButtonPress>", on_button_press)
+    button.bind("<ButtonRelease>", on_button_release)
 
 
 ####################################################################################################################################################################
@@ -581,62 +601,31 @@ style = ttk.Style()
 
 style.configure("LGV.TButton", 
                 focuscolor="white", 
-                padding=4,
+                padding=(4,4),
+                anchor="center",
                 foreground='black', 
                 focusthickness=1, 
                 font=("Segoe UI", 18))
 
 style.configure("LGV.Pressed.TButton", 
-                padding=4,
+                padding=(4,4),
+                anchor="center",
                 foreground='blue', 
                 font=("Segoe UI", 18, "bold"))
 
 style.configure("LGV.Connected.TButton", 
                 focuscolor="white", 
-                padding=4,
+                padding=(4,4),
+                anchor="center",
                 foreground='green', 
                 focusthickness=1, 
                 font=("Segoe UI", 18, "bold"))
 
 style.configure("LGV.Disconnected.TButton", 
                 focuscolor="white", 
-                padding=4,
+                padding=(4,4),
+                anchor="center",
                 foreground='red', 
-                focusthickness=1, 
-                font=("Segoe UI", 18))
-
-style.configure("LGV.Reset.TButton", 
-                focuscolor="white", 
-                padding=4,
-                foreground='black', 
-                focusthickness=1, 
-                font=("Segoe UI", 18))
-
-style.configure("LGV.Run.TButton", 
-                focuscolor="white", 
-                padding=4,
-                foreground='black',
-                focusthickness=1, 
-                font=("Segoe UI", 18))
-
-style.configure("LGV.Stop.TButton", 
-                focuscolor="white", 
-                padding=4,
-                foreground='black', 
-                focusthickness=1, 
-                font=("Segoe UI", 18))
-
-style.configure("LGV.ManAuto.TButton", 
-                focuscolor="white", 
-                padding=4,
-                foreground='black', 
-                focusthickness=1, 
-                font=("Segoe UI", 18))
-
-style.configure("LGV.DisHorn.TButton", 
-                focuscolor="white", 
-                padding=4,
-                foreground='black', 
                 focusthickness=1, 
                 font=("Segoe UI", 18))
 
@@ -687,7 +676,7 @@ status_label.grid(row=0, column=1, padx=5, pady=5)
 
 # Create a frame for the table (Treeview)
 table_frame = ttk.Frame(root)
-table_frame.grid(row=1, column=0, padx=10, pady=10, sticky='ew')
+table_frame.grid(row=1, column=0, padx=15, pady=25, sticky='nsew')
 
 treeview_style = ttk.Style()
 treeview_style.configure("Treeview", rowheight=23)  # Increase row height for more space between items
@@ -719,39 +708,41 @@ scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
 
 # Create a frame for the buttons
-button_frame = ttk.Frame(root)
+button_frame = ttk.Frame(root, width=170, height=350)
+button_frame.pack_propagate(False)
 button_frame.grid(row=1, column=1, padx=10, pady=10, sticky='ew')
+
 
 # Add some buttons to the right frame
 reset_button = ttk.Button(button_frame, 
                           text="Reset", 
                           style='LGV.TButton')
-reset_button.pack(pady=5, fill='both', ipady=5, ipadx=5)
+reset_button.pack(pady=5, fill='both', expand=True, ipady=3)#, ipadx=5)
 bind_button_actions(reset_button, 'reset')
 
 run_button = ttk.Button(button_frame, 
                         text="Run",
                         style='LGV.TButton')
-run_button.pack(pady=5, fill='both', ipady=5, ipadx=5)
+run_button.pack(pady=5, fill='both', expand=True, ipady=3)#, ipadx=5)
 bind_button_actions(run_button, 'run')
 
 stop_button = ttk.Button(button_frame, 
                          text="Stop", 
                          style='LGV.Pressed.TButton')
-stop_button.pack(pady=5, fill='both', ipady=5, ipadx=5)
+stop_button.pack(pady=5, fill='both', expand=True, ipady=3)#, ipadx=5)
 bind_button_actions(stop_button, 'stop', press_value=False, release_value=True)
 
 man_auto_button = ttk.Button(button_frame, 
                              text="Man/Auto",
                              style='LGV.TButton')
-man_auto_button.pack(pady=5, fill='both', ipady=5, ipadx=5)
+man_auto_button.pack(pady=5, fill='both', expand=True, ipady=3)#, ipadx=5)
 bind_button_actions(man_auto_button, 'man_auto')
 
 dis_horn_button = ttk.Button(button_frame, 
                              text="Disable Horn", 
                              style='LGV.TButton',
                              command=on_dis_horn_button_click)
-dis_horn_button.pack(pady=5, fill='both', ipady=5, ipadx=5)
+dis_horn_button.pack(pady=5, fill='both', expand=True, ipady=3)#, ipadx=5)
 
 
 disable_control_buttons()
