@@ -5,7 +5,7 @@ a = Analysis(
     ['SuperADSClient.py'],
     pathex=[],
     binaries=[],
-    datas=[('agv.ico', '.')],
+    datas=[('plc.ico', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -35,5 +35,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['agv.ico'],
+    icon=['plc.ico'],
 )

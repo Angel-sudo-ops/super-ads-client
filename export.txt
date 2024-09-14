@@ -1,1 +1,1 @@
-pyinstaller --onefile --icon=route.ico --windowed --add-data "agv.ico;." SiperADSClient.py
+pyinstaller --onefile --icon=plc.ico --windowed --add-data "plc.ico;." SuperADSClient.py
