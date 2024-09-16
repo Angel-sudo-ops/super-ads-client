@@ -10,7 +10,7 @@ import sys
 import threading
 import time
 
-__version__ = '2.0.6'
+__version__ = '2.0.7'
 __icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
@@ -189,7 +189,7 @@ def close_current_connection():
 
 # Background connection handler (runs in a separate thread)
 def background_connect(plc_data, label):
-    global current_ads_connection
+    global current_ads_connection, stop_event, active_threads, connection_in_progress
 
     # If already connected, don't try to reconnect
     if current_ads_connection is not None:
@@ -201,6 +201,10 @@ def background_connect(plc_data, label):
     update_ui_connection_status("Connecting...", "orange", label)
 
     try:
+        # Periodically check if the stop_event is set
+        if stop_event.is_set():
+            return
+        
         # Attempt to open a new connection
         current_ads_connection = pyads.Connection(ams_net_id, port)
         current_ads_connection.open()
@@ -226,12 +230,26 @@ def background_connect(plc_data, label):
         update_ui_connection_status("Disconnected", "red", label)
         messagebox.showerror("Connection Error", f"Failed to connect to {lgv_name}: {str(e)}")
 
+    finally:
+        active_threads -= 1
+        connection_in_progress = False
+        if current_ads_connection is None:
+            update_ui_connection_status("Disconnected", "red", label)
+
 # Update the UI status label (called from the main thread)
 def update_ui_connection_status(text, color, label):
     label.config(text=text, foreground=color)
 
+active_threads = 0
+max_threads = 1
 # Attempt to connect to the selected PLC (starts in a new thread)
 def connect_to_plc(tree, label):
+    global stop_event, active_threads, connection_in_progress
+
+    if active_threads >= max_threads or connection_in_progress:
+        print("Connection in progress. Waiting for it to finish. Triggered on connect")
+        return
+    
     # Get the selected PLC data
     selected_item = tree.selection()
     if not selected_item:
@@ -241,16 +259,22 @@ def connect_to_plc(tree, label):
 
     lgv_data = tree.item(selected_item)["values"]
 
+    stop_event.clear()
+    connection_in_progress = True
+
     # Start the connection in a new thread
     connection_thread = threading.Thread(target=background_connect, args=(lgv_data, label))
     connection_thread.start()
+    active_threads += 1
 
 
 previous_selection = None #track previous connection
+stop_event = threading.Event()
 
+connection_in_progress = False
 # Close the current connection when selection changes
 def on_treeview_select(event):
-    global current_ads_connection, previous_selection
+    global current_ads_connection, previous_selection, stop_event, connection_in_progress
     # Get the currently selected LGV
     selected_item = treeview.selection()
     if not selected_item:
@@ -262,12 +286,19 @@ def on_treeview_select(event):
 
     previous_selection = selected_item  # Update the previously selected item
 
-    # Close any existing connection when the selection changes
-    if current_ads_connection:
-        close_current_connection()
-        disable_control_buttons()
-        update_ui_connection_status("Disconnected", "red", status_label)
+    stop_event.set()
 
+    if connection_in_progress:
+        print("Connection in progress. Waiting for it to finish. Triggered on select")
+        return
+
+    # Close any existing connection when the selection changes
+    if  current_ads_connection:
+        update_ui_connection_status("Disconnected", "red", status_label)
+        status_label.update_idletasks()
+        disable_control_buttons()
+        close_current_connection()
+        
     tc_type = get_lgv_data()[2]
 
     if tc_type == 'TC3':
@@ -370,9 +401,12 @@ def on_dis_horn_button_click():
     print(f"Disable Horn pressed, value:{dis_horn_state}")
 
 press_successful = False
+cooldown_active = False  # Variable to track cooldown state
 
 def on_button_action(action, value, button):
-    global press_successful
+    global press_successful, cooldown_active
+    if cooldown_active:
+        return
     button_state = button.cget("state").string
     if  button_state != 'normal':
         return
@@ -397,6 +431,17 @@ def on_button_action(action, value, button):
             button.config(style="LGV.Pressed.TButton")
         else:  # If released (False)
             button.config(style="LGV.TButton")
+    
+    if not press_successful:
+        button.config(style="LGV.TButton")
+    
+    # Activate cooldown for 500ms (or any duration you choose)
+    cooldown_active = True
+    button.after(500, lambda: end_cooldown())  # End cooldown after 500ms
+
+def end_cooldown():
+    global cooldown_active
+    cooldown_active = False  # Cooldown ended, button can be pressed again
 
 
 def bind_button_actions(button, action, press_value=True, release_value=False):
@@ -408,6 +453,8 @@ def bind_button_actions(button, action, press_value=True, release_value=False):
     def on_button_release(event):
         if press_successful:
             on_button_action(action, release_value, button)
+        else:
+            button.config(style="LGV.TButton")
 
     button.bind("<ButtonPress>", on_button_press)
     button.bind("<ButtonRelease>", on_button_release)
@@ -780,3 +827,4 @@ root.mainloop()
 
 # Add colors to the buttons, at least for the horn, and reset that variable whenever there's a new connection
 
+# Connected/Disconnedted label doesn't change from conencted to disconnected when another selection is made, maybe set this to default when connection is closed
