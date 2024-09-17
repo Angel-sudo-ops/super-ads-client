@@ -10,7 +10,7 @@ import sys
 import threading
 import time
 
-__version__ = '2.0.8'
+__version__ = '2.0.9'
 __icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
@@ -390,12 +390,16 @@ def on_dis_horn_button_click():
 
 press_successful = False
 cooldown_active = False  # Variable to track cooldown state
+interaction_in_progress = False # Track pres-release cycle
 
-def on_button_action(action, value, button):
-    global press_successful, cooldown_active
+def on_button_action(action, value, button, is_release=False):
+    global press_successful, cooldown_active, interaction_in_progress
 
     if cooldown_active:
         return
+    
+    if not is_release:
+        interaction_in_progress = True
     
     button_state = button.cget("state").string
     if  button_state != 'normal':
@@ -410,9 +414,9 @@ def on_button_action(action, value, button):
     tc_type = lgv_data[2]
 
     # Write the value (True or False) for the specific action
-    press_successful = write_variable(action, tc_type, is_core.get(), value)
+    write_variable(action, tc_type, is_core.get(), value)
 
-    # press_successful = True
+    press_successful = True
 
     # Change button color only for reset, stop, and man_auto actions
     if action in ['reset', 'stop', 'man_auto']:
@@ -425,9 +429,12 @@ def on_button_action(action, value, button):
     if not press_successful:
         button.config(style="LGV.TButton")
     
-    # Activate cooldown for 500ms (or any duration you choose)
-    cooldown_active = True
-    button.after(500, lambda: end_cooldown())  # End cooldown after 500ms
+    if is_release and interaction_in_progress:
+        interaction_in_progress = False
+        cooldown_active = True
+        button.after(100, lambda: end_cooldown())  # End cooldown after 500ms
+
+    print(f"Button {action} is pressed and value is {value}")
 
 def end_cooldown():
     global cooldown_active
@@ -442,7 +449,7 @@ def bind_button_actions(button, action, press_value=True, release_value=False):
     
     def on_button_release(event):
         if press_successful:
-            on_button_action(action, release_value, button)
+            on_button_action(action, release_value, button, is_release=True)
         else:
             button.config(style="LGV.TButton")
 
@@ -788,7 +795,8 @@ dis_horn_button = ttk.Button(button_frame,
 dis_horn_button.pack(pady=5, fill='both', expand=True, ipady=3)#, ipadx=5)
 
 
-disable_control_buttons()
+# disable_control_buttons()
+enable_control_buttons()
 
 load_table_data_from_xml(treeview)
 
