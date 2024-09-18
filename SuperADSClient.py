@@ -10,7 +10,7 @@ import sys
 import threading
 import time
 
-__version__ = '2.0.9'
+__version__ = '2.1.0'
 __icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
@@ -349,7 +349,6 @@ variable_write = {
 }
 
 
-
 def write_variable(action, tc_type, is_core, value):
     global current_ads_connection
 
@@ -367,6 +366,7 @@ def write_variable(action, tc_type, is_core, value):
             return True
         except Exception as e:
             messagebox.showerror("Write Error", f"Failed to write to {variable_name}: {str(e)}")
+            print(f"Failed to write to {variable_name}: {str(e)}")
     else:
         print("Connection Error", "No active connection to write to.")
     return False
@@ -375,7 +375,7 @@ def write_variable(action, tc_type, is_core, value):
 # Variable to track toggle state for dis_horn
 dis_horn_state = False
 
-def on_dis_horn_button_click():
+def on_dis_horn_button_click(button):
     global dis_horn_state
     lgv_data = get_lgv_data()
     
@@ -385,8 +385,12 @@ def on_dis_horn_button_click():
 
     # Toggle the state of dis_horn
     dis_horn_state = not dis_horn_state
-    write_variable('dis_horn', tc_type, is_core.get(), dis_horn_state)
-    print(f"Disable Horn pressed, value:{dis_horn_state}")
+    success_write = write_variable('dis_horn', tc_type, is_core.get(), dis_horn_state)
+    if success_write:   
+        print(f"Disable Horn pressed, value: {dis_horn_state}")
+    else:
+        dis_horn_state= False
+        print(f"Disable Horn presse unsuccessful, value: {dis_horn_state}")
 
 press_successful = False
 cooldown_active = False  # Variable to track cooldown state
@@ -414,27 +418,27 @@ def on_button_action(action, value, button, is_release=False):
     tc_type = lgv_data[2]
 
     # Write the value (True or False) for the specific action
-    write_variable(action, tc_type, is_core.get(), value)
+    press_successful = write_variable(action, tc_type, is_core.get(), value)
 
-    press_successful = True
+    # press_successful = True
 
     # Change button color only for reset, stop, and man_auto actions
     if action in ['reset', 'stop', 'man_auto']:
         # Change button color based on press/release value
-        if value:  # If pressed (True)
+        if value and press_successful:  # If pressed (True)
             button.config(style="LGV.Pressed.TButton")
         else:  # If released (False)
             button.config(style="LGV.TButton")
-    
-    if not press_successful:
-        button.config(style="LGV.TButton")
     
     if is_release and interaction_in_progress:
         interaction_in_progress = False
         cooldown_active = True
         button.after(100, lambda: end_cooldown())  # End cooldown after 500ms
 
-    print(f"Button {action} is pressed and value is {value}")
+    if press_successful:    
+        print(f"Button {action} is pressed and value is {value}")
+    else:
+        print(f"Press {action} unsuccessful")
 
 def end_cooldown():
     global cooldown_active
@@ -451,10 +455,24 @@ def bind_button_actions(button, action, press_value=True, release_value=False):
         if press_successful:
             on_button_action(action, release_value, button, is_release=True)
         else:
-            button.config(style="LGV.TButton")
+            button.config(state="normal")
+            # Delay resetting the button's visual state to avoid it appearing pressed
+            button.after(50, lambda: button.state(['!pressed', '!active']))  # Slight delay
+        # Shift focus away after a small delay
+        button.after(50, lambda: button.winfo_toplevel().focus_force())
+
 
     button.bind("<ButtonPress>", on_button_press)
     button.bind("<ButtonRelease>", on_button_release)
+
+def on_button_action_wrapper(action, press_value, release_value, button):
+    global press_successful
+    on_button_action(action, press_value, button)
+
+    if press_successful:
+        # Attempt write release value only if press value was successful
+        on_button_action(action, release_value, button, is_release=True)
+
 
 
 ####################################################################################################################################################################
@@ -650,11 +668,9 @@ root.after(100, set_icon)
 style = ttk.Style()
 
 style.configure("LGV.TButton", 
-                focuscolor="white", 
                 padding=(4,4),
                 anchor="center",
                 foreground='black', 
-                focusthickness=1, 
                 font=("Segoe UI", 18))
 
 style.configure("LGV.Pressed.TButton", 
@@ -664,24 +680,19 @@ style.configure("LGV.Pressed.TButton",
                 font=("Segoe UI", 18, "bold"))
 
 style.configure("LGV.Connected.TButton", 
-                focuscolor="white", 
                 padding=(4,4),
                 anchor="center",
                 foreground='green', 
-                focusthickness=1, 
                 font=("Segoe UI", 18, "bold"))
 
 style.configure("LGV.Disconnected.TButton", 
-                focuscolor="white", 
                 padding=(4,4),
                 anchor="center",
-                foreground='red', 
-                focusthickness=1, 
+                foreground='red',  
                 font=("Segoe UI", 18))
 
 style.configure("Connect.TButton",
                 padding=2,
-                focusthickness=1,
                 font=("Segoe UI", 13))
 
 
@@ -766,37 +777,41 @@ button_frame.grid(row=1, column=1, padx=10, pady=10, sticky='ew')
 # Add some buttons to the right frame
 reset_button = ttk.Button(button_frame, 
                           text="Reset", 
-                          style='LGV.TButton')
-reset_button.pack(pady=5, fill='both', expand=True, ipady=3)#, ipadx=5)
-bind_button_actions(reset_button, 'reset')
+                          style='LGV.TButton',
+                          command=lambda: on_button_action_wrapper('reset', True, False, reset_button))
+reset_button.pack(pady=5, fill='both', expand=True, ipady=3)
+# bind_button_actions(reset_button, 'reset')
 
 run_button = ttk.Button(button_frame, 
                         text="Run",
-                        style='LGV.TButton')
-run_button.pack(pady=5, fill='both', expand=True, ipady=3)#, ipadx=5)
-bind_button_actions(run_button, 'run')
+                        style='LGV.TButton',
+                        command=lambda: on_button_action_wrapper('run', True, False, run_button))
+run_button.pack(pady=5, fill='both', expand=True, ipady=3)
+# bind_button_actions(run_button, 'run')
 
 stop_button = ttk.Button(button_frame, 
                          text="Stop", 
-                         style='LGV.Pressed.TButton')
-stop_button.pack(pady=5, fill='both', expand=True, ipady=3)#, ipadx=5)
-bind_button_actions(stop_button, 'stop', press_value=False, release_value=True)
+                         style='LGV.Pressed.TButton',
+                         command=lambda: on_button_action_wrapper('stop', False, True, stop_button))
+stop_button.pack(pady=5, fill='both', expand=True, ipady=3)
+# bind_button_actions(stop_button, 'stop', press_value=False, release_value=True)
 
 man_auto_button = ttk.Button(button_frame, 
                              text="Man/Auto",
-                             style='LGV.TButton')
-man_auto_button.pack(pady=5, fill='both', expand=True, ipady=3)#, ipadx=5)
-bind_button_actions(man_auto_button, 'man_auto')
+                             style='LGV.TButton',
+                             command=lambda: on_button_action_wrapper('man_auto', True, False, man_auto_button))
+man_auto_button.pack(pady=5, fill='both', expand=True, ipady=3)
+# bind_button_actions(man_auto_button, 'man_auto')
 
 dis_horn_button = ttk.Button(button_frame, 
                              text="Disable Horn", 
                              style='LGV.TButton',
-                             command=on_dis_horn_button_click)
-dis_horn_button.pack(pady=5, fill='both', expand=True, ipady=3)#, ipadx=5)
+                             command=lambda: on_dis_horn_button_click(dis_horn_button))
+dis_horn_button.pack(pady=5, fill='both', expand=True, ipady=3)
 
 
-# disable_control_buttons()
-enable_control_buttons()
+disable_control_buttons()
+# enable_control_buttons()
 
 load_table_data_from_xml(treeview)
 
