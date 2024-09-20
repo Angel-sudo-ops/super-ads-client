@@ -10,7 +10,7 @@ import sys
 import threading
 import time
 
-__version__ = '2.1.0'
+__version__ = '2.1.1'
 __icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
@@ -369,7 +369,7 @@ def write_variable(action, tc_type, is_core, value):
             print(f"Failed to write to {variable_name}: {str(e)}")
     else:
         print("Connection Error", "No active connection to write to.")
-        messagebox.showerror("Connection Error", "No active connection to write to.")
+        # messagebox.showerror("Connection Error", "No active connection to write to.")
     return False
     
 
@@ -474,28 +474,30 @@ def bind_button_actions(button, action, press_value=True, release_value=False):
 #         on_button_action(action, release_value, button, is_release=True)
 
 
+release_bound = True # Track is released event was bound
 
 def on_button_action_wrapper(action, press_value, release_value, button):
-    # button_pressed = False  # Global variable to track if the button is pressed
+    global press_successful, release_bound
 
-    # if not button_pressed:
-    # Press action: simulate pressing the button and sending the value
     on_button_action(action, press_value, button)
-    # button_pressed = True  # Mark button as pressed
-    if press_successful:
-    # Wait for the user to release the button to send the release value
+
+    if press_successful and not release_bound:
+        # Wait for the user to release the button to send the release value
         button.bind("<ButtonRelease>", lambda event: on_button_release(action, release_value, button))
+        release_bound = True
 
 def on_button_release(action, release_value, button):
-    global press_successful#, button_pressed
+    global press_successful, release_bound
 
-    if press_successful:
-        # Release action: simulate releasing the button and sending the value
-        on_button_action(action, release_value, button, is_release=True)
-        # button_pressed = False  # Reset the button state to not pressed
-
-        # Unbind the release event to prevent multiple triggers
-        button.unbind("<ButtonRelease>")
+    try:    
+        if press_successful:
+            # Release action: simulate releasing the button and sending the value
+            on_button_action(action, release_value, button, is_release=True)
+    finally:
+        if release_bound:
+            # Unbind the release event to prevent multiple triggers
+            button.unbind("<ButtonRelease>")
+            release_bound = False
 
 
 
@@ -834,8 +836,8 @@ dis_horn_button = ttk.Button(button_frame,
 dis_horn_button.pack(pady=5, fill='both', expand=True, ipady=3)
 
 
-# disable_control_buttons()
-enable_control_buttons()
+disable_control_buttons()
+# enable_control_buttons()
 
 load_table_data_from_xml(treeview)
 
