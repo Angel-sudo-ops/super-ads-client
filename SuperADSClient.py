@@ -10,7 +10,7 @@ import sys
 import threading
 import time
 
-__version__ = '2.1.1'
+__version__ = '2.1.2'
 __icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
@@ -460,7 +460,7 @@ def bind_button_actions(button, action, press_value=True, release_value=False):
             # Delay resetting the button's visual state to avoid it appearing pressed
             button.after(50, lambda: button.state(['!pressed', '!active']))  # Slight delay
         # Shift focus away after a small delay
-        button.after(50, lambda: button.winfo_toplevel().focus_force())
+        # button.after(50, lambda: button.winfo_toplevel().focus_force())
 
     button.bind("<ButtonPress>", lambda event: on_button_press(event))
     button.bind("<ButtonRelease>", lambda event: on_button_release(event))
@@ -474,30 +474,29 @@ def bind_button_actions(button, action, press_value=True, release_value=False):
 #         on_button_action(action, release_value, button, is_release=True)
 
 
-release_bound = True # Track is released event was bound
+# release_bound = False # Track is released event was bound
 
 def on_button_action_wrapper(action, press_value, release_value, button):
-    global press_successful, release_bound
+    global press_successful
 
     on_button_action(action, press_value, button)
 
-    if press_successful and not release_bound:
+    if press_successful:
         # Wait for the user to release the button to send the release value
         button.bind("<ButtonRelease>", lambda event: on_button_release(action, release_value, button))
-        release_bound = True
 
 def on_button_release(action, release_value, button):
-    global press_successful, release_bound
+    global press_successful
 
-    try:    
-        if press_successful:
+    # try:    
+        # if press_successful:
             # Release action: simulate releasing the button and sending the value
-            on_button_action(action, release_value, button, is_release=True)
-    finally:
-        if release_bound:
+    on_button_action(action, release_value, button, is_release=True)
+ 
+    # finally:
             # Unbind the release event to prevent multiple triggers
-            button.unbind("<ButtonRelease>")
-            release_bound = False
+    button.unbind("<ButtonRelease>")
+            # release_bound = False
 
 
 
@@ -505,14 +504,14 @@ def on_button_release(action, release_value, button):
 ##################################################################### Read variables ###############################################################################
 ####################################################################################################################################################################
 variable_read = {
-    'reset': {
+    'reset': {  
         'TC2': ".Button_Reset",
         ('TC3', False): "LGV.Status.manReset",
         ('TC3', True): "LibraryInterfaces.LGV.Status.manReset"
     },
     'run': {
         'TC2': ".OUT_Lamp_Top_Auto",
-        ('TC3', False): "Light.runButton.isTurnedOn",
+        ('TC3', False): "SafetyControls.alert.out.lampRunButton",
         ('TC3', True): "SafetyControls.alert.out.lampRunButton"
     },
     'stop': {
@@ -702,8 +701,9 @@ style.configure("LGV.TButton",
 style.configure("LGV.Pressed.TButton", 
                 padding=(4,4),
                 anchor="center",
-                foreground='blue', 
+                foreground='#2D68C4', 
                 font=("Segoe UI", 18, "bold"))
+# #1E90FF, #1560bd, #005A9C, #1877F2, #0071c5, #1C39BB, #2D68C4
 
 style.configure("LGV.Connected.TButton", 
                 padding=(4,4),
@@ -803,31 +803,32 @@ button_frame.grid(row=1, column=1, padx=10, pady=10, sticky='ew')
 # Add some buttons to the right frame
 reset_button = ttk.Button(button_frame, 
                           text="Reset", 
-                          style='LGV.TButton',
-                          command=lambda: on_button_action_wrapper('reset', True, False, reset_button))
+                          style='LGV.TButton')
+                        #   command=lambda: bind_button_actions(reset_button, 'reset'))
+                        #   command=lambda: on_button_action_wrapper('reset', True, False, reset_button))
 reset_button.pack(pady=5, fill='both', expand=True, ipady=3)
-# bind_button_actions(reset_button, 'reset')
+bind_button_actions(reset_button, 'reset')
 
 run_button = ttk.Button(button_frame, 
                         text="Run",
-                        style='LGV.TButton',
-                        command=lambda: on_button_action_wrapper('run', True, False, run_button))
+                        style='LGV.TButton')
+                        # command=lambda: on_button_action_wrapper('run', True, False, run_button))
 run_button.pack(pady=5, fill='both', expand=True, ipady=3)
-# bind_button_actions(run_button, 'run')
+bind_button_actions(run_button, 'run')
 
 stop_button = ttk.Button(button_frame, 
                          text="Stop", 
-                         style='LGV.Pressed.TButton',
-                         command=lambda: on_button_action_wrapper('stop', False, True, stop_button))
+                         style='LGV.Pressed.TButton')
+                        #  command=lambda: on_button_action_wrapper('stop', False, True, stop_button))
 stop_button.pack(pady=5, fill='both', expand=True, ipady=3)
-# bind_button_actions(stop_button, 'stop', press_value=False, release_value=True)
+bind_button_actions(stop_button, 'stop', press_value=False, release_value=True)
 
 man_auto_button = ttk.Button(button_frame, 
                              text="Man/Auto",
-                             style='LGV.TButton',
-                             command=lambda: on_button_action_wrapper('man_auto', True, False, man_auto_button))
+                             style='LGV.TButton')
+                            #  command=lambda: on_button_action_wrapper('man_auto', True, False, man_auto_button))
 man_auto_button.pack(pady=5, fill='both', expand=True, ipady=3)
-# bind_button_actions(man_auto_button, 'man_auto')
+bind_button_actions(man_auto_button, 'man_auto')
 
 dis_horn_button = ttk.Button(button_frame, 
                              text="Disable Horn", 
