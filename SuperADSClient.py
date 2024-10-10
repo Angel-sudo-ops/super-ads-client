@@ -10,7 +10,7 @@ import sys
 import threading
 import time
 
-__version__ = '2.1.2 Beta 6'
+__version__ = '2.1.2 Beta 7'
 __icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
@@ -227,6 +227,7 @@ def background_connect(plc_data, label):
         disable_control_buttons()
         update_ui_connection_status("Disconnected", "red", label)
         messagebox.showerror("Connection Error", f"Failed to connect to {lgv_name}: {str(e)}")
+        treeview.selection_remove(treeview.selection())
 
     finally:
         connection_in_progress = False
