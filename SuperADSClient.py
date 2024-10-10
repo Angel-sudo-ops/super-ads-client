@@ -10,7 +10,7 @@ import sys
 import threading
 import time
 
-__version__ = '2.1.2'
+__version__ = '2.1.2 Beta 6'
 __icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
@@ -180,8 +180,10 @@ def check_plc_status(ads_connection):
 
 # Close the current connection if it exists
 def close_current_connection():
-    global current_ads_connection, dis_horn_state
+    global current_ads_connection, dis_horn_state, connection_in_progress
     # with read_lock:
+    connection_in_progress = False
+    update_ui_connection_status("Disconnected", "red", status_label)
     if current_ads_connection:
         current_ads_connection.close()
         current_ads_connection = None
@@ -237,10 +239,17 @@ def update_ui_connection_status(text, color, label):
 
 # Attempt to connect to the selected PLC (starts in a new thread)
 def connect_to_plc(tree, label):
-    global connection_in_progress
-
+    global connection_in_progress, current_ads_connection
+    
     if connection_in_progress:
         print("Connection in progress. Waiting for it to finish. Triggered on connect")
+        messagebox.showinfo("Attention", "Connection in progress. Waiting for it to finish. Triggered on connect")
+        return
+    
+    # If already connected, don't try to reconnect
+    if current_ads_connection is not None:
+        print("Target already connected")
+        messagebox.showinfo("Attention", "Target already connected")
         return
     
     # Get the selected PLC data
@@ -252,41 +261,46 @@ def connect_to_plc(tree, label):
 
     lgv_data = tree.item(selected_item)["values"]
 
-    connection_in_progress = True
-
     # Start the connection in a new thread
     connection_thread = threading.Thread(target=background_connect, args=(lgv_data, label))
     connection_thread.start()
+    connection_in_progress = True
 
 
-previous_selection = None #track previous connection
+previous_selection = None # track previous connection
 
 connection_in_progress = False
 # Close the current connection when selection changes
 def on_treeview_select(event):
     global current_ads_connection, previous_selection, connection_in_progress
     # Get the currently selected LGV
+    
     selected_item = treeview.selection()
     if not selected_item:
         return
+    
+    if connection_in_progress:
+        print("Connection in progress. Waiting for it to finish. Triggered on select")
+        messagebox.showinfo("Attention", "Connection in progress. Waiting for it to finish. Triggered on select")
+        return
 
     # If the same item is selected, do nothing
-    if previous_selection == selected_item:
+    if (previous_selection == selected_item) and current_ads_connection:
+        print("Target already connected")
+        messagebox.showinfo("Attention", "Target already connected")
         return
 
     previous_selection = selected_item  # Update the previously selected item
-
-    if connection_in_progress:
-        print("Connection in progress. Waiting for it to finish. Triggered on select")
-        return
-
+    
     # Close any existing connection when the selection changes
     if  current_ads_connection:
-        update_ui_connection_status("Disconnected", "red", status_label)
-        status_label.update_idletasks()
+        # status_label.update_idletasks()
         disable_control_buttons()
         close_current_connection()
-        
+        messagebox.showinfo("Attention", "Connection Closed")
+    
+    update_ui_connection_status("Disconnected", "red", status_label)
+
     tc_type = get_lgv_data()[2]
 
     if tc_type == 'TC3':
@@ -323,22 +337,22 @@ def on_core_check():
 variable_write = {
     'reset': {
         'TC2': ".ADS_Reset",
-        ('TC3', False): "ADS_Reset",
+        ('TC3', False): "Load_Handling.ADS_Reset",
         ('TC3', True): "CoreGVL.ADS_Reset"
     },
     'run': {
         'TC2': ".ADS_Run",
-        ('TC3', False): "ADS_Run",
+        ('TC3', False): "Load_Handling.ADS_Run",
         ('TC3', True): "CoreGVL.ADS_Run"
     },
     'stop': {
         'TC2': ".ADS_Stop",
-        ('TC3', False): "ADS_Stop",
+        ('TC3', False): "Load_Handling.ADS_Stop",
         ('TC3', True): "CoreGVL.ADS_Stop"
     },
     'man_auto': {
         'TC2': ".ADS_MCD_Mode",
-        ('TC3', False): "ADS_MCD_Mode",
+        ('TC3', False): "Load_Handling.ADS_MCD_Mode",
         ('TC3', True): "CoreGVL.ADS_MCD_Mode"
     },
     'dis_horn': {
@@ -585,8 +599,8 @@ read_lock = threading.Lock()
 def update_buttons_from_plc_thread():
     global current_ads_connection
 
-    if current_ads_connection is None:
-        return
+    # if current_ads_connection is None:
+    #     return
         
     # Read variables and update button colors for all actions
     # actions = ['reset', 'run', 'stop', 'man_auto', 'dis_horn']
@@ -603,6 +617,8 @@ def update_buttons_from_plc_thread():
     
     # with read_lock:
     for action in actions:
+        if current_ads_connection is None:
+            return
         read_value = read_variable(action)  # Read value from PLC
         button = button_mapping[action]
     
