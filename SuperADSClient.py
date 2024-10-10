@@ -10,7 +10,7 @@ import sys
 import threading
 import time
 
-__version__ = '2.1.2 Beta 7'
+__version__ = '2.1.2 Beta 8'
 __icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
@@ -281,6 +281,7 @@ def on_treeview_select(event):
         return
     
     if connection_in_progress:
+        treeview.selection_remove(treeview.selection())
         print("Connection in progress. Waiting for it to finish. Triggered on select")
         messagebox.showinfo("Attention", "Connection in progress. Waiting for it to finish. Triggered on select")
         return
