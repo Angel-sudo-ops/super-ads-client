@@ -10,7 +10,7 @@ import sys
 import threading
 import time
 
-__version__ = '2.1.2 Beta 8'
+__version__ = '2.1.2 Beta 9'
 __icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
@@ -365,7 +365,7 @@ variable_write = {
 }
 
 
-def write_variable(action, tc_type, is_core, value):
+def write_variable(action, tc_type, is_core, value, button):
     global current_ads_connection
 
     # Select the appropriate variable name for the action, based on tc_type and is_core
@@ -383,6 +383,11 @@ def write_variable(action, tc_type, is_core, value):
         except Exception as e:
             messagebox.showerror("Write Error", f"Failed to write to {variable_name}: {str(e)}")
             print(f"Failed to write to {variable_name}: {str(e)}")
+        finally:
+            button.config(state="normal")
+            # Delay resetting the button's visual state to avoid it appearing pressed
+            button.after(0, lambda: button.state(['!pressed', '!active']))  # Slight delay
+
     else:
         print("Connection Error", "No active connection to write to.")
         # messagebox.showerror("Connection Error", "No active connection to write to.")
@@ -390,10 +395,13 @@ def write_variable(action, tc_type, is_core, value):
     
 
 # Variable to track toggle state for dis_horn
-dis_horn_state = False
 
 def on_dis_horn_button_click(button):
     global dis_horn_state
+
+    # Get initial state of dis_horn variable to toggle it
+    dis_horn_state = read_variable('dis_horn') 
+
     lgv_data = get_lgv_data()
     
     if lgv_data is None:
@@ -402,7 +410,7 @@ def on_dis_horn_button_click(button):
 
     # Toggle the state of dis_horn
     dis_horn_state = not dis_horn_state
-    success_write = write_variable('dis_horn', tc_type, is_core.get(), dis_horn_state)
+    success_write = write_variable('dis_horn', tc_type, is_core.get(), dis_horn_state, button)
     if success_write:   
         print(f"Disable Horn pressed, value: {dis_horn_state}")
     else:
@@ -435,7 +443,7 @@ def on_button_action(action, value, button, is_release=False):
     tc_type = lgv_data[2]
 
     # Write the value (True or False) for the specific action
-    press_successful = write_variable(action, tc_type, is_core.get(), value)
+    press_successful = write_variable(action, tc_type, is_core.get(), value, button)
 
     # press_successful = True
 
@@ -471,12 +479,12 @@ def bind_button_actions(button, action, press_value=True, release_value=False):
     def on_button_release(event):
         if press_successful:
             on_button_action(action, release_value, button, is_release=True)
-        else:
-            button.config(state="normal")
-            # Delay resetting the button's visual state to avoid it appearing pressed
-            button.after(50, lambda: button.state(['!pressed', '!active']))  # Slight delay
-        # Shift focus away after a small delay
-        # button.after(50, lambda: button.winfo_toplevel().focus_force())
+        # else:
+        #     button.config(state="normal")
+        #     # Delay resetting the button's visual state to avoid it appearing pressed
+        #     button.after(10, lambda: button.state(['!pressed', '!active']))  # Slight delay
+        # # Shift focus away after a small delay
+        # # button.after(50, lambda: button.winfo_toplevel().focus_force())
 
     button.bind("<ButtonPress>", lambda event: on_button_press(event))
     button.bind("<ButtonRelease>", lambda event: on_button_release(event))
