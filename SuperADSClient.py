@@ -10,7 +10,7 @@ import sys
 import threading
 import time
 
-__version__ = '2.1.2 Beta 10'
+__version__ = '2.1.2 Beta 12'
 __icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
@@ -189,7 +189,7 @@ def close_current_connection():
         current_ads_connection = None
         dis_horn_state = False #reset horn state
         is_core = False
-        core_status_label.config(text="No Core Lib", foreground="red")
+        core_status_label.config(text="No Core Lib")
 
 # Background connection handler (runs in a separate thread)
 def background_connect(plc_data, label):
@@ -565,14 +565,14 @@ def check_for_core_variable():
         # If the core variable is read successfully, set the variable and update the label
         if core_value is not None:
             is_core = True  # Set the variable to True (core detected)
-            core_status_label.config(text="Core Lib", foreground="green")
+            core_status_label.config(text="Core Lib")
         else:
             is_core = False  # Set the variable to False (core not detected)
-            core_status_label.config(text="No Core Lib", foreground="red")
+            core_status_label.config(text="No Core Lib")
             
     except Exception as e:
         is_core = False  # Handle error, set core status to "not detected"
-        core_status_label.config(text="No Core Lib", foreground="red")
+        core_status_label.config(text="No Core Lib")
 
 
 def read_variable(action):
@@ -799,7 +799,7 @@ connect_button.grid(row=0, column=1, padx=5, ipady=4, sticky='e')
 # core_check.config(state='disabled')
 
 # Create a label as an indicator
-core_status_label = ttk.Label(frame_connect, text="No Core Lib", foreground="red")
+core_status_label = ttk.Label(frame_connect, text="No Core Lib", foreground="#4682B4") # #3CB371, #6495ED, 4682B4
 core_status_label.grid(row=0, column=0, padx=0, pady=0)
 
 
@@ -813,7 +813,7 @@ status_label.grid(row=0, column=1, padx=5, pady=5)
 
 # Create a frame for the table (Treeview)
 table_frame = ttk.Frame(root)
-table_frame.grid(row=1, column=0, padx=15, pady=25, sticky='nsew')
+table_frame.grid(row=1, column=0, padx=10, pady=25, sticky='nsew')
 
 treeview_style = ttk.Style()
 treeview_style.configure("Treeview", rowheight=23)  # Increase row height for more space between items
