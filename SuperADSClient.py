@@ -10,7 +10,7 @@ import sys
 import threading
 import time
 
-__version__ = '2.1.2 Beta 9'
+__version__ = '2.1.2 Beta 10'
 __icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
@@ -212,6 +212,8 @@ def background_connect(plc_data, label):
             update_ui_connection_status("Connected", "green", label)
             enable_control_buttons()
 
+            # Automatically detect core variable
+            check_for_core_variable()
             # Call update_buttons once to start the loop
             # update_buttons()
             update_buttons_from_plc_thread()
@@ -305,10 +307,10 @@ def on_treeview_select(event):
 
     tc_type = get_lgv_data()[2]
 
-    if tc_type == 'TC3':
-        core_check.config(state='normal')
-    else:
-        core_check.config(state='disabled')
+    # if tc_type == 'TC3':
+    #     core_check.config(state='normal')
+    # else:
+    #     core_check.config(state='disabled')
 
 # Enable control buttons after a successful connection
 def enable_control_buttons():
@@ -554,6 +556,21 @@ variable_read = {
         ('TC3', True): "Output.disableHorn"
     }
 }
+
+def check_for_core_variable():
+    try:
+        # Attempt to read the core variable
+        core_value = current_ads_connection.read_by_name("CoreGVL.ADS_Run", pyads.PLCTYPE_BOOL)
+        
+        # If the core variable is read successfully, set the checkbox
+        if core_value is not None:  # Adjust this depending on how core variables behave
+            is_core.set(1)  # Select the checkbox
+        else:
+            is_core.set(0)  # Deselect the checkbox (not core)
+
+    except Exception as e:
+        is_core.set(0)  # Deselect the checkbox in case of failure
+
 
 def read_variable(action):
     lgv_data = get_lgv_data()
