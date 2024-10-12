@@ -180,7 +180,7 @@ def check_plc_status(ads_connection):
 
 # Close the current connection if it exists
 def close_current_connection():
-    global current_ads_connection, dis_horn_state, connection_in_progress
+    global current_ads_connection, dis_horn_state, connection_in_progress, is_core
     # with read_lock:
     connection_in_progress = False
     update_ui_connection_status("Disconnected", "red", status_label)
@@ -188,6 +188,8 @@ def close_current_connection():
         current_ads_connection.close()
         current_ads_connection = None
         dis_horn_state = False #reset horn state
+        is_core = False
+        core_status_label.config(text="No Core Lib", foreground="red")
 
 # Background connection handler (runs in a separate thread)
 def background_connect(plc_data, label):
@@ -230,6 +232,7 @@ def background_connect(plc_data, label):
         update_ui_connection_status("Disconnected", "red", label)
         messagebox.showerror("Connection Error", f"Failed to connect to {lgv_name}: {str(e)}")
         treeview.selection_remove(treeview.selection())
+        is_core = False
 
     finally:
         connection_in_progress = False
@@ -305,13 +308,6 @@ def on_treeview_select(event):
     
     update_ui_connection_status("Disconnected", "red", status_label)
 
-    tc_type = get_lgv_data()[2]
-
-    # if tc_type == 'TC3':
-    #     core_check.config(state='normal')
-    # else:
-    #     core_check.config(state='disabled')
-
 # Enable control buttons after a successful connection
 def enable_control_buttons():
     lgv_buttons = (reset_button, run_button, stop_button, man_auto_button, dis_horn_button)
@@ -328,7 +324,7 @@ def disable_control_buttons():
         button.config(state="disabled")
 
 def on_core_check():
-    if is_core.get():
+    if is_core:
         print("Core library present")
     else:
         print("Normal library")
@@ -412,7 +408,7 @@ def on_dis_horn_button_click(button):
 
     # Toggle the state of dis_horn
     dis_horn_state = not dis_horn_state
-    success_write = write_variable('dis_horn', tc_type, is_core.get(), dis_horn_state, button)
+    success_write = write_variable('dis_horn', tc_type, is_core, dis_horn_state, button)
     if success_write:   
         print(f"Disable Horn pressed, value: {dis_horn_state}")
     else:
@@ -445,7 +441,7 @@ def on_button_action(action, value, button, is_release=False):
     tc_type = lgv_data[2]
 
     # Write the value (True or False) for the specific action
-    press_successful = write_variable(action, tc_type, is_core.get(), value, button)
+    press_successful = write_variable(action, tc_type, is_core, value, button)
 
     # press_successful = True
 
@@ -557,25 +553,32 @@ variable_read = {
     }
 }
 
+# Variable to store core status
+is_core = False
+
 def check_for_core_variable():
+    global is_core 
     try:
         # Attempt to read the core variable
         core_value = current_ads_connection.read_by_name("CoreGVL.ADS_Run", pyads.PLCTYPE_BOOL)
         
-        # If the core variable is read successfully, set the checkbox
-        if core_value is not None:  # Adjust this depending on how core variables behave
-            is_core.set(1)  # Select the checkbox
+        # If the core variable is read successfully, set the variable and update the label
+        if core_value is not None:
+            is_core = True  # Set the variable to True (core detected)
+            core_status_label.config(text="Core Lib", foreground="green")
         else:
-            is_core.set(0)  # Deselect the checkbox (not core)
-
+            is_core = False  # Set the variable to False (core not detected)
+            core_status_label.config(text="No Core Lib", foreground="red")
+            
     except Exception as e:
-        is_core.set(0)  # Deselect the checkbox in case of failure
+        is_core = False  # Handle error, set core status to "not detected"
+        core_status_label.config(text="No Core Lib", foreground="red")
 
 
 def read_variable(action):
     lgv_data = get_lgv_data()
     tc_type = lgv_data[2]
-    is_core_value = is_core.get()
+    is_core_value = is_core
 
     # Fetch the variable name based on the TC type and is_core flag
     var_name = variable_read[action].get(tc_type) if tc_type == "TC2" else variable_read[action].get((tc_type, is_core_value))
@@ -790,10 +793,14 @@ frame_connect.grid(row=0, column=0, padx=0, pady=0, sticky='e')
 connect_button = ttk.Button(frame_connect, text="Connect", command=lambda: connect_to_plc(treeview, status_label), style='Connect.TButton')
 connect_button.grid(row=0, column=1, padx=5, ipady=4, sticky='e')
 
-is_core = tk.IntVar()
-core_check = ttk.Checkbutton(frame_connect, text="IsCore", variable=is_core, command=on_core_check)
-core_check.grid(row=0, column=0, padx=0, pady=0)
-core_check.config(state='disabled')
+# is_core = tk.IntVar()
+# core_check = ttk.Checkbutton(frame_connect, text="IsCore", variable=is_core, command=on_core_check)
+# core_check.grid(row=0, column=0, padx=0, pady=0)
+# core_check.config(state='disabled')
+
+# Create a label as an indicator
+core_status_label = ttk.Label(frame_connect, text="No Core Lib", foreground="red")
+core_status_label.grid(row=0, column=0, padx=0, pady=0)
 
 
 
