@@ -278,7 +278,7 @@ previous_selection = None # track previous connection
 connection_in_progress = False
 # Close the current connection when selection changes
 def on_treeview_select(event):
-    global current_ads_connection, previous_selection, connection_in_progress
+    global current_ads_connection, previous_selection, connection_in_progress, dis_horn_state
     # Get the currently selected LGV
     
     selected_item = treeview.selection()
@@ -304,7 +304,9 @@ def on_treeview_select(event):
         # status_label.update_idletasks()
         disable_control_buttons()
         close_current_connection()
-        messagebox.showinfo("Attention", "Connection Closed")
+        # messagebox.showinfo("Attention", "Connection Closed")
+        if dis_horn_state:
+            messagebox.showwarning("Attention", "Horn is disabled!!")
     
     update_ui_connection_status("Disconnected", "red", status_label)
 
