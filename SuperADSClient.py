@@ -375,6 +375,13 @@ default_variable_write = {
     }
 }
 
+def reset_to_defaults():
+    if os.path.exists("variables_config.json"):
+        os.remove("variables_config.json")
+        messagebox.showinfo("Reset", "Variables have been reset to defaults.")
+    # else:
+        # messagebox.showinfo("Reset", "No saved configuration found.")
+
 # Load variables from JSON or fall back to defaults
 def load_variables():
     if os.path.exists("variables_config.json"):
@@ -400,19 +407,21 @@ def save_variables(variable_write):
 # Example usage
 def save_user_input(plc_type, is_core, variables):
     current_vars = load_variables()
+    non_empty_found = False
     
     # Save the inputs for TC2 or TC3 (core/no core) based on selection
     for key, value in variables.items():
-        if plc_type == "TC2":
-            if 'TC2' not in current_vars[key]:
-                current_vars[key]['TC2'] = value  # Initialize if not exists
-            current_vars[key]['TC2'] = value
-        elif plc_type == "TC3":
-            core_key = 'core' if is_core else 'no_core'
-            if 'TC3' not in current_vars[key]:
-                current_vars[key]['TC3'] = {'core': "", 'no_core': ""}  # Initialize if not exists
-            current_vars[key]['TC3'][core_key] = value
+        if value.strip(): # Only save non-empty values (remove leading/trailing spaces)
+            non_empty_found = True
+            if plc_type == "TC2":
+                current_vars[key]['TC2'] = value
+            elif plc_type == "TC3":
+                core_key = 'core' if is_core else 'no_core'
+                current_vars[key]['TC3'][core_key] = value
 
+    if not non_empty_found:
+        print("No non-empty values found, skipping save")
+        return
     # Save to the JSON file
     save_variables(current_vars)
     print(f"Variables saved for {plc_type} with core: {is_core}")
@@ -815,9 +824,12 @@ def open_variable_window():
 
         # Call the function to save user input
         save_user_input(plc_type.get(), is_core.get(), variables)
-        print("Variables saved!")
 
-    ttk.Button(var_window, text="Save", command=save).grid(row=3, column=0, pady=10, ipadx=5, ipady=5)
+    frame_setvar = tk.Frame(var_window)
+    frame_setvar.grid(row=3, column=0, padx=5, pady=5)
+    ttk.Button(frame_setvar, text="Save", command=save).grid(row=0, column=0, pady=10, padx=10, ipadx=5, ipady=5)
+    ttk.Button(frame_setvar, text="Reset", command=reset_to_defaults).grid(row=0, column=1, pady=10, padx=10, ipadx=5, ipady=5)
+
 ####################################################################################################################################################################
 ####################################################################### Create UI ##################################################################################
 ####################################################################################################################################################################
@@ -888,9 +900,10 @@ menu_bar.add_cascade(label="  File ", menu=file_menu)
 
 
 options_menu = tk.Menu(menu_bar, tearoff=0)
-options_menu.add_command(label=" Set Variables ", command=open_variable_window)
+options_menu.add_command(label="Set Variables    ", command=open_variable_window)
+# options_menu.add_command(label="Reset to Defaults ", command=reset_to_defaults)
 
-menu_bar.add_cascade(label=" Options  ", menu=options_menu)
+menu_bar.add_cascade(label=" Options  ", menu=options_menu)    
 
 root.config(menu=menu_bar)
 
