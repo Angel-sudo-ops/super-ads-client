@@ -379,8 +379,17 @@ def reset_to_defaults():
     if os.path.exists("variables_config.json"):
         os.remove("variables_config.json")
         messagebox.showinfo("Reset", "Variables have been reset to defaults.")
+        options_menu.entryconfig("Reset to Defaults ", state="disabled")
     # else:
         # messagebox.showinfo("Reset", "No saved configuration found.")
+
+# Function to update the menu item based on whether the JSON file exists
+def update_menu():
+    if os.path.exists("variables_config.json"):
+        options_menu.entryconfig("Reset to Defaults ", state="normal")  # Enable if file exists
+    else:
+        options_menu.entryconfig("Reset to Defaults ", state="disabled")  # Disable if file doesn't exist
+
 
 # Load variables from JSON or fall back to defaults
 def load_variables():
@@ -406,6 +415,7 @@ def save_variables(variable_write):
 
 # Example usage
 def save_user_input(plc_type, is_core, variables):
+    global variable_write
     current_vars = load_variables()
     non_empty_found = False
     
@@ -425,12 +435,14 @@ def save_user_input(plc_type, is_core, variables):
     # Save to the JSON file
     save_variables(current_vars)
     print(f"Variables saved for {plc_type} with core: {is_core}")
+    messagebox.showinfo("Success", f"Variables saved for {plc_type} with" + " " if is_core else "no" + "core")
+    variable_write = load_variables()
+    update_menu()
 
 
 def write_variable(action, tc_type, is_core, value, button):
     global current_ads_connection
 
-    variable_write = load_variables()
     # Select the appropriate variable name for the action, based on tc_type and is_core
     if tc_type == 'TC2':
         variable_name = variable_write[action]['TC2']  # For TC2, ignore is_core
@@ -828,7 +840,31 @@ def open_variable_window():
     frame_setvar = tk.Frame(var_window)
     frame_setvar.grid(row=3, column=0, padx=5, pady=5)
     ttk.Button(frame_setvar, text="Save", command=save).grid(row=0, column=0, pady=10, padx=10, ipadx=5, ipady=5)
-    ttk.Button(frame_setvar, text="Reset", command=reset_to_defaults).grid(row=0, column=1, pady=10, padx=10, ipadx=5, ipady=5)
+    # ttk.Button(frame_setvar, text="Reset", command=reset_to_defaults).grid(row=0, column=1, pady=10, padx=10, ipadx=5, ipady=5)
+   
+
+####################################################################################################################################################################
+######################################################## Window To Read/Write Custom Variables #####################################################################
+####################################################################################################################################################################
+def open_read_write_window():
+    read_write_window = tk.Toplevel(root)
+    read_write_window.title("Set Variables")
+
+    read_write_window.resizable(False,False)
+
+
+    # entry to input LGV range
+
+    # drop down menu to add and save variables
+
+    # frame to add radio buttons for TRUE FALSE or Value (in a entry) when writing
+
+    # Frame with two buttons (read / write)
+
+    # Widget to show results when reading (enable only with reading)
+
+    # Read and write will be multi thread
+
 
 ####################################################################################################################################################################
 ####################################################################### Create UI ##################################################################################
@@ -901,11 +937,14 @@ menu_bar.add_cascade(label="  File ", menu=file_menu)
 
 options_menu = tk.Menu(menu_bar, tearoff=0)
 options_menu.add_command(label="Set Variables    ", command=open_variable_window)
-# options_menu.add_command(label="Reset to Defaults ", command=reset_to_defaults)
+options_menu.add_command(label="Reset to Defaults ", command=reset_to_defaults)
 
 menu_bar.add_cascade(label=" Options  ", menu=options_menu)    
 
 root.config(menu=menu_bar)
+
+# Update the menu based on whether the file exists
+update_menu()
 
 
 frame_connect = ttk.Frame(root)
@@ -1009,6 +1048,7 @@ disable_control_buttons()
 
 load_table_data_from_xml(treeview)
 
+variable_write = load_variables()
 
 def on_closing():
     close_current_connection()  # Close connection before exiting
