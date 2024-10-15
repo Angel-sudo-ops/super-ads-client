@@ -9,6 +9,7 @@ import pyads
 import sys
 import threading
 import time
+import json
 
 __version__ = '2.1.2 Beta 12'
 __icon__ = "./plc.ico"
@@ -336,43 +337,97 @@ def on_core_check():
 #################################################################### Write variables ###############################################################################
 ####################################################################################################################################################################
 # Dictionary to map variable names for each action based on conditions
-variable_write = {
+default_variable_write = {
     'reset': {
         'TC2': ".ADS_Reset",
-        ('TC3', False): "Load_Handling.ADS_Reset",
-        ('TC3', True): "CoreGVL.ADS_Reset"
+        'TC3': {
+            'core': "CoreGVL.ADS_Reset",
+            'no_core': "Load_Handling.ADS_Reset"
+        }
     },
     'run': {
         'TC2': ".ADS_Run",
-        ('TC3', False): "Load_Handling.ADS_Run",
-        ('TC3', True): "CoreGVL.ADS_Run"
+        'TC3': {
+            'core': "CoreGVL.ADS_Run",
+            'no_core': "Load_Handling.ADS_Run"
+        }
     },
     'stop': {
         'TC2': ".ADS_Stop",
-        ('TC3', False): "Load_Handling.ADS_Stop",
-        ('TC3', True): "CoreGVL.ADS_Stop"
+        'TC3': {
+            'core': "CoreGVL.ADS_Stop",
+            'no_core': "Load_Handling.ADS_Stop"
+        }
     },
     'man_auto': {
         'TC2': ".ADS_MCD_Mode",
-        ('TC3', False): "Load_Handling.ADS_MCD_Mode",
-        ('TC3', True): "CoreGVL.ADS_MCD_Mode"
+        'TC3': {
+            'core': "CoreGVL.ADS_MCD_Mode",
+            'no_core': "Load_Handling.ADS_MCD_Mode"
+        }
     },
-    'dis_horn': {
+    'disable_horn': {
         'TC2': ".ADS_DisableHorn",
-        ('TC3', False): "Output.DisableHorn",
-        ('TC3', True): "Output.disableHorn"
+        'TC3': {
+            'core': "Output.disableHorn",
+            'no_core': "Output.DisableHorn"
+        }
     }
 }
+
+# Load variables from JSON or fall back to defaults
+def load_variables():
+    if os.path.exists("variables_config.json"):
+        with open("variables_config.json", "r") as json_file:
+            loaded_variables = json.load(json_file)
+        
+        # Merge loaded variables with defaults
+        for key, default_values in default_variable_write.items():
+            if key in loaded_variables:
+                loaded_variables[key] = {**default_values, **loaded_variables.get(key, {})}
+            else:
+                loaded_variables[key] = default_values
+        
+        return loaded_variables
+    else:
+        return default_variable_write
+
+# Save variables to JSON
+def save_variables(variable_write):
+    with open("variables_config.json", "w") as json_file:
+        json.dump(variable_write, json_file, indent=4)
+
+# Example usage
+def save_user_input(plc_type, is_core, variables):
+    current_vars = load_variables()
+    
+    # Save the inputs for TC2 or TC3 (core/no core) based on selection
+    for key, value in variables.items():
+        if plc_type == "TC2":
+            if 'TC2' not in current_vars[key]:
+                current_vars[key]['TC2'] = value  # Initialize if not exists
+            current_vars[key]['TC2'] = value
+        elif plc_type == "TC3":
+            core_key = 'core' if is_core else 'no_core'
+            if 'TC3' not in current_vars[key]:
+                current_vars[key]['TC3'] = {'core': "", 'no_core': ""}  # Initialize if not exists
+            current_vars[key]['TC3'][core_key] = value
+
+    # Save to the JSON file
+    save_variables(current_vars)
+    print(f"Variables saved for {plc_type} with core: {is_core}")
 
 
 def write_variable(action, tc_type, is_core, value, button):
     global current_ads_connection
 
+    variable_write = load_variables()
     # Select the appropriate variable name for the action, based on tc_type and is_core
     if tc_type == 'TC2':
         variable_name = variable_write[action]['TC2']  # For TC2, ignore is_core
     else:
-        variable_name = variable_write[action][('TC3', is_core)]  # For TC3, consider is_core
+        core_key = 'core' if is_core else 'no_core'
+        variable_name = variable_write[action]['TC3'][core_key]  # For TC3, use core/no_core
 
     if current_ads_connection is not None:
         try:
@@ -394,13 +449,13 @@ def write_variable(action, tc_type, is_core, value, button):
     return False
     
 
-# Variable to track toggle state for dis_horn
+# Variable to track toggle state for disable_horn
 
 def on_dis_horn_button_click(button):
     global dis_horn_state
 
-    # Get initial state of dis_horn variable to toggle it
-    dis_horn_state = read_variable('dis_horn') 
+    # Get initial state of disable_horn variable to toggle it
+    dis_horn_state = read_variable('disable_horn') 
 
     lgv_data = get_lgv_data()
     
@@ -408,9 +463,9 @@ def on_dis_horn_button_click(button):
         return
     tc_type = lgv_data[2]
 
-    # Toggle the state of dis_horn
+    # Toggle the state of disable_horn
     dis_horn_state = not dis_horn_state
-    success_write = write_variable('dis_horn', tc_type, is_core, dis_horn_state, button)
+    success_write = write_variable('disable_horn', tc_type, is_core, dis_horn_state, button)
     if success_write:   
         print(f"Disable Horn pressed, value: {dis_horn_state}")
     else:
@@ -548,7 +603,7 @@ variable_read = {
         ('TC3', False): "LGV.Status.MCD_Mode",
         ('TC3', True): "LibraryInterfaces.LGV.Status.MCD_Mode"
     },
-    'dis_horn': {
+    'disable_horn': {
         'TC2': ".ADS_DisableHorn",
         ('TC3', False): "Output.DisableHorn",
         ('TC3', True): "Output.disableHorn"
@@ -607,7 +662,7 @@ def update_buttons():
     if current_ads_connection is None:
         return
     # Read variables and update button colors for all actions
-    actions = ['reset', 'run', 'stop', 'man_auto', 'dis_horn']
+    actions = ['reset', 'run', 'stop', 'man_auto', 'disable_horn']
     
     # Mapping actions to buttons
     button_mapping = {
@@ -615,7 +670,7 @@ def update_buttons():
         'run': run_button,
         'stop': stop_button,
         'man_auto': man_auto_button,
-        'dis_horn': dis_horn_button
+        'disable_horn': dis_horn_button
     }
     
     for action in actions:
@@ -635,8 +690,8 @@ def update_buttons_from_plc_thread():
     #     return
         
     # Read variables and update button colors for all actions
-    # actions = ['reset', 'run', 'stop', 'man_auto', 'dis_horn']
-    actions = ['run', 'dis_horn']
+    # actions = ['reset', 'run', 'stop', 'man_auto', 'disable_horn']
+    actions = ['run', 'disable_horn']
     
     # Mapping actions to buttons
     button_mapping = {
@@ -644,7 +699,7 @@ def update_buttons_from_plc_thread():
         'run': run_button,
         # 'stop': stop_button,
         # 'man_auto': man_auto_button,
-        'dis_horn': dis_horn_button
+        'disable_horn': dis_horn_button
     }
     
     # with read_lock:
@@ -712,6 +767,58 @@ def natural_keys(text):
 
 
 ####################################################################################################################################################################
+################################################################ Window To Set Variables ###########################################################################
+####################################################################################################################################################################
+
+def open_variable_window():
+    var_window = tk.Toplevel(root)
+    var_window.title("Set Variables")
+
+    var_window.resizable(False,False)
+
+    # Radio buttons for TC2 and TC3
+    plc_type = tk.StringVar(value="TC2") # Default is TC2
+
+    def toggle_is_core():
+        if plc_type.get() == "TC3":
+            core_checkbox.config(state="normal")
+        else:
+            core_checkbox.config(state="disabled")
+            is_core.set(False)  # Reset core to False when TC2 is selected
+
+    frame_tc_type = tk.Frame(var_window)
+    frame_tc_type.grid(row=0, column=0, columnspan=3, padx=5, pady=5)
+     # PLC Type Selection (TC2 or TC3)
+    ttk.Radiobutton(frame_tc_type, text="TC2", variable=plc_type, value="TC2", command=toggle_is_core).grid(row=0, column=0, padx=10)
+    ttk.Radiobutton(frame_tc_type, text="TC3", variable=plc_type, value="TC3", command=toggle_is_core).grid(row=0, column=1, padx=10)
+
+    # Core Selection (only enabled for TC3)
+    is_core = tk.BooleanVar()
+    core_checkbox = ttk.Checkbutton(frame_tc_type, text="Is Core", variable=is_core, state="disabled")
+    core_checkbox.grid(row=0, column=3, padx=15)
+
+    entries = {}
+    frame_vars = tk.Frame(var_window)
+    frame_vars.grid(row=2, column=0, pady=5, padx=5)
+    # Labels and Entries
+    labels = ["Reset", "Run", "Stop", "Man Auto", "Disable Horn"]
+    for i, label_text in enumerate(labels):
+        ttk.Label(frame_vars, text=label_text).grid(row=i, column=0, padx=5, pady=10, sticky='e')
+        entry = ttk.Entry(frame_vars, width=50)
+        entry.grid(row=i, column=1, padx=10, pady=10)
+        entries[label_text] = entry
+
+    # Save button to capture and save the inputs
+    def save():
+        # Gather variables using the entries dictionary
+        variables = {key.lower().replace(" ", "_"): entry.get() for key, entry in entries.items()}
+
+        # Call the function to save user input
+        save_user_input(plc_type.get(), is_core.get(), variables)
+        print("Variables saved!")
+
+    ttk.Button(var_window, text="Save", command=save).grid(row=3, column=0, pady=10, ipadx=5, ipady=5)
+####################################################################################################################################################################
 ####################################################################### Create UI ##################################################################################
 ####################################################################################################################################################################
 
@@ -737,6 +844,7 @@ else:
 
 # Apply the icon after the window is initialized
 root.after(100, set_icon)
+
 
 style = ttk.Style()
 
@@ -770,39 +878,33 @@ style.configure("Connect.TButton",
                 font=("Segoe UI", 13))
 
 
-# menu_bar = tk.Menu(root)
-# file_menu = tk.Menu(menu_bar, 
-#                     tearoff=0)
-# file_menu.add_command(label="Load Config.db3", command=populate_table_from_db3)
-# menu_bar.add_cascade(label="File", menu=file_menu)
-# root.config(menu=menu_bar)
+# Create the menu bar
+menu_bar = tk.Menu(root)
+
+file_menu = tk.Menu(menu_bar, tearoff=0)
+file_menu.add_command(label=" Load Config.db3 ", command=populate_table_from_db3)  # Add Load Config option
+file_menu.add_command(label=" Exit ", command=root.quit)  # Add Exit option
+menu_bar.add_cascade(label="  File ", menu=file_menu)
 
 
-# load_config_button = ttk.Button(root, text="Load Config.db3", command=populate_table_from_db3)
-# load_config_button.grid(row=0, column=0, padx=5, pady=5)
+options_menu = tk.Menu(menu_bar, tearoff=0)
+options_menu.add_command(label=" Set Variables ", command=open_variable_window)
 
-footer_frame = ttk.Frame(root)
-footer_frame.grid(row=0, column=0, sticky='nsw', padx=5, pady=5)
-load_config_button = ttk.Button(footer_frame, text="     Load \nconfig.db3", command=populate_table_from_db3)
-load_config_button.pack()
+menu_bar.add_cascade(label=" Options  ", menu=options_menu)
 
-separator = ttk.Separator(root, orient='vertical')
-separator.grid(row=0, column=0, sticky='ns', pady=10)
+root.config(menu=menu_bar)
+
 
 frame_connect = ttk.Frame(root)
-frame_connect.grid(row=0, column=0, padx=0, pady=0, sticky='e')
+frame_connect.grid(row=0, column=0, padx=20, pady=5)
+
 # Add a button to connect to the PLC
 connect_button = ttk.Button(frame_connect, text="Connect", command=lambda: connect_to_plc(treeview, status_label), style='Connect.TButton')
 connect_button.grid(row=0, column=1, padx=5, ipady=4, sticky='e')
 
-# is_core = tk.IntVar()
-# core_check = ttk.Checkbutton(frame_connect, text="IsCore", variable=is_core, command=on_core_check)
-# core_check.grid(row=0, column=0, padx=0, pady=0)
-# core_check.config(state='disabled')
-
 # Create a label as an indicator
 core_status_label = ttk.Label(frame_connect, text="No Core Lib", foreground="#4682B4") # #3CB371, #6495ED, 4682B4
-core_status_label.grid(row=0, column=0, padx=0, pady=0)
+core_status_label.grid(row=0, column=0, padx=20, pady=0)
 
 
 
@@ -815,7 +917,7 @@ status_label.grid(row=0, column=1, padx=5, pady=5)
 
 # Create a frame for the table (Treeview)
 table_frame = ttk.Frame(root)
-table_frame.grid(row=1, column=0, padx=10, pady=25, sticky='nsew')
+table_frame.grid(row=1, column=0, padx=10, pady=20, sticky='nsew')
 
 treeview_style = ttk.Style()
 treeview_style.configure("Treeview", rowheight=23)  # Increase row height for more space between items
@@ -901,7 +1003,6 @@ def on_closing():
 
 # Bind the window close event to custom close function
 root.protocol("WM_DELETE_WINDOW", on_closing)
-
 
 
 root.mainloop()
