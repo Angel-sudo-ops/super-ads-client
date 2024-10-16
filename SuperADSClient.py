@@ -400,12 +400,12 @@ def load_variables():
     if os.path.exists("variables_config.json"):
         with open("variables_config.json", "r") as json_file:
             loaded_variables = json.load(json_file)
-        # Merge loaded variables with defaults (in-memory merge)
-        for key, default_values in default_variable_write.items():
-            if key in loaded_variables:
-                loaded_variables[key] = {**default_values, **loaded_variables.get(key, {})}
-            else:
-                loaded_variables[key] = default_values
+        # # Merge loaded variables with defaults (in-memory merge)
+        # for key, default_values in default_variable_write.items():
+        #     if key in loaded_variables:
+        #         loaded_variables[key] = {**default_values, **loaded_variables.get(key, {})}
+        #     else:
+        #         loaded_variables[key] = default_values
         return loaded_variables
     else:
         return default_variable_write
@@ -413,38 +413,45 @@ def load_variables():
 
 def save_user_input(plc_type, is_core, variables):
     global variable_write
-    current_vars = load_variables()
+    current_vars = load_variables() # Load only user-modified variables
     non_empty_found = False
     user_variables = {}
     
     # Save the inputs for TC2 or TC3 (core/no core) based on selection
     for key, value in variables.items():
-        if value.strip(): # Only save non-empty values (remove leading/trailing spaces)
+        if value.strip():  # Only process non-empty values (remove leading/trailing spaces)
             non_empty_found = True
 
             if plc_type == "TC2":
-                # only save if value is different from the default
-                if value != default_variable_write[key]['TC2']:
-                    user_variables.setdefault(key, {})['TC2'] = value
+                # Only save if value is different from what's in the JSON (user-modified)
+                if key in current_vars and value != current_vars.get(key, {}).get('TC2', default_variable_write[key]['TC2']):
+                    user_variables.setdefault(key, {}).update({'TC2': value})
+
             elif plc_type == "TC3":
                 core_key = 'core' if is_core else 'no_core'
-                # only save if value is different from the default
-                if value != default_variable_write[key]['TC3'][core_key]:
-                    user_variables.setdefault(key, {}).setdefault('TC3', {})[core_key] = value
+                # Ensure the 'TC3' key and core_key ('core' or 'no_core') exist to avoid KeyError
+                if key not in current_vars or 'TC3' not in current_vars[key] or core_key not in current_vars[key]['TC3']:
+                    # Directly save if the structure doesn't exist yet
+                    user_variables.setdefault(key, {}).setdefault('TC3', {}).update({core_key: value})
+                else:
+                    # Only save if the value differs from the user-modified or default value
+                    if value != current_vars.get(key, {}).get('TC3', {}).get(core_key, default_variable_write[key]['TC3'][core_key]):
+                        user_variables.setdefault(key, {}).setdefault('TC3', {}).update({core_key: value})
 
     # If no non-empty value was found, don't save the JSON file
     if not non_empty_found:
         print("No non-empty values found, skipping save.")
+        messagebox.showwarning("Attention", "Add a value to save")
         return
 
     # Merge user-modified variables with the existing ones in memory
     for key, value in user_variables.items():
-        current_vars[key].update(value)
+        current_vars.setdefault(key, {}).update(value)
 
     # Save only user-modified variables
     if user_variables:  # Only save if there are new or modified variables
         with open("variables_config.json", "w") as json_file:
-            json.dump(user_variables, json_file, indent=4)
+            json.dump(current_vars, json_file, indent=4)  # Save the updated state of all variables
         print(f"Variables saved for {plc_type} {'' if plc_type == 'TC2' else 'with core' if is_core else 'with no core'}")
         messagebox.showinfo("Success", f"Variables saved for {plc_type} {'' if plc_type == 'TC2' else 'with core' if is_core else 'with no core'}")
     else:
