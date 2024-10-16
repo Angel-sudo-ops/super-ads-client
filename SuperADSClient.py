@@ -202,7 +202,7 @@ def background_connect(plc_data, label):
     
     lgv_name, ams_net_id, tc_type = plc_data
     port = 851 if tc_type == 'TC3' else 801
-
+    # ip_address = ".".join(str(ams_net_id).split(".")[:4])
     update_ui_connection_status("Connecting...", "orange", label)
 
     try:        
@@ -297,17 +297,21 @@ def on_treeview_select(event):
         print("Target already connected")
         messagebox.showinfo("Attention", "Target already connected")
         return
+    
+    old_selection = previous_selection
 
     previous_selection = selected_item  # Update the previously selected item
     
     # Close any existing connection when the selection changes
     if  current_ads_connection:
         # status_label.update_idletasks()
+        
+        # messagebox.showinfo("Attention", "Connection Closed")
+        if read_variable('disable_horn'):
+            messagebox.showwarning("Attention", f"Horn in {treeview.item(old_selection)["values"][0]} is disabled!")
+
         disable_control_buttons()
         close_current_connection()
-        # messagebox.showinfo("Attention", "Connection Closed")
-        if dis_horn_state:
-            messagebox.showwarning("Attention", "Horn is disabled!!")
     
     update_ui_connection_status("Disconnected", "red", status_label)
 
@@ -396,14 +400,12 @@ def load_variables():
     if os.path.exists("variables_config.json"):
         with open("variables_config.json", "r") as json_file:
             loaded_variables = json.load(json_file)
-        
-        # Merge loaded variables with defaults
+        # Merge loaded variables with defaults (in-memory merge)
         for key, default_values in default_variable_write.items():
             if key in loaded_variables:
                 loaded_variables[key] = {**default_values, **loaded_variables.get(key, {})}
             else:
                 loaded_variables[key] = default_values
-        
         return loaded_variables
     else:
         return default_variable_write
@@ -432,10 +434,11 @@ def save_user_input(plc_type, is_core, variables):
     if not non_empty_found:
         print("No non-empty values found, skipping save")
         return
+    
     # Save to the JSON file
     save_variables(current_vars)
     print(f"Variables saved for {plc_type} with core: {is_core}")
-    messagebox.showinfo("Success", f"Variables saved for {plc_type} with" + " " if is_core else "no" + "core")
+    messagebox.showinfo("Success", f"Variables saved for {plc_type} with { 'core' if is_core else 'no core'}")
     variable_write = load_variables()
     update_menu()
 
