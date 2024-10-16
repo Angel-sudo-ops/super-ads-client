@@ -411,7 +411,6 @@ def load_variables():
         return default_variable_write
 
 
-# Example usage
 def save_user_input(plc_type, is_core, variables):
     global variable_write
     current_vars = load_variables()
@@ -422,33 +421,37 @@ def save_user_input(plc_type, is_core, variables):
     for key, value in variables.items():
         if value.strip(): # Only save non-empty values (remove leading/trailing spaces)
             non_empty_found = True
+
             if plc_type == "TC2":
                 # only save if value is different from the default
                 if value != default_variable_write[key]['TC2']:
                     user_variables.setdefault(key, {})['TC2'] = value
-                    current_vars[key]['TC2'] = value
             elif plc_type == "TC3":
                 core_key = 'core' if is_core else 'no_core'
                 # only save if value is different from the default
                 if value != default_variable_write[key]['TC3'][core_key]:
-                    user_variables.setdefault(key,{}).setdefault('TC3', {})[core_key] = value
-                    current_vars[key]['TC3'][core_key] = value
+                    user_variables.setdefault(key, {}).setdefault('TC3', {})[core_key] = value
 
+    # If no non-empty value was found, don't save the JSON file
     if not non_empty_found:
-        print("No non-empty values found, skipping save")
+        print("No non-empty values found, skipping save.")
         return
-    
-    # Save to the JSON file if there are new or modified variables
-    if user_variables:
+
+    # Merge user-modified variables with the existing ones in memory
+    for key, value in user_variables.items():
+        current_vars[key].update(value)
+
+    # Save only user-modified variables
+    if user_variables:  # Only save if there are new or modified variables
         with open("variables_config.json", "w") as json_file:
             json.dump(user_variables, json_file, indent=4)
-        print(f"Variables saved for {plc_type} with core: {is_core}")
-        messagebox.showinfo("Success", f"Variables saved for {plc_type} { '' if plc_type == 'TC2' else 'with core' if is_core else 'with no core'}")
+        print(f"Variables saved for {plc_type} {'' if plc_type == 'TC2' else 'with core' if is_core else 'with no core'}")
+        messagebox.showinfo("Success", f"Variables saved for {plc_type} {'' if plc_type == 'TC2' else 'with core' if is_core else 'with no core'}")
     else:
         print("No changes detected, nothing to save.")
 
+    # Reload variables after saving
     variable_write = load_variables()
-    update_menu()
 
 
 def write_variable(action, tc_type, is_core, value, button):
