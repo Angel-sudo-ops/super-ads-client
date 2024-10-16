@@ -410,35 +410,43 @@ def load_variables():
     else:
         return default_variable_write
 
-# Save variables to JSON
-def save_variables(variable_write):
-    with open("variables_config.json", "w") as json_file:
-        json.dump(variable_write, json_file, indent=4)
 
 # Example usage
 def save_user_input(plc_type, is_core, variables):
     global variable_write
     current_vars = load_variables()
     non_empty_found = False
+    user_variables = {}
     
     # Save the inputs for TC2 or TC3 (core/no core) based on selection
     for key, value in variables.items():
         if value.strip(): # Only save non-empty values (remove leading/trailing spaces)
             non_empty_found = True
             if plc_type == "TC2":
-                current_vars[key]['TC2'] = value
+                # only save if value is different from the default
+                if value != default_variable_write[key]['TC2']:
+                    user_variables.setdefault(key, {})['TC2'] = value
+                    current_vars[key]['TC2'] = value
             elif plc_type == "TC3":
                 core_key = 'core' if is_core else 'no_core'
-                current_vars[key]['TC3'][core_key] = value
+                # only save if value is different from the default
+                if value != default_variable_write[key]['TC3'][core_key]:
+                    user_variables.setdefault(key,{}).setdefault('TC3', {})[core_key] = value
+                    current_vars[key]['TC3'][core_key] = value
 
     if not non_empty_found:
         print("No non-empty values found, skipping save")
         return
     
-    # Save to the JSON file
-    save_variables(current_vars)
-    print(f"Variables saved for {plc_type} with core: {is_core}")
-    messagebox.showinfo("Success", f"Variables saved for {plc_type} with { 'core' if is_core else 'no core'}")
+    # Save to the JSON file if there are new or modified variables
+    if user_variables:
+        with open("variables_config.json", "w") as json_file:
+            json.dump(user_variables, json_file, indent=4)
+        print(f"Variables saved for {plc_type} with core: {is_core}")
+        messagebox.showinfo("Success", f"Variables saved for {plc_type} { '' if plc_type == 'TC2' else 'with core' if is_core else 'with no core'}")
+    else:
+        print("No changes detected, nothing to save.")
+
     variable_write = load_variables()
     update_menu()
 
@@ -794,11 +802,21 @@ def natural_keys(text):
 ################################################################ Window To Set Variables ###########################################################################
 ####################################################################################################################################################################
 
-def open_variable_window():
-    var_window = tk.Toplevel(root)
-    var_window.title("Set Variables")
+variable_window = None 
 
-    var_window.resizable(False,False)
+def open_variable_window_cond():
+    global variable_window
+
+    if variable_window is None or not variable_window.winfo_exists():
+        open_variable_window()
+
+def open_variable_window():
+    global variable_window
+
+    variable_window = tk.Toplevel(root)
+    variable_window.title("Set Variables")
+
+    variable_window.resizable(False,False)
 
     # Radio buttons for TC2 and TC3
     plc_type = tk.StringVar(value="TC2") # Default is TC2
@@ -810,7 +828,7 @@ def open_variable_window():
             core_checkbox.config(state="disabled")
             is_core.set(False)  # Reset core to False when TC2 is selected
 
-    frame_tc_type = tk.Frame(var_window)
+    frame_tc_type = tk.Frame(variable_window)
     frame_tc_type.grid(row=0, column=0, columnspan=3, padx=5, pady=5)
      # PLC Type Selection (TC2 or TC3)
     ttk.Radiobutton(frame_tc_type, text="TC2", variable=plc_type, value="TC2", command=toggle_is_core).grid(row=0, column=0, padx=10)
@@ -822,7 +840,7 @@ def open_variable_window():
     core_checkbox.grid(row=0, column=3, padx=15)
 
     entries = {}
-    frame_vars = tk.Frame(var_window)
+    frame_vars = tk.Frame(variable_window)
     frame_vars.grid(row=2, column=0, pady=5, padx=5)
     # Labels and Entries
     labels = ["Reset", "Run", "Stop", "Man Auto", "Disable Horn"]
@@ -840,10 +858,18 @@ def open_variable_window():
         # Call the function to save user input
         save_user_input(plc_type.get(), is_core.get(), variables)
 
-    frame_setvar = tk.Frame(var_window)
+    frame_setvar = tk.Frame(variable_window)
     frame_setvar.grid(row=3, column=0, padx=5, pady=5)
     ttk.Button(frame_setvar, text="Save", command=save).grid(row=0, column=0, pady=10, padx=10, ipadx=5, ipady=5)
     # ttk.Button(frame_setvar, text="Reset", command=reset_to_defaults).grid(row=0, column=1, pady=10, padx=10, ipadx=5, ipady=5)
+
+    # Handle window close event to reset the reference
+    variable_window.protocol("WM_DELETE_WINDOW", on_variable_window_close)
+
+def on_variable_window_close():
+    global variable_window
+    variable_window.destroy()  # Destroy the window
+    variable_window = None  # Reset the reference so it can be reopened
    
 
 ####################################################################################################################################################################
@@ -939,7 +965,7 @@ menu_bar.add_cascade(label="  File ", menu=file_menu)
 
 
 options_menu = tk.Menu(menu_bar, tearoff=0)
-options_menu.add_command(label="Set Variables    ", command=open_variable_window)
+options_menu.add_command(label="Set Variables    ", command=open_variable_window_cond)
 options_menu.add_command(label="Reset to Defaults ", command=reset_to_defaults)
 
 menu_bar.add_cascade(label=" Options  ", menu=options_menu)    
