@@ -426,8 +426,7 @@ def reset_to_defaults():
         os.remove("variables_config.json")
         messagebox.showinfo("Reset", "Variables have been reset to defaults.")
         update_menu()
-        # Reload variables after saving
-        variable_write = load_variables()
+
     # else:
         # messagebox.showinfo("Reset", "No saved configuration found.")
 
@@ -458,54 +457,65 @@ def load_variables():
 
 def save_user_input(plc_type, is_core, variables):
     global variable_write
-    current_vars = load_variables()  # Load only user-modified variables
-    non_empty_found = False
-    user_variables = {}
-    
-    # Save the inputs for TC2 or TC3 (core/no core) based on selection
+
+    # Load the existing variables from the JSON file if it exists
+    existing_vars = {}
+    if os.path.exists("variables_config.json"):
+        with open("variables_config.json", "r") as json_file:
+            existing_vars = json.load(json_file)
+
+    non_empty_found = False  # Track if the user has entered valid input
+    user_variables = {}  # Store only user-modified variables
+
+    # Iterate through user input and process based on selection
     for key, value in variables.items():
-        if value.strip():  # Only process non-empty values (remove leading/trailing spaces)
+        if value.strip():  # Ignore empty values
             non_empty_found = True
 
-            # Only save if the new value is different from the current one
             if plc_type == "TC2":
-                if current_vars.get(key, {}).get('TC2') != value:
+                # Save only if the new value differs from the current one
+                if existing_vars.get(key, {}).get('TC2') != value:
                     user_variables.setdefault(key, {})['TC2'] = value
 
             elif plc_type == "TC3":
                 core_key = 'core' if is_core else 'no_core'
-                if current_vars.get(key, {}).get('TC3', {}).get(core_key) != value:
+                # Save only if the new value differs from the current one
+                if existing_vars.get(key, {}).get('TC3', {}).get(core_key) != value:
                     user_variables.setdefault(key, {}).setdefault('TC3', {})[core_key] = value
 
-    # If no non-empty value was found, don't save the JSON file
+    # If no valid input was provided, do not save anything
     if not non_empty_found:
         print("No non-empty values found, skipping save.")
-        messagebox.showwarning("Attention", "Add a value to save")
+        messagebox.showwarning("Attention", "Add a value to save.")
         return
 
-    # Merge user-modified variables with the existing ones (overwrite where necessary)
-    for key, value in user_variables.items():
-        if key in current_vars:
-            # Update only the modified part, keeping other values intact
-            current_vars[key].update(value)
-        else:
-            # If the key doesn't exist, add the new structure
-            current_vars[key] = value
+   # Recursively merge existing variables with user-modified variables
+    merged_vars = merge_dicts(existing_vars, user_variables)
 
-    # Save only user-modified variables, do not include defaults
-    if user_variables:  # Only save if there are new or modified variables
+    # Save only if there are new or modified variables
+    if user_variables:  # Save only user-modified content, no defaults
         with open("variables_config.json", "w") as json_file:
-            json.dump(current_vars, json_file, indent=4)  # Save the updated state of all variables
+            json.dump(merged_vars, json_file, indent=4)  # Save the final state
         print(f"Variables saved for {plc_type} {'' if plc_type == 'TC2' else 'with core' if is_core else 'with no core'}")
         messagebox.showinfo("Success", f"Variables saved for {plc_type} {'' if plc_type == 'TC2' else 'with core' if is_core else 'with no core'}")
     else:
         print("No changes detected, nothing to save.")
 
-    # Reload variables after saving
+    # Reload variables after saving to reflect the latest state
     variable_write = load_variables()
+    update_menu()  # Update the reset button state
 
-    update_menu() # State for Reset Variables to default
 
+def merge_dicts(existing, new):
+    """Recursively merge two dictionaries."""
+    for key, value in new.items():
+        if isinstance(value, dict) and key in existing:
+            # Recursively merge nested dictionaries
+            existing[key] = merge_dicts(existing.get(key, {}), value)
+        else:
+            # Update or add the new value
+            existing[key] = value
+    return existing
 
 def write_variable(action, tc_type, is_core, value, button):
     global current_ads_connection
