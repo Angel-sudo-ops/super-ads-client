@@ -11,8 +11,9 @@ import threading
 import time
 import json
 from queue import Queue, Empty
+import copy
 
-__version__ = '2.1.2 Beta 14'
+__version__ = '2.1.2 Beta 15'
 __icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
@@ -189,14 +190,20 @@ def check_plc_status(ads_connection):
 # Close the current connection if it exists
 def close_current_connection():
     global current_ads_connection, dis_horn_state, connection_in_progress, is_core, monitor_timer
+
     with connection_lock:
         connection_in_progress = False
+
         if current_ads_connection:
             current_ads_connection.close()
             current_ads_connection = None
+
             dis_horn_state = False #reset horn state
             is_core = False
             core_status_label.config(text="No Core Lib")
+
+            # Stop the read thread
+            stop_read_thread()  # Stop and join the thread
         
         if monitor_timer:
             monitor_timer.cancel()
@@ -207,12 +214,12 @@ def close_current_connection():
 # Background connection handler (runs in a separate thread)
 def background_connect(plc_data):
     global current_ads_connection, connection_in_progress
-
-    # If already connected, don't try to reconnect
-    if current_ads_connection is not None:
-        return
     
     try:        
+        # If already connected, don't try to reconnect
+        if current_ads_connection is not None:
+            return
+        
         lgv_name, ams_net_id, tc_type = plc_data
         port = 851 if tc_type == 'TC3' else 801
         # ip_address = ".".join(str(ams_net_id).split(".")[:4])
@@ -281,7 +288,7 @@ def update_status_in_queue(status, color):
 
 connection_lock = threading.Lock()
 # Attempt to connect to the selected PLC (starts in a new thread)
-def connect_to_plc(tree):
+def connect_to_plc():
     global connection_in_progress, current_ads_connection
     
     with connection_lock:
@@ -297,13 +304,13 @@ def connect_to_plc(tree):
             return
         
         # Get the selected PLC data
-        selected_item = tree.selection()
+        selected_item = treeview.selection()
         if not selected_item:
             # messagebox.showinfo("Attention", "Select LGV")
             print("No LGV selected")
             return
 
-        lgv_data = tree.item(selected_item)["values"]
+        lgv_data = treeview.item(selected_item)["values"]
 
     
         # Start the connection in a new thread
@@ -421,17 +428,25 @@ default_variable_write = {
 }
 
 def reset_to_defaults():
-    global variable_write
+    global variable_write, read_thread
+
+    # Stop the read thread before resetting variables
+    stop_read_thread()
+
     if os.path.exists("variables_config.json"):
         os.remove("variables_config.json")
 
-    variable_write = load_variables()
+    variable_write = copy.deepcopy(default_variable_write)
+    print(F"Variable write after reset: {variable_write}")
+    # print(f"Variables reset to defaults: {variable_write['disable_horn']['TC3']['core']}")
+
     update_menu()
 
-    messagebox.showinfo("Reset", "Variables have been reset to defaults.")
-        
+    stop_thread_event.clear()
+    start_read_thread()
 
-    
+    messagebox.showinfo("Reset", "Variables have been reset to defaults.")
+          
 
     # else:
         # messagebox.showinfo("Reset", "No saved configuration found.")
@@ -449,14 +464,18 @@ def load_variables():
     """Load variables from JSON or return defaults if the file is missing."""
     if not os.path.exists("variables_config.json"):
         # If file doesn't exist, return the defaults
-        return default_variable_write.copy()
+        vars = copy.deepcopy(default_variable_write)
+        print(f"Default vars: {vars}")
+        return vars
 
     # Load from JSON if the file exists
     with open("variables_config.json", "r") as json_file:
         user_variables = json.load(json_file)
 
     # Merge user-modified values into the defaults
-    return merge_dicts(default_variable_write.copy(), user_variables)
+    merge_vars = merge_dicts(copy.deepcopy(default_variable_write), user_variables)
+    print(f"Merged vars: {merge_vars}")
+    return merge_vars
 
 
 def save_user_input(plc_type, is_core, variables):
@@ -494,6 +513,7 @@ def save_user_input(plc_type, is_core, variables):
 
    # Recursively merge existing variables with user-modified variables
     merged_vars = merge_dicts(existing_vars, user_variables)
+    print(f"Merged vars input: {merged_vars}")
 
     # Save only if there are new or modified variables
     if user_variables:  # Save only user-modified content, no defaults
@@ -506,6 +526,7 @@ def save_user_input(plc_type, is_core, variables):
 
     # Reload variables after saving to reflect the latest state
     variable_write = load_variables()
+    print(f"Variable write: {variable_write}")
     update_menu()  # Update the reset button state
 
 
@@ -750,14 +771,6 @@ def read_variable(action):
             return None
     return None
 
-def update_button_color(action, button, read_value):
-    if read_value is None:
-        return
-    # Change the button's foreground color based on the read_value
-    if read_value:  # If the PLC variable is True
-        button.configure(style='LGV.Connected.TButton')
-    else:  # If the PLC variable is False
-        button.configure(style='LGV.Disconnected.TButton')
 
 def update_buttons():
     if current_ads_connection is None:
@@ -782,40 +795,63 @@ def update_buttons():
     # Schedule the function to run again after 2s
     root.after(50, update_buttons)
 
+def update_button_color(action, button, read_value):
+    if read_value is None:
+        return
+    # Change the button's foreground color based on the read_value
+    if read_value:  # If the PLC variable is True
+        button.configure(style='LGV.Connected.TButton')
+    else:  # If the PLC variable is False
+        button.configure(style='LGV.Disconnected.TButton')
+
 read_lock = threading.Lock()
+stop_thread_event = threading.Event()
 
 def update_buttons_from_plc_thread():
     global current_ads_connection
 
-    # if current_ads_connection is None:
-    #     return
-        
-    # Read variables and update button colors for all actions
-    # actions = ['reset', 'run', 'stop', 'man_auto', 'disable_horn']
     actions = ['run', 'disable_horn']
     
     # Mapping actions to buttons
     button_mapping = {
-        # 'reset': reset_button,
         'run': run_button,
-        # 'stop': stop_button,
-        # 'man_auto': man_auto_button,
         'disable_horn': dis_horn_button
     }
     
     # with read_lock:
-    for action in actions:
+    while not stop_thread_event.is_set():
         if current_ads_connection is None:
             return
-        read_value = read_variable(action)  # Read value from PLC
-        button = button_mapping[action]
-    
-        root.after(0, update_button_color, action, button, read_value)
-    
+        
+        # print(f"Current state of variable write: {variable_write['disable_horn']['TC3']['core']}")
+        for action in actions:
+            read_value = read_variable(action)  # Read value from PLC
+            button = button_mapping[action]
+            root.after(0, update_button_color, action, button, read_value)
 
-    t = threading.Timer(0.1, update_buttons_from_plc_thread)
-    t.daemon = True 
-    t.start()
+        stop_thread_event.wait(0.1)
+    
+    print("Read thread stopped...")
+
+    # t = threading.Timer(0.1, update_buttons_from_plc_thread)
+    # t.daemon = True 
+    # t.start()
+read_thread = None
+
+def start_read_thread():
+    global read_thread
+    stop_thread_event.clear()
+
+    read_thread = threading.Thread(target=update_buttons_from_plc_thread)
+    read_thread.daemon = True
+    read_thread.start()
+
+def stop_read_thread():
+    global read_thread
+    if read_thread is not None:
+        stop_thread_event.set()  # Signal the thread to stop
+        read_thread.join()  # Wait for the thread to finish
+        read_thread = None  # Reset the thread reference
 
 ####################################################################################################################################################################
 ############################################################## Treeview setup and sorting ##########################################################################
@@ -876,7 +912,10 @@ variable_window = None
 def open_variable_window_cond():
     global variable_window
 
-    if variable_window is None or not variable_window.winfo_exists():
+    if variable_window is not None and variable_window.winfo_exists():
+        variable_window.lift()
+        variable_window.focus_force()
+    else:
         open_variable_window()
 
 def open_variable_window():
@@ -1067,7 +1106,7 @@ frame_connect = ttk.Frame(root, width=100)
 frame_connect.grid(row=0, column=0, padx=20, pady=5)
 
 # Add a button to connect to the PLC
-connect_button = ttk.Button(frame_connect, text="Connect", command=lambda: connect_to_plc(treeview), style='Connect.TButton')
+connect_button = ttk.Button(frame_connect, text="Connect", command=lambda: connect_to_plc(), style='Connect.TButton')
 connect_button.grid(row=0, column=1, padx=10, ipady=4, sticky='w')
 
 # Create a label as an indicator
@@ -1165,6 +1204,8 @@ disable_control_buttons()
 load_table_data_from_xml(treeview)
 
 variable_write = load_variables()
+
+start_read_thread()
 
 root.after(100, process_status_updates)
 
