@@ -10,8 +10,9 @@ import sys
 import threading
 import time
 import json
+from queue import Queue, Empty
 
-__version__ = '2.1.2 Beta 12'
+__version__ = '2.1.2 Beta 13'
 __icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
@@ -151,26 +152,32 @@ def load_table_data_from_xml(tree, filename="lgv_data.xml"):
 ####################################################################################################################################################################
 ################################################################# ADS connection setup #############################################################################
 ####################################################################################################################################################################
+
+monitor_timer = None
+
 def monitor_connection_status():
-    global current_ads_connection
+    global current_ads_connection, monitor_timer
 
     if current_ads_connection is None:
         return
     
     try:
         if check_plc_status(current_ads_connection):
-            root.after(0, update_ui_connection_status, "Connected", "green", status_label)
+            update_status_in_queue("Connected", "green")
         else:
             raise Exception("PLC not in valid state")
     except Exception as e:
         # assume connection is lost if not status 5 is read
         disable_control_buttons()
-        root.after(0, update_ui_connection_status, "Disconnected", "red", status_label)
+        update_status_in_queue("Disconnected", "red")
         close_current_connection()
 
-    t = threading.Timer(1.0, monitor_connection_status)
-    t.daemon = True
-    t.start()  
+    if monitor_timer:
+        monitor_timer.cancel()
+
+    monitor_timer = threading.Timer(1.0, monitor_connection_status)
+    monitor_timer.daemon = True
+    monitor_timer.start()  
 
     
 def check_plc_status(ads_connection):
@@ -181,38 +188,43 @@ def check_plc_status(ads_connection):
 
 # Close the current connection if it exists
 def close_current_connection():
-    global current_ads_connection, dis_horn_state, connection_in_progress, is_core
-    # with read_lock:
-    connection_in_progress = False
-    update_ui_connection_status("Disconnected", "red", status_label)
-    if current_ads_connection:
-        current_ads_connection.close()
-        current_ads_connection = None
-        dis_horn_state = False #reset horn state
-        is_core = False
-        core_status_label.config(text="No Core Lib")
+    global current_ads_connection, dis_horn_state, connection_in_progress, is_core, monitor_timer
+    with connection_lock:
+        connection_in_progress = False
+        if current_ads_connection:
+            current_ads_connection.close()
+            current_ads_connection = None
+            dis_horn_state = False #reset horn state
+            is_core = False
+            core_status_label.config(text="No Core Lib")
+        
+        if monitor_timer:
+            monitor_timer.cancel()
+            monitor_timer = None
+
+        update_status_in_queue("Disconnected", "red")
 
 # Background connection handler (runs in a separate thread)
-def background_connect(plc_data, label):
+def background_connect(plc_data):
     global current_ads_connection, connection_in_progress
 
     # If already connected, don't try to reconnect
     if current_ads_connection is not None:
         return
     
-    lgv_name, ams_net_id, tc_type = plc_data
-    port = 851 if tc_type == 'TC3' else 801
-    # ip_address = ".".join(str(ams_net_id).split(".")[:4])
-    update_ui_connection_status("Connecting...", "orange", label)
-
     try:        
+        lgv_name, ams_net_id, tc_type = plc_data
+        port = 851 if tc_type == 'TC3' else 801
+        # ip_address = ".".join(str(ams_net_id).split(".")[:4])
+        update_status_in_queue("Connecting...", "orange")
+
         # Attempt to open a new connection
         current_ads_connection = pyads.Connection(ams_net_id, port)
         current_ads_connection.open()
 
         # Check PLC status
         if check_plc_status(current_ads_connection):
-            update_ui_connection_status("Connected", "green", label)
+            update_status_in_queue("Connected", "green")
             enable_control_buttons()
 
             # Automatically detect core variable
@@ -230,48 +242,74 @@ def background_connect(plc_data, label):
     except Exception as e:
         current_ads_connection = None
         disable_control_buttons()
-        update_ui_connection_status("Disconnected", "red", label)
+        update_status_in_queue("Disconnected", "red")
         messagebox.showerror("Connection Error", f"Failed to connect to {lgv_name}: {str(e)}")
         treeview.selection_remove(treeview.selection())
-        is_core = False
 
     finally:
-        connection_in_progress = False
-        if current_ads_connection is None:
-            update_ui_connection_status("Disconnected", "red", label)
+        with connection_lock:
+            connection_in_progress = False
+            if current_ads_connection is None:
+                update_status_in_queue("Disconnected", "red")
+
+
+current_status = None
 
 # Update the UI status label (called from the main thread)
-def update_ui_connection_status(text, color, label):
-    label.config(text=text, foreground=color)
+def update_ui_connection_status(text, color):
+    global current_status
+    if current_status != text:
+        current_status = text
+        status_label.config(text=text, foreground=color)
 
+status_queue = Queue()
+
+def process_status_updates():
+    try:
+        status, color = status_queue.get_nowait()
+        update_ui_connection_status(status, color)
+    except Empty:
+        pass
+    root.after(100, process_status_updates)
+
+status_lock = threading.Lock()
+# Use the queue for updating the status
+def update_status_in_queue(status, color):
+    with status_lock:
+        status_queue.put((status, color))
+
+
+connection_lock = threading.Lock()
 # Attempt to connect to the selected PLC (starts in a new thread)
-def connect_to_plc(tree, label):
+def connect_to_plc(tree):
     global connection_in_progress, current_ads_connection
     
-    if connection_in_progress:
-        print("Connection in progress. Waiting for it to finish. Triggered on connect")
-        messagebox.showinfo("Attention", "Connection in progress. Waiting for it to finish. Triggered on connect")
-        return
-    
-    # If already connected, don't try to reconnect
-    if current_ads_connection is not None:
-        print("Target already connected")
-        messagebox.showinfo("Attention", "Target already connected")
-        return
-    
-    # Get the selected PLC data
-    selected_item = tree.selection()
-    if not selected_item:
-        # messagebox.showinfo("Attention", "Select LGV")
-        print("No LGV selected")
-        return
+    with connection_lock:
+        if connection_in_progress:
+            print("Connection in progress. Waiting for it to finish. Triggered on connect")
+            messagebox.showinfo("Attention", "Connection in progress. Waiting for it to finish. Triggered on connect")
+            return
+        
+        # If already connected, don't try to reconnect
+        if current_ads_connection is not None:
+            print("Target already connected")
+            messagebox.showinfo("Attention", "Target already connected")
+            return
+        
+        # Get the selected PLC data
+        selected_item = tree.selection()
+        if not selected_item:
+            # messagebox.showinfo("Attention", "Select LGV")
+            print("No LGV selected")
+            return
 
-    lgv_data = tree.item(selected_item)["values"]
+        lgv_data = tree.item(selected_item)["values"]
 
-    # Start the connection in a new thread
-    connection_thread = threading.Thread(target=background_connect, args=(lgv_data, label))
-    connection_thread.start()
-    connection_in_progress = True
+    
+        # Start the connection in a new thread
+        connection_in_progress = True
+        connection_thread = threading.Thread(target=background_connect, args=(lgv_data,))
+        connection_thread.start()
 
 
 previous_selection = None # track previous connection
@@ -282,38 +320,41 @@ def on_treeview_select(event):
     global current_ads_connection, previous_selection, connection_in_progress, dis_horn_state
     # Get the currently selected LGV
     
-    selected_item = treeview.selection()
-    if not selected_item:
-        return
-    
-    if connection_in_progress:
-        treeview.selection_remove(treeview.selection())
-        print("Connection in progress. Waiting for it to finish. Triggered on select")
-        messagebox.showinfo("Attention", "Connection in progress. Waiting for it to finish. Triggered on select")
-        return
-
-    # If the same item is selected, do nothing
-    if (previous_selection == selected_item) and current_ads_connection:
-        print("Target already connected")
-        messagebox.showinfo("Attention", "Target already connected")
-        return
-    
-    old_selection = previous_selection
-
-    previous_selection = selected_item  # Update the previously selected item
-    
-    # Close any existing connection when the selection changes
-    if  current_ads_connection:
-        # status_label.update_idletasks()
+    try:
+        selected_item = treeview.selection()
+        if not selected_item:
+            return
         
-        # messagebox.showinfo("Attention", "Connection Closed")
-        if read_variable('disable_horn'):
-            messagebox.showwarning("Attention", f"Horn in {treeview.item(old_selection)["values"][0]} is disabled!")
+        if connection_in_progress:
+            print("Connection in progress. Waiting for it to finish. Triggered on select")
+            messagebox.showinfo("Attention", "Connection in progress. Waiting for it to finish. Triggered on select")
+            treeview.selection_remove(treeview.selection())
+            return
 
-        disable_control_buttons()
-        close_current_connection()
-    
-    update_ui_connection_status("Disconnected", "red", status_label)
+        # If the same item is selected, do nothing
+        if (previous_selection == selected_item) and current_ads_connection:
+            print("Target already connected")
+            messagebox.showinfo("Attention", "Target already connected")
+            return
+        
+        old_selection = previous_selection
+
+        previous_selection = selected_item  # Update the previously selected item
+        
+        # Close any existing connection when the selection changes
+        if  current_ads_connection:
+            # status_label.update_idletasks()
+            
+            # messagebox.showinfo("Attention", "Connection Closed")
+            if read_variable('disable_horn'):
+                old_lgv_name = treeview.item(old_selection)["values"][0]
+                messagebox.showwarning("Attention", f"Horn in {old_lgv_name} is disabled!")
+
+            disable_control_buttons()
+            close_current_connection()
+            
+    finally:
+        update_status_in_queue("Disconnected", "red")
 
 # Enable control buttons after a successful connection
 def enable_control_buttons():
@@ -413,7 +454,7 @@ def load_variables():
 
 def save_user_input(plc_type, is_core, variables):
     global variable_write
-    current_vars = load_variables() # Load only user-modified variables
+    current_vars = load_variables()  # Load only user-modified variables
     non_empty_found = False
     user_variables = {}
     
@@ -423,8 +464,8 @@ def save_user_input(plc_type, is_core, variables):
             non_empty_found = True
 
             if plc_type == "TC2":
-                # Only save if value is different from what's in the JSON (user-modified)
-                if key in current_vars and value != current_vars.get(key, {}).get('TC2', default_variable_write[key]['TC2']):
+                # Only save if value is different from what's in the JSON or not present in current_vars
+                if key not in current_vars or value != current_vars.get(key, {}).get('TC2', default_variable_write[key]['TC2']):
                     user_variables.setdefault(key, {}).update({'TC2': value})
 
             elif plc_type == "TC3":
@@ -448,7 +489,7 @@ def save_user_input(plc_type, is_core, variables):
     for key, value in user_variables.items():
         current_vars.setdefault(key, {}).update(value)
 
-    # Save only user-modified variables
+    # Save only user-modified variables, do not include defaults
     if user_variables:  # Only save if there are new or modified variables
         with open("variables_config.json", "w") as json_file:
             json.dump(current_vars, json_file, indent=4)  # Save the updated state of all variables
@@ -459,6 +500,8 @@ def save_user_input(plc_type, is_core, variables):
 
     # Reload variables after saving
     variable_write = load_variables()
+
+    update_menu() # State for Reset Variables to default
 
 
 def write_variable(action, tc_type, is_core, value, button):
@@ -664,7 +707,7 @@ def check_for_core_variable():
         # If the core variable is read successfully, set the variable and update the label
         if core_value is not None:
             is_core = True  # Set the variable to True (core detected)
-            core_status_label.config(text="Core Lib")
+            core_status_label.config(text="      Core Lib")
         else:
             is_core = False  # Set the variable to False (core not detected)
             core_status_label.config(text="No Core Lib")
@@ -986,16 +1029,17 @@ root.config(menu=menu_bar)
 update_menu()
 
 
-frame_connect = ttk.Frame(root)
+frame_connect = ttk.Frame(root, width=100)
+# frame_connect.grid_propagate(False)
 frame_connect.grid(row=0, column=0, padx=20, pady=5)
 
 # Add a button to connect to the PLC
-connect_button = ttk.Button(frame_connect, text="Connect", command=lambda: connect_to_plc(treeview, status_label), style='Connect.TButton')
-connect_button.grid(row=0, column=1, padx=5, ipady=4, sticky='e')
+connect_button = ttk.Button(frame_connect, text="Connect", command=lambda: connect_to_plc(treeview), style='Connect.TButton')
+connect_button.grid(row=0, column=1, padx=10, ipady=4, sticky='w')
 
 # Create a label as an indicator
 core_status_label = ttk.Label(frame_connect, text="No Core Lib", foreground="#4682B4") # #3CB371, #6495ED, 4682B4
-core_status_label.grid(row=0, column=0, padx=20, pady=0)
+core_status_label.grid(row=0, column=0, padx=20, pady=0, sticky='e')
 
 
 
@@ -1088,6 +1132,8 @@ disable_control_buttons()
 load_table_data_from_xml(treeview)
 
 variable_write = load_variables()
+
+root.after(100, process_status_updates)
 
 def on_closing():
     close_current_connection()  # Close connection before exiting
