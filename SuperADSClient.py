@@ -12,7 +12,7 @@ import time
 import json
 from queue import Queue, Empty
 
-__version__ = '2.1.2 Beta 13'
+__version__ = '2.1.2 Beta 14'
 __icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
@@ -424,8 +424,14 @@ def reset_to_defaults():
     global variable_write
     if os.path.exists("variables_config.json"):
         os.remove("variables_config.json")
-        messagebox.showinfo("Reset", "Variables have been reset to defaults.")
-        update_menu()
+
+    variable_write = load_variables()
+    update_menu()
+
+    messagebox.showinfo("Reset", "Variables have been reset to defaults.")
+        
+
+    
 
     # else:
         # messagebox.showinfo("Reset", "No saved configuration found.")
@@ -440,24 +446,21 @@ def update_menu():
 
 # Load variables from JSON or fall back to defaults
 def load_variables():
-    # Load variables from JSON and override the defaults with user values if available
-    variables = default_variable_write.copy()
+    """Load variables from JSON or return defaults if the file is missing."""
+    if not os.path.exists("variables_config.json"):
+        # If file doesn't exist, return the defaults
+        return default_variable_write.copy()
 
-    if os.path.exists("variables_config.json"):
-        with open("variables_config.json", "r") as json_file:
-            user_variables = json.load(json_file)
+    # Load from JSON if the file exists
+    with open("variables_config.json", "r") as json_file:
+        user_variables = json.load(json_file)
 
-        # Overwrite defaults with the ones from the user
-        for key, user_value in user_variables.items():
-            if key in variables:
-                variables[key].update(user_value) 
-    
-    return variables
+    # Merge user-modified values into the defaults
+    return merge_dicts(default_variable_write.copy(), user_variables)
 
 
 def save_user_input(plc_type, is_core, variables):
     global variable_write
-
     # Load the existing variables from the JSON file if it exists
     existing_vars = {}
     if os.path.exists("variables_config.json"):
@@ -520,8 +523,6 @@ def merge_dicts(existing, new):
 def write_variable(action, tc_type, is_core, value, button):
     global current_ads_connection
 
-    variable_write = load_variables()
-    
     # Select the appropriate variable name for the action, based on tc_type and is_core
     if tc_type == 'TC2':
         variable_name = variable_write[action]['TC2']  # For TC2, ignore is_core
