@@ -520,6 +520,8 @@ def merge_dicts(existing, new):
 def write_variable(action, tc_type, is_core, value, button):
     global current_ads_connection
 
+    variable_write = load_variables()
+    
     # Select the appropriate variable name for the action, based on tc_type and is_core
     if tc_type == 'TC2':
         variable_name = variable_write[action]['TC2']  # For TC2, ignore is_core
@@ -884,8 +886,22 @@ def open_variable_window():
 
     variable_window.resizable(False,False)
 
+    def clear_entries():
+        for entry in entries.values():
+            entry.delete(0, tk.END)
+
+    def radio_button_changed(*args):
+        print(f"Radio button selected: {plc_type.get()}")
+        clear_entries()
+
+    def checkbox_changed(*args):
+        print(f"Checkbox selected: {is_core.get()}")
+        clear_entries()
+
     # Radio buttons for TC2 and TC3
     plc_type = tk.StringVar(value="TC2") # Default is TC2
+
+    plc_type.trace_add("write", radio_button_changed)
 
     def toggle_is_core():
         if plc_type.get() == "TC3":
@@ -901,7 +917,9 @@ def open_variable_window():
     ttk.Radiobutton(frame_tc_type, text="TC3", variable=plc_type, value="TC3", command=toggle_is_core).grid(row=0, column=1, padx=10)
 
     # Core Selection (only enabled for TC3)
-    is_core = tk.BooleanVar()
+    is_core = tk.BooleanVar(value=False)
+
+    is_core.trace_add("write", checkbox_changed)
     core_checkbox = ttk.Checkbutton(frame_tc_type, text="Is Core", variable=is_core, state="disabled")
     core_checkbox.grid(row=0, column=3, padx=15)
 
@@ -915,6 +933,7 @@ def open_variable_window():
         entry = ttk.Entry(frame_vars, width=50)
         entry.grid(row=i, column=1, padx=10, pady=10)
         entries[label_text] = entry
+
 
     # Save button to capture and save the inputs
     def save():
