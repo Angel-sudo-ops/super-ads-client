@@ -13,7 +13,7 @@ import json
 from queue import Queue, Empty
 import copy
 
-__version__ = '2.1.2 Beta 15'
+__version__ = '2.1.2 Beta 16'
 __icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
@@ -240,7 +240,7 @@ def background_connect(plc_data):
         current_ads_connection = pyads.Connection(ams_net_id, port)
         current_ads_connection.open()
 
-    
+
         # Check PLC status
         if not check_plc_status(current_ads_connection):
             raise Exception("PLC not in valid state")
@@ -277,6 +277,10 @@ def background_connect(plc_data):
 
             # Ensure the read thread is stopped when connection is closed
         stop_read_thread()
+
+        # Ensure the connection is closed properly
+        if current_ads_connection:
+            close_current_connection()
 
 
 
@@ -335,8 +339,10 @@ def connect_to_plc():
     
         # Start the connection in a new thread
         connection_in_progress = True
-        connection_thread = threading.Thread(target=background_connect, args=(lgv_data,))
-        connection_thread.start()
+
+    print("Starting connection thread.")
+    connection_thread = threading.Thread(target=background_connect, args=(lgv_data,))
+    connection_thread.start()
 
 
 previous_selection = None # track previous connection
@@ -346,29 +352,31 @@ connection_in_progress = False
 def on_treeview_select(event):
     global current_ads_connection, previous_selection, connection_in_progress, dis_horn_state
     # Get the currently selected LGV
-    
-    selected_item = treeview.selection()
-    if not selected_item:
-        return
+
+    # if not selected_item:
+    #     return
     
     # stop_read_thread()
-    # with connection_lock:
-    if connection_in_progress:
-        print("Connection in progress. Waiting for it to finish. Triggered on select")
-        messagebox.showinfo("Attention", "Connection in progress. Waiting for it to finish. Triggered on select")
-        treeview.selection_remove(treeview.selection())
-        return
+    with connection_lock:
+        if connection_in_progress:
+            print("Connection in progress. Waiting for it to finish. Triggered on select")
+            messagebox.showinfo("Attention", "Connection in progress. Waiting for it to finish. Triggered on select")
+            treeview.selection_remove(treeview.selection())
+            return
 
-    # If the same item is selected, do nothing
-    if (previous_selection == selected_item) and current_ads_connection:
-        print("Target already connected")
-        messagebox.showinfo("Attention", "Target already connected")
-        return
+        selected_item = treeview.selection()
 
-    old_selection = previous_selection
-
-    previous_selection = selected_item  # Update the previously selected item
+        # If the same item is selected, do nothing
+        if not selected_item or ((previous_selection == selected_item) and current_ads_connection):
+            print("Target already connected")
+            messagebox.showinfo("Attention", "Target already connected")
+            return
+        
+        old_selection = previous_selection
+        previous_selection = selected_item  # Update the previously selected item
     
+    stop_read_thread()
+
     # Close any existing connection when the selection changes
     if  current_ads_connection:
         try:
@@ -841,30 +849,32 @@ def update_buttons_from_plc_thread():
     }
 
     while not stop_thread_event.is_set():
-        with connection_lock:  # Synchronize access to current_ads_connection
-            if current_ads_connection is None:
-                print("Connection lost. Exiting read thread.")
-                break  # Exit the loop if the connection is lost
 
-            for action in actions:
-                try:
-                    # Read value from PLC
-                    read_value = read_variable(action)  
-                    button = button_mapping[action]
+        # with connection_lock:  # Synchronize access to current_ads_connection
+        connection = current_ads_connection
 
-                    # Update the button color on the main thread
-                    root.after(0, update_button_color, action, button, read_value)
+        if connection is None:
+            print("Connection lost. Exiting read thread.")
+            break  # Exit the loop if the connection is lost
 
-                except Exception as e:
-                    print(f"Error reading {action}: {e}")
+        for action in actions:
+            try:
+                # Read value from PLC
+                read_value = read_variable(action)  
+                button = button_mapping[action]
+
+                # Update the button color on the main thread
+                root.after(0, update_button_color, action, button, read_value)
+
+            except Exception as e:
+                print(f"Error reading {action}: {e}")
 
         stop_thread_event.wait(0.1)  # Wait before the next update
 
     print("Read thread stopped.")
 
-    # t = threading.Timer(0.1, update_buttons_from_plc_thread)
-    # t.daemon = True 
-    # t.start()
+
+
 read_thread = None
 stop_thread_event = threading.Event()
 
@@ -875,6 +885,7 @@ def start_read_thread():
         print("Read thread is already running.")
         return  # Avoid starting a new thread if it's already running
     
+    print("Start new read thread...")
     stop_thread_event.clear()
 
     read_thread = threading.Thread(target=update_buttons_from_plc_thread)
@@ -883,12 +894,14 @@ def start_read_thread():
 
 def stop_read_thread():
     global read_thread
-    stop_thread_event.set()  # Signal the thread to stop
-    
-    if read_thread is not None:
-        print("Stopping read thread.")
+
+    if read_thread is not None and read_thread.is_alive():
+        print("Stopping the read thread.")
+        stop_thread_event.set()  # Signal the thread to stop
         read_thread.join()  # Wait for the thread to finish
         read_thread = None  # Reset the thread reference
+    else:
+        print("No active read thread to stop.")
 
 ####################################################################################################################################################################
 ############################################################## Treeview setup and sorting ##########################################################################
