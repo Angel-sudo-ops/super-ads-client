@@ -313,14 +313,9 @@ def update_status_in_queue(status, color):
 connection_lock = threading.Lock()
 # Attempt to connect to the selected PLC (starts in a new thread)
 def connect_to_plc():
-    global connection_in_progress, current_ads_connection
+    global connection_in_progress
     
     with connection_lock:
-        # If already connected, don't try to reconnect
-        if current_ads_connection is not None:
-            print("Target already connected")
-            messagebox.showinfo("Attention", "Target already connected")
-            return
         
         if connection_in_progress:
             print("Connection in progress. Waiting for it to finish. Triggered on connect")
@@ -333,14 +328,12 @@ def connect_to_plc():
             # messagebox.showinfo("Attention", "Select LGV")
             print("No LGV selected")
             return
-
+        
         lgv_data = treeview.item(selected_item)["values"]
 
-    
-        # Start the connection in a new thread
-        connection_in_progress = True
-
-    print("Starting connection thread.")
+        connection_in_progress = True  # Set the connection in progress flag
+        
+    # Start the new connection thread
     connection_thread = threading.Thread(target=background_connect, args=(lgv_data,))
     connection_thread.start()
 
@@ -350,24 +343,18 @@ previous_selection = None # track previous connection
 connection_in_progress = False
 # Close the current connection when selection changes
 def on_treeview_select(event):
-    global current_ads_connection, previous_selection, connection_in_progress, dis_horn_state
+    global current_ads_connection, previous_selection
     # Get the currently selected LGV
 
-    # if not selected_item:
-    #     return
+    selected_item = treeview.selection()
+    if not selected_item:
+        return
     
     # stop_read_thread()
     with connection_lock:
-        if connection_in_progress:
-            print("Connection in progress. Waiting for it to finish. Triggered on select")
-            messagebox.showinfo("Attention", "Connection in progress. Waiting for it to finish. Triggered on select")
-            treeview.selection_remove(treeview.selection())
-            return
-
-        selected_item = treeview.selection()
-
+    
         # If the same item is selected, do nothing
-        if not selected_item or ((previous_selection == selected_item) and current_ads_connection):
+        if (previous_selection == selected_item) and current_ads_connection:
             print("Target already connected")
             messagebox.showinfo("Attention", "Target already connected")
             return
