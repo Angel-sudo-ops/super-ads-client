@@ -231,8 +231,14 @@ def background_connect(plc_data):
 
         # Check PLC status
         if check_plc_status(current_ads_connection):
+            
+            with connection_lock:
+                connection_in_progress = False
+
             update_status_in_queue("Connected", "green")
             enable_control_buttons()
+
+            start_read_thread()
 
             # Automatically detect core variable
             check_for_core_variable()
@@ -242,6 +248,8 @@ def background_connect(plc_data):
 
             # Start monitoring the connection after connecting
             monitor_connection_status()
+
+            # connection_in_progress = False
 
         else:
             raise Exception("PLC not in a valid state")
@@ -254,10 +262,17 @@ def background_connect(plc_data):
         treeview.selection_remove(treeview.selection())
 
     finally:
+        if connection_lock.locked():
+            print("Connection lock is already held.")
         with connection_lock:
+            print("Finally block executed")
             connection_in_progress = False
             if current_ads_connection is None:
                 update_status_in_queue("Disconnected", "red")
+            
+             # Ensure the read thread is stopped when connection is closed
+            stop_read_thread()
+
 
 
 current_status = None
@@ -328,10 +343,13 @@ def on_treeview_select(event):
     # Get the currently selected LGV
     
     try:
+
         selected_item = treeview.selection()
         if not selected_item:
             return
         
+        # stop_read_thread()
+
         if connection_in_progress:
             print("Connection in progress. Waiting for it to finish. Triggered on select")
             messagebox.showinfo("Attention", "Connection in progress. Waiting for it to finish. Triggered on select")
@@ -442,7 +460,7 @@ def reset_to_defaults():
 
     update_menu()
 
-    stop_thread_event.clear()
+    # stop_thread_event.clear()
     start_read_thread()
 
     messagebox.showinfo("Reset", "Variables have been reset to defaults.")
@@ -810,26 +828,32 @@ stop_thread_event = threading.Event()
 def update_buttons_from_plc_thread():
     global current_ads_connection
 
-    actions = ['run', 'disable_horn']
+    try:
+        actions = ['run', 'disable_horn']
     
-    # Mapping actions to buttons
-    button_mapping = {
-        'run': run_button,
-        'disable_horn': dis_horn_button
-    }
-    
-    # with read_lock:
-    while not stop_thread_event.is_set():
-        if current_ads_connection is None:
-            return
+        # Mapping actions to buttons
+        button_mapping = {
+            'run': run_button,
+            'disable_horn': dis_horn_button
+        }
         
-        # print(f"Current state of variable write: {variable_write['disable_horn']['TC3']['core']}")
-        for action in actions:
-            read_value = read_variable(action)  # Read value from PLC
-            button = button_mapping[action]
-            root.after(0, update_button_color, action, button, read_value)
+        # with read_lock:
+        while not stop_thread_event.is_set():
+            if current_ads_connection is None:
+                print("Connection lost. Stopping read thread.")
+                stop_thread_event.set()  # Signal the thread to stop
+                break  # Exit the while loop gracefully
+            
+            # print(f"Current state of variable write: {variable_write['disable_horn']['TC3']['core']}")
+            for action in actions:
+                read_value = read_variable(action)  # Read value from PLC
+                button = button_mapping[action]
+                root.after(0, update_button_color, action, button, read_value)
 
-        stop_thread_event.wait(0.1)
+            stop_thread_event.wait(0.1)
+    
+    except Exception as e:
+        print(f"Error in read thread: {e}")
     
     print("Read thread stopped...")
 
@@ -840,6 +864,11 @@ read_thread = None
 
 def start_read_thread():
     global read_thread
+
+    if read_thread is not None and read_thread.is_alive():
+        print("Read thread is already running.")
+        return  # Avoid starting a new thread if it's already running
+    
     stop_thread_event.clear()
 
     read_thread = threading.Thread(target=update_buttons_from_plc_thread)
@@ -848,8 +877,9 @@ def start_read_thread():
 
 def stop_read_thread():
     global read_thread
+    stop_thread_event.set()  # Signal the thread to stop
+    
     if read_thread is not None:
-        stop_thread_event.set()  # Signal the thread to stop
         read_thread.join()  # Wait for the thread to finish
         read_thread = None  # Reset the thread reference
 
@@ -1233,3 +1263,7 @@ root.mainloop()
 # Add colors to the buttons, at least for the horn, and reset that variable whenever there's a new connection
 
 # Connected/Disconnedted label doesn't change from conencted to disconnected when another selection is made, maybe set this to default when connection is closed
+
+# Leer STRUCT
+
+# Chance agregarle el selector
