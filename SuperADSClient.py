@@ -199,27 +199,27 @@ def check_plc_status(ads_connection):
 def close_current_connection():
     global current_ads_connection, dis_horn_state, connection_in_progress, is_core, monitor_timer
 
-    with connection_lock:
-        connection_in_progress = False
+    # with connection_lock:
+    connection_in_progress = False
 
-        if current_ads_connection:
-            print("Closing current ADS connection.")
-            current_ads_connection.close()
-            current_ads_connection = None
+    if current_ads_connection:
+        print("Closing current ADS connection.")
+        current_ads_connection.close()
+        current_ads_connection = None
 
-            dis_horn_state = False #reset horn state
-            is_core = False
-            core_status_label.config(text="No Core Lib")
+        dis_horn_state = False #reset horn state
+        is_core = False
+        core_status_label.config(text="No Core Lib")
 
-            # Stop the read thread
-            stop_read_thread()  # Stop and join the thread
-        
-        if monitor_timer:
-            print("Canceling monitor timer.")
-            monitor_timer.cancel()
-            monitor_timer = None
+        # Stop the read thread
+        stop_read_thread()  # Stop and join the thread
+    
+    if monitor_timer:
+        print("Canceling monitor timer.")
+        monitor_timer.cancel()
+        monitor_timer = None
 
-        update_status_in_queue("Disconnected", "red")
+    update_status_in_queue("Disconnected", "red")
 
 # Background connection handler (runs in a separate thread)
 def background_connect(plc_data):
@@ -240,12 +240,13 @@ def background_connect(plc_data):
         current_ads_connection = pyads.Connection(ams_net_id, port)
         current_ads_connection.open()
 
+    
         # Check PLC status
         if not check_plc_status(current_ads_connection):
             raise Exception("PLC not in valid state")
         
         connection_in_progress = False
-        
+
         update_status_in_queue("Connected", "green")
         enable_control_buttons()
 
@@ -260,11 +261,8 @@ def background_connect(plc_data):
         # Start monitoring the connection after connecting
         monitor_connection_status()
 
-        # Reset connection_in_progress after a successful connection
-        # with connection_lock:
-        
-
     except Exception as e:
+        print(f"Connection error {e}")
         current_ads_connection = None
         disable_control_buttons()
         update_status_in_queue("Disconnected", "red")
@@ -272,16 +270,13 @@ def background_connect(plc_data):
         treeview.selection_remove(treeview.selection())
 
     finally:
-        # if connection_lock.locked():
-        #     print("Connection lock is already held.")
-        with connection_lock:
-            print("Finally block executed")
-            connection_in_progress = False
-            if current_ads_connection is None:
-                update_status_in_queue("Disconnected", "red")
-            
-             # Ensure the read thread is stopped when connection is closed
-            stop_read_thread()
+        print("Finally block executed")
+        connection_in_progress = False
+        if current_ads_connection is None:
+            update_status_in_queue("Disconnected", "red")
+
+            # Ensure the read thread is stopped when connection is closed
+        stop_read_thread()
 
 
 
@@ -352,44 +347,46 @@ def on_treeview_select(event):
     global current_ads_connection, previous_selection, connection_in_progress, dis_horn_state
     # Get the currently selected LGV
     
-    try:
+    selected_item = treeview.selection()
+    if not selected_item:
+        return
+    
+    # stop_read_thread()
+    # with connection_lock:
+    if connection_in_progress:
+        print("Connection in progress. Waiting for it to finish. Triggered on select")
+        messagebox.showinfo("Attention", "Connection in progress. Waiting for it to finish. Triggered on select")
+        treeview.selection_remove(treeview.selection())
+        return
 
-        selected_item = treeview.selection()
-        if not selected_item:
-            return
-        
-        # stop_read_thread()
+    # If the same item is selected, do nothing
+    if (previous_selection == selected_item) and current_ads_connection:
+        print("Target already connected")
+        messagebox.showinfo("Attention", "Target already connected")
+        return
 
-        if connection_in_progress:
-            print("Connection in progress. Waiting for it to finish. Triggered on select")
-            messagebox.showinfo("Attention", "Connection in progress. Waiting for it to finish. Triggered on select")
-            treeview.selection_remove(treeview.selection())
-            return
+    old_selection = previous_selection
 
-        # If the same item is selected, do nothing
-        if (previous_selection == selected_item) and current_ads_connection:
-            print("Target already connected")
-            messagebox.showinfo("Attention", "Target already connected")
-            return
-        
-        old_selection = previous_selection
-
-        previous_selection = selected_item  # Update the previously selected item
-        
-        # Close any existing connection when the selection changes
-        if  current_ads_connection:
-            # status_label.update_idletasks()
-            
-            # messagebox.showinfo("Attention", "Connection Closed")
+    previous_selection = selected_item  # Update the previously selected item
+    
+    # Close any existing connection when the selection changes
+    if  current_ads_connection:
+        try:
+            # Check if the horn is disabled before closing
             if read_variable('disable_horn'):
                 old_lgv_name = treeview.item(old_selection)["values"][0]
                 messagebox.showwarning("Attention", f"Horn in {old_lgv_name} is disabled!")
 
-            disable_control_buttons()
-            close_current_connection()
+        except Exception as e:
+            print(f"Error reading variable: {e}")  # Handle any read errors gracefully
+
+        # Close the current connection safely
+        print("Closing current connection.")
+        disable_control_buttons()
+        close_current_connection()
             
-    finally:
-        update_status_in_queue("Disconnected", "red")
+    print("Updating status to Disconnected.")
+    update_status_in_queue("Disconnected", "red")
 
 # Enable control buttons after a successful connection
 def enable_control_buttons():
