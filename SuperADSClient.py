@@ -13,7 +13,7 @@ import json
 from queue import Queue, Empty
 import copy
 
-__version__ = '2.1.2 Beta 15'
+__version__ = '2.2.7'
 __icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
