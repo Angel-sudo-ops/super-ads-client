@@ -155,30 +155,38 @@ def load_table_data_from_xml(tree, filename="lgv_data.xml"):
 ####################################################################################################################################################################
 
 monitor_timer = None
+monitor_lock = threading.Lock()
 
 def monitor_connection_status():
     global current_ads_connection, monitor_timer
 
-    if current_ads_connection is None:
-        return
+    with monitor_lock:
+
+        if monitor_timer:
+            monitor_timer.cancel()
+            monitor_timer = None
+
+        if current_ads_connection is None:
+            print("Connection lost. Stopping monitoring.")
+            return  # Stop monitoring if the connection is gone
     
-    try:
-        if check_plc_status(current_ads_connection):
-            update_status_in_queue("Connected", "green")
-        else:
-            raise Exception("PLC not in valid state")
-    except Exception as e:
-        # assume connection is lost if not status 5 is read
-        disable_control_buttons()
-        update_status_in_queue("Disconnected", "red")
-        close_current_connection()
+        try:
+            if check_plc_status(current_ads_connection):
+                update_status_in_queue("Connected", "green")
+            else:
+                raise Exception("PLC not in valid state")
+        except Exception as e:
+            # assume connection is lost if not status 5 is read
+            print(f"Monitoring error: {e}. Disconnecting...")
+            disable_control_buttons()
+            update_status_in_queue("Disconnected", "red")
+            close_current_connection()
+            return
 
-    if monitor_timer:
-        monitor_timer.cancel()
-
-    monitor_timer = threading.Timer(1.0, monitor_connection_status)
-    monitor_timer.daemon = True
-    monitor_timer.start()  
+        monitor_timer = threading.Timer(1.0, monitor_connection_status)
+        monitor_timer.daemon = True
+        monitor_timer.start()  
+        print("Monitoring connection...")
 
     
 def check_plc_status(ads_connection):
@@ -195,6 +203,7 @@ def close_current_connection():
         connection_in_progress = False
 
         if current_ads_connection:
+            print("Closing current ADS connection.")
             current_ads_connection.close()
             current_ads_connection = None
 
@@ -206,6 +215,7 @@ def close_current_connection():
             stop_read_thread()  # Stop and join the thread
         
         if monitor_timer:
+            print("Canceling monitor timer.")
             monitor_timer.cancel()
             monitor_timer = None
 
@@ -218,6 +228,7 @@ def background_connect(plc_data):
     try:        
         # If already connected, don't try to reconnect
         if current_ads_connection is not None:
+            print("Already connected, skipping connection.")
             return
         
         lgv_name, ams_net_id, tc_type = plc_data
@@ -230,29 +241,28 @@ def background_connect(plc_data):
         current_ads_connection.open()
 
         # Check PLC status
-        if check_plc_status(current_ads_connection):
-            
-            with connection_lock:
-                connection_in_progress = False
+        if not check_plc_status(current_ads_connection):
+            raise Exception("PLC not in valid state")
+        
+        connection_in_progress = False
+        
+        update_status_in_queue("Connected", "green")
+        enable_control_buttons()
 
-            update_status_in_queue("Connected", "green")
-            enable_control_buttons()
+        start_read_thread()
 
-            start_read_thread()
+        # Automatically detect core variable
+        check_for_core_variable()
+        # Call update_buttons once to start the loop
+        # update_buttons()
+        update_buttons_from_plc_thread()
 
-            # Automatically detect core variable
-            check_for_core_variable()
-            # Call update_buttons once to start the loop
-            # update_buttons()
-            update_buttons_from_plc_thread()
+        # Start monitoring the connection after connecting
+        monitor_connection_status()
 
-            # Start monitoring the connection after connecting
-            monitor_connection_status()
-
-            # connection_in_progress = False
-
-        else:
-            raise Exception("PLC not in a valid state")
+        # Reset connection_in_progress after a successful connection
+        # with connection_lock:
+        
 
     except Exception as e:
         current_ads_connection = None
@@ -262,8 +272,8 @@ def background_connect(plc_data):
         treeview.selection_remove(treeview.selection())
 
     finally:
-        if connection_lock.locked():
-            print("Connection lock is already held.")
+        # if connection_lock.locked():
+        #     print("Connection lock is already held.")
         with connection_lock:
             print("Finally block executed")
             connection_in_progress = False
@@ -307,15 +317,15 @@ def connect_to_plc():
     global connection_in_progress, current_ads_connection
     
     with connection_lock:
-        if connection_in_progress:
-            print("Connection in progress. Waiting for it to finish. Triggered on connect")
-            messagebox.showinfo("Attention", "Connection in progress. Waiting for it to finish. Triggered on connect")
-            return
-        
         # If already connected, don't try to reconnect
         if current_ads_connection is not None:
             print("Target already connected")
             messagebox.showinfo("Attention", "Target already connected")
+            return
+        
+        if connection_in_progress:
+            print("Connection in progress. Waiting for it to finish. Triggered on connect")
+            messagebox.showinfo("Attention", "Connection in progress. Waiting for it to finish. Triggered on connect")
             return
         
         # Get the selected PLC data
@@ -823,44 +833,43 @@ def update_button_color(action, button, read_value):
         button.configure(style='LGV.Disconnected.TButton')
 
 read_lock = threading.Lock()
-stop_thread_event = threading.Event()
 
 def update_buttons_from_plc_thread():
     global current_ads_connection
 
-    try:
-        actions = ['run', 'disable_horn']
-    
-        # Mapping actions to buttons
-        button_mapping = {
-            'run': run_button,
-            'disable_horn': dis_horn_button
-        }
-        
-        # with read_lock:
-        while not stop_thread_event.is_set():
-            if current_ads_connection is None:
-                print("Connection lost. Stopping read thread.")
-                stop_thread_event.set()  # Signal the thread to stop
-                break  # Exit the while loop gracefully
-            
-            # print(f"Current state of variable write: {variable_write['disable_horn']['TC3']['core']}")
-            for action in actions:
-                read_value = read_variable(action)  # Read value from PLC
-                button = button_mapping[action]
-                root.after(0, update_button_color, action, button, read_value)
+    actions = ['run', 'disable_horn']
+    button_mapping = {
+        'run': run_button,
+        'disable_horn': dis_horn_button
+    }
 
-            stop_thread_event.wait(0.1)
-    
-    except Exception as e:
-        print(f"Error in read thread: {e}")
-    
-    print("Read thread stopped...")
+    while not stop_thread_event.is_set():
+        with connection_lock:  # Synchronize access to current_ads_connection
+            if current_ads_connection is None:
+                print("Connection lost. Exiting read thread.")
+                break  # Exit the loop if the connection is lost
+
+            for action in actions:
+                try:
+                    # Read value from PLC
+                    read_value = read_variable(action)  
+                    button = button_mapping[action]
+
+                    # Update the button color on the main thread
+                    root.after(0, update_button_color, action, button, read_value)
+
+                except Exception as e:
+                    print(f"Error reading {action}: {e}")
+
+        stop_thread_event.wait(0.1)  # Wait before the next update
+
+    print("Read thread stopped.")
 
     # t = threading.Timer(0.1, update_buttons_from_plc_thread)
     # t.daemon = True 
     # t.start()
 read_thread = None
+stop_thread_event = threading.Event()
 
 def start_read_thread():
     global read_thread
@@ -880,6 +889,7 @@ def stop_read_thread():
     stop_thread_event.set()  # Signal the thread to stop
     
     if read_thread is not None:
+        print("Stopping read thread.")
         read_thread.join()  # Wait for the thread to finish
         read_thread = None  # Reset the thread reference
 
