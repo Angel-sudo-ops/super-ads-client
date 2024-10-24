@@ -19,6 +19,8 @@ __icon__ = "./plc.ico"
 # Variable to hold the current ads connection
 current_ads_connection = None
 
+connection_active = False
+
 ####################################################################################################################################################################
 ########################################################## Initial data reading from db3 file ######################################################################
 ####################################################################################################################################################################
@@ -163,10 +165,11 @@ def monitor_connection_status():
         return
     
     try:
-        if check_plc_status(current_ads_connection):
-            update_status_in_queue("Connected", "green")
-        else:
+        if not check_plc_status(current_ads_connection):
             raise Exception("PLC not in valid state")
+        
+        update_status_in_queue("Connected", "green")
+
     except Exception as e:
         # assume connection is lost if not status 5 is read
         disable_control_buttons()
@@ -213,7 +216,7 @@ def close_current_connection():
 
 # Background connection handler (runs in a separate thread)
 def background_connect(plc_data):
-    global current_ads_connection, connection_in_progress
+    global current_ads_connection, connection_in_progress, connection_active
     
     try:        
         # If already connected, don't try to reconnect
@@ -229,8 +232,13 @@ def background_connect(plc_data):
         current_ads_connection = pyads.Connection(ams_net_id, port)
         current_ads_connection.open()
 
+        connection_active = check_plc_status(current_ads_connection)
+
         # Check PLC status
-        if check_plc_status(current_ads_connection):
+        if connection_active:
+
+            connection_in_progress = False
+
             update_status_in_queue("Connected", "green")
             enable_control_buttons()
 
@@ -256,8 +264,6 @@ def background_connect(plc_data):
     finally:
         with connection_lock:
             connection_in_progress = False
-            if current_ads_connection is None:
-                update_status_in_queue("Disconnected", "red")
 
 
 current_status = None
@@ -289,20 +295,22 @@ def update_status_in_queue(status, color):
 connection_lock = threading.Lock()
 # Attempt to connect to the selected PLC (starts in a new thread)
 def connect_to_plc():
-    global connection_in_progress, current_ads_connection
+    global connection_in_progress
     
     with connection_lock:
+
+        # If already connected, don't try to reconnect
+        if current_ads_connection and not connection_in_progress:
+            print("Target already connected")
+            # messagebox.showinfo("Attention", "Target already connected")
+            return
+
         if connection_in_progress:
             print("Connection in progress. Waiting for it to finish. Triggered on connect")
-            messagebox.showinfo("Attention", "Connection in progress. Waiting for it to finish. Triggered on connect")
+            # messagebox.showinfo("Attention", "Connection in progress. Waiting for it to finish. Triggered on connect")
             return
         
-        # If already connected, don't try to reconnect
-        if current_ads_connection is not None:
-            print("Target already connected")
-            messagebox.showinfo("Attention", "Target already connected")
-            return
-        
+
         # Get the selected PLC data
         selected_item = treeview.selection()
         if not selected_item:
@@ -312,11 +320,11 @@ def connect_to_plc():
 
         lgv_data = treeview.item(selected_item)["values"]
 
-    
-        # Start the connection in a new thread
         connection_in_progress = True
-        connection_thread = threading.Thread(target=background_connect, args=(lgv_data,))
-        connection_thread.start()
+
+    # Start the connection in a new thread
+    connection_thread = threading.Thread(target=background_connect, args=(lgv_data,))
+    connection_thread.start()
 
 
 previous_selection = None # track previous connection
@@ -324,44 +332,43 @@ previous_selection = None # track previous connection
 connection_in_progress = False
 # Close the current connection when selection changes
 def on_treeview_select(event):
-    global current_ads_connection, previous_selection, connection_in_progress, dis_horn_state
+    global current_ads_connection, previous_selection, connection_in_progress, connection_active
     # Get the currently selected LGV
     
-    try:
-        selected_item = treeview.selection()
-        if not selected_item:
-            return
-        
-        if connection_in_progress:
-            print("Connection in progress. Waiting for it to finish. Triggered on select")
-            messagebox.showinfo("Attention", "Connection in progress. Waiting for it to finish. Triggered on select")
-            treeview.selection_remove(treeview.selection())
-            return
+    selected_item = treeview.selection()
+    if not selected_item:
+        print("No item selected.")
+        return
+    
+    # If the same item is selected, do nothing
+    if (previous_selection == selected_item) and current_ads_connection and connection_active and not connection_in_progress:
+        print("Target already connected")
+        # messagebox.showinfo("Attention", "Target already connected")
+        return
 
-        # If the same item is selected, do nothing
-        if (previous_selection == selected_item) and current_ads_connection:
-            print("Target already connected")
-            messagebox.showinfo("Attention", "Target already connected")
-            return
-        
-        old_selection = previous_selection
 
-        previous_selection = selected_item  # Update the previously selected item
+    if connection_in_progress:
+        print("Connection in progress. Waiting for it to finish. Triggered on select")
+        # messagebox.showinfo("Attention", "Connection in progress. Waiting for it to finish. Triggered on select")
+        treeview.selection_remove(treeview.selection())
+        return
+    
+    old_selection = previous_selection
+    previous_selection = selected_item  # Update the previously selected item
+
+    # Close any existing connection when the selection changes
+    if  current_ads_connection and connection_active:
+        if read_variable('disable_horn'):
+            old_lgv_name = treeview.item(old_selection)["values"][0]
+            messagebox.showwarning("Attention", f"Horn in {old_lgv_name} is disabled!")
         
-        # Close any existing connection when the selection changes
-        if  current_ads_connection:
-            # status_label.update_idletasks()
+        print("Stopping read thread and closing current connection.")
+        stop_read_thread()  # Ensure the read thread is stopped
+
+        disable_control_buttons()
+        close_current_connection()
             
-            # messagebox.showinfo("Attention", "Connection Closed")
-            if read_variable('disable_horn'):
-                old_lgv_name = treeview.item(old_selection)["values"][0]
-                messagebox.showwarning("Attention", f"Horn in {old_lgv_name} is disabled!")
-
-            disable_control_buttons()
-            close_current_connection()
-            
-    finally:
-        update_status_in_queue("Disconnected", "red")
+    update_status_in_queue("Disconnected", "red")
 
 # Enable control buttons after a successful connection
 def enable_control_buttons():
@@ -846,12 +853,17 @@ def start_read_thread():
     read_thread.daemon = True
     read_thread.start()
 
+
 def stop_read_thread():
     global read_thread
-    if read_thread is not None:
-        stop_thread_event.set()  # Signal the thread to stop
+
+    if read_thread is not None and read_thread.is_alive():
+        print("Stopping read thread.")
+        stop_thread_event.set()
         read_thread.join()  # Wait for the thread to finish
         read_thread = None  # Reset the thread reference
+    else:
+        print("No active read thread to stop.")
 
 ####################################################################################################################################################################
 ############################################################## Treeview setup and sorting ##########################################################################
