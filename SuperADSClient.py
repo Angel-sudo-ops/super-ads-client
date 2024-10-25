@@ -13,7 +13,7 @@ import json
 from queue import Queue, Empty
 import copy
 
-__version__ = '2.2.8'
+__version__ = '2.2.9'
 __icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
@@ -1017,11 +1017,152 @@ def on_variable_window_close():
 ####################################################################################################################################################################
 ######################################################## Window To Read/Write Custom Variables #####################################################################
 ####################################################################################################################################################################
+read_write_window = None 
+
+def open_read_write_window_cond():
+    global read_write_window
+
+    if read_write_window is not None and read_write_window.winfo_exists():
+        read_write_window.lift()
+        read_write_window.focus_force()
+    else:
+        open_read_write_window()
+
+
 def open_read_write_window():
+    global read_write_window
+
     read_write_window = tk.Toplevel(root)
-    read_write_window.title("Set Variables")
+    read_write_window.title("Read/Write ")
 
     read_write_window.resizable(False,False)
+
+    # Predefined and custom variables
+    default_variables = ["reset", "run", "stop"]
+    custom_variables = []
+    result_var = tk.StringVar()
+
+    # Functions
+    def add_variable():
+        variable_name = variable_menu.get()
+        if variable_name and variable_name not in custom_variables:
+            custom_variables.append(variable_name)
+            update_variable_menu()
+
+    def update_variable_menu():
+        all_variables = default_variables + custom_variables
+        variable_menu["values"] = all_variables
+
+    def read_variable():
+        threading.Thread(target=_read_variable_thread).start()
+
+    def _read_variable_thread():
+        selected_variable = variable_menu.get()
+        result_var.set(f"Reading {selected_variable}...")
+        read_write_window.after(1000, lambda: result_var.set(f"Value of {selected_variable}: OK"))
+
+    def write_variable():
+        threading.Thread(target=_write_variable_thread).start()
+
+    def _write_variable_thread():
+        selected_variable = variable_menu.get()
+        value = var_type.get() if var_type.get() != "Value" else value_entry.get()
+        result_var.set(f"Writing {value} to {selected_variable}...")
+        read_write_window.after(1000, lambda: result_var.set(f"Written {value} to {selected_variable}"))
+
+    def on_radio_selection():
+        """Disable value entry if True/False radio is selected."""
+        value_entry.config(state="disabled")
+
+    def on_value_entry():
+        """Disable radio buttons if a value is being entered."""
+        true_radio.config(state="disabled")
+        false_radio.config(state="disabled")
+
+    def reset_to_default(event):
+        """Reset radio buttons and entry field to their default states."""
+        widget = event.widget
+        if widget not in exceptions and not any(is_descendant(widget, exception) for exception in exceptions):
+            var_type.set("")  # Deselect both radio buttons
+            value_entry.delete(0, tk.END)  # Clear the entry field
+            value_entry.config(state="normal")  # Re-enable entry field
+            true_radio.config(state="normal")  # Re-enable radio buttons
+            false_radio.config(state="normal")
+
+    def is_descendant(widget, parent):
+        while widget:
+            if widget == parent:
+                return True
+            widget = widget.master
+        return False
+    # Bind click event to the entire read/write window to reset on outside click
+    read_write_window.bind("<Button-1>", reset_to_default)
+
+    # LGV Range Frame
+    lgv_frame = ttk.LabelFrame(read_write_window, text="LGV Range")
+    lgv_frame.grid(row=0, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
+
+    ttk.Label(lgv_frame, text="Enter LGV Range:").grid(row=0, column=0, padx=5, pady=5)
+    lgv_range_entry = ttk.Entry(lgv_frame)
+    lgv_range_entry.grid(row=0, column=1, padx=5, pady=5)
+
+    # Variables Frame
+    variable_frame = ttk.LabelFrame(read_write_window, text="Variables")
+    variable_frame.grid(row=1, column=0, padx=10, pady=5, sticky="nsew")
+
+    ttk.Label(variable_frame, text="Select or Add Variable:").grid(row=0, column=0, padx=5, pady=5)
+    variable_menu = ttk.Combobox(variable_frame)
+    variable_menu.grid(row=1, column=0, padx=5, pady=5)
+    update_variable_menu()
+
+    ttk.Button(variable_frame, text="Add Variable", command=add_variable).grid(row=2, column=0, padx=5, pady=5)
+
+    # Value Input Frame
+    value_frame = ttk.LabelFrame(read_write_window, text="Set Variable Value")
+    value_frame.grid(row=1, column=1, padx=10, pady=5, sticky="nsew")
+
+    var_type = tk.StringVar()
+    true_radio = ttk.Radiobutton(value_frame, text="True", variable=var_type, value="True", command=on_radio_selection)
+    true_radio.grid(row=0, column=0, padx=5, pady=5)
+
+    false_radio = ttk.Radiobutton(value_frame, text="False", variable=var_type, value="False", command=on_radio_selection)
+    false_radio.grid(row=0, column=1, padx=5, pady=5)
+
+    value_entry = ttk.Entry(value_frame)
+    value_entry.grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
+    value_entry.bind("<FocusIn>", lambda event: on_value_entry())
+    # value_entry.bind("<FocusOut>", on_entry_focus_out)
+
+    # Buttons Frame
+    button_frame = ttk.Frame(read_write_window)
+    button_frame.grid(row=2, column=0, columnspan=2, pady=10)
+
+    ttk.Button(button_frame, text="Read", command=read_variable).grid(row=0, column=0, padx=10)
+    ttk.Button(button_frame, text="Write", command=write_variable).grid(row=0, column=1, padx=10)
+
+    # Result Display Frame
+    result_frame = ttk.LabelFrame(read_write_window, text="Result")
+    result_frame.grid(row=3, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
+
+    result_label = ttk.Label(result_frame, textvariable=result_var, relief="sunken")
+    result_label.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
+
+    # Make the grid layout expand properly
+    read_write_window.grid_columnconfigure(0, weight=1)
+    read_write_window.grid_columnconfigure(1, weight=1)
+    value_frame.grid_columnconfigure(0, weight=1)
+    value_frame.grid_columnconfigure(1, weight=1)
+    result_frame.grid_columnconfigure(0, weight=1)
+
+    exceptions = [value_frame]
+
+    # Handle window close event to reset the reference
+    read_write_window.protocol("WM_DELETE_WINDOW", on_read_write_window_close)
+
+def on_read_write_window_close():
+    global read_write_window
+    read_write_window.destroy()
+    read_write_window = None
 
 
     # entry to input LGV range
@@ -1109,8 +1250,13 @@ menu_bar.add_cascade(label="  File ", menu=file_menu)
 options_menu = tk.Menu(menu_bar, tearoff=0)
 options_menu.add_command(label="Set Variables    ", command=open_variable_window_cond)
 options_menu.add_command(label="Reset to Defaults ", command=reset_to_defaults)
+menu_bar.add_cascade(label=" Options  ", menu=options_menu) 
 
-menu_bar.add_cascade(label=" Options  ", menu=options_menu)    
+more_menu = tk.Menu(menu_bar, tearoff=0)
+more_menu.add_command(label="Read/Write    ", command=open_read_write_window_cond)
+menu_bar.add_cascade(label="More", menu=more_menu)
+
+   
 
 root.config(menu=menu_bar)
 
