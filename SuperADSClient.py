@@ -1038,7 +1038,11 @@ def open_read_write_window():
     read_write_window.resizable(False,False)
 
     # Predefined and custom variables
-    default_variables = ["reset", "run", "stop"]
+    default_variables = ['PressureGVLs.weightPar.touchingWeight',
+                          'CoreGVL.AutoReboot.startRequest', 
+                          'CoreGVL.AutoReboot.autorebootDone',
+                          'Shutdown.DEBUG_forceShutdown',
+                          'LibraryInterfaces.FileManagement.loadRequest[3]']
     custom_variables = []
     result_var = tk.StringVar()
 
@@ -1078,8 +1082,8 @@ def open_read_write_window():
                     match = re.search(r"\d+", name)
                     if match and int(match.group()) == lgv:
                         amsnet_id = treeview.item(child)["values"][1]
-                        plc_type = treeview.item(child)["values"][2]
-                        found_entries.append((lgv, amsnet_id, plc_type))
+                        tc_type = treeview.item(child)["values"][2]
+                        found_entries.append((lgv, amsnet_id, tc_type))
 
             if len(found_entries) == len(lgv_numbers):
                 # Display AMS Net IDs and types for the found LGVs
@@ -1092,52 +1096,77 @@ def open_read_write_window():
             lgv_range_entry.delete(0, tk.END)
             return None
 
-
-    def generalized_write_variable(variable_name, value, button):
-        global current_ads_connection
-
-        # Determine the variable name based on the action, TC type, and core status
+    def check_type(value):
         try:
-            if current_ads_connection is not None:
-                # Write the value to the PLC
-                current_ads_connection.write_by_name(variable_name, value, pyads.PLCTYPE_BOOL)
-                print(f"Successfully wrote {value} to {variable_name} for action: {action}")
-                return True
-            else:
-                raise ConnectionError("No active ADS connection.")
-        except KeyError as e:
-            messagebox.showerror("Invalid Action", f"Action '{action}' is not recognized.")
-            print(f"Invalid action: {str(e)}")
+            int(value)
+            return "Integer"
+        except ValueError:
+            try:
+                float(value)
+                return "Float"
+            except ValueError:
+                return "String"
+
+    def write_variable_for_lgv(lgv, ams_net_id, tc_type, variable_name, value):
+        """Handle writing for each LGV in its own thread."""
+        try:
+            port = 851 if tc_type == "TC3" else 801
+            # Create a new connection for this LGV
+            with pyads.Connection(ams_net_id, port) as ads_connection:
+                print(f"Connection established for LGV {lgv} with AMS Net ID: {ams_net_id}")
+
+                value_type = check_type(value)
+                if value_type == "String":
+                    type_var = pyads.PLCTYPE_BOOL
+                elif value_type == "Integer":
+                    type_var = pyads.PLCTYPE_INT
+                elif value_type == "Float":
+                    type_var = pyads.PLCTYPE_INT
+
+                # Write the value to the PLC using the provided variable name
+                ads_connection.write_by_name(variable_name, value, type_var)
+                print(f"Successfully wrote {value} to {variable_name} for LGV {lgv}")
+
         except Exception as e:
-            messagebox.showerror("Write Error", f"Failed to write to {variable_name}: {str(e)}")
-            print(f"Failed to write to {variable_name}: {str(e)}")
-        finally:
-            # Reset the button state regardless of success or failure
-            button.config(state="normal")
-            button.after(0, lambda: button.state(['!pressed', '!active']))
-        return False
+            messagebox.showerror("Write Error", f"Failed to write to LGV {lgv}: {str(e)}")
+            print(f"Error writing to LGV {lgv}: {str(e)}")
     
+    def convert_to_number(user_input):
+        try:
+            # Try to convert to an integer first
+            number = int(user_input)
+            print(f"Converted to integer: {number}")
+            return number
+        except ValueError:
+            try:
+                # If it fails, try to convert to a float
+                number = float(user_input)
+                print(f"Converted to float: {number}")
+                return number
+            except ValueError:
+                # If both conversions fail, it's not a valid number
+                print(f"'{user_input}' is not a valid number.")
+
     def write_variable():
-        threading.Thread(target=_write_variable_thread).start()
+        """Start the write operation for all selected LGVs."""
+        variable_name = variable_menu.get()  # Directly get the variable name
+        radio_value = var_type.get()
+        entry_value = convert_to_number(value_entry.get())
 
-    def _write_variable_thread():
-        selected_variable = variable_menu.get()  # Action name (e.g., "reset", "run", etc.)
-        value = var_type.get() if var_type.get() != "Value" else value_entry.get()  # Boolean value or entry
-        button = write_button  # Reference to the Write button
+        value = radio_value if radio_value != '' else entry_value
+        
 
-        # Example usage of the generalized_write_variable function
-        for lgv, data in lgv_data_store.items():
-            tc_type = data["Type"]
-            ams_net_id = data["AMSNetID"]
-            is_core = (tc_type == "TC3" and core_status_var.get() == 1)  # Check core status
+        # Get the validated LGV data
+        lgv_data = validate_and_link_lgv()
+        if lgv_data is None:
+            return  # Exit if validation failed
 
-            # Set AMS connection to the appropriate AMS Net ID before writing
-            current_ads_connection.set_local_address(ams_net_id)
-
-            # Call the generalized write function for each LGV
-            generalized_write_variable(selected_variable, tc_type, is_core, value, button)
-
-        result_var.set(f"Successfully wrote {value} to {selected_variable}.")
+        # Start a thread for each LGV to perform the write operation
+        for lgv, ams_net_id, tc_type in lgv_data:
+            threading.Thread(
+                target=write_variable_for_lgv, 
+                args=(lgv, ams_net_id, tc_type, variable_name, value)
+            ).start()
 
 
 
@@ -1162,8 +1191,8 @@ def open_read_write_window():
         """Reset radio buttons and entry field to their default states."""
         widget = event.widget
         if widget not in exceptions and not any(is_descendant(widget, exception) for exception in exceptions):
-            var_type.set("")  # Deselect both radio buttons
-            value_entry.delete(0, tk.END)  # Clear the entry field
+            # var_type.set("")  # Deselect both radio buttons
+            # value_entry.delete(0, tk.END)  # Clear the entry field
             value_entry.config(state="normal")  # Re-enable entry field
             true_radio.config(state="normal")  # Re-enable radio buttons
             false_radio.config(state="normal")
@@ -1177,53 +1206,56 @@ def open_read_write_window():
     # Bind click event to the entire read/write window to reset on outside click
     read_write_window.bind("<Button-1>", reset_to_default)
 
-    # LGV Range Frame
-    lgv_frame = ttk.LabelFrame(read_write_window, text="LGV Range")
-    lgv_frame.grid(row=0, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
+    
+    # Variables Frame
+    variable_frame = ttk.LabelFrame(read_write_window, text="Variables")
+    variable_frame.grid(row=0, column=0, columnspan=2, padx=10, pady=5, sticky="nsew")
 
-    ttk.Label(lgv_frame, text="Enter LGV Range:").grid(row=0, column=0, padx=5, pady=5)
+    # ttk.Label(variable_frame, text="Select or Add Variable:").grid(row=0, column=0, padx=5, pady=5)
+    variable_menu = ttk.Combobox(variable_frame, width=55)
+    variable_menu.grid(row=0, column=0, padx=5, pady=5)
+    update_variable_menu()
+
+    ttk.Button(variable_frame, text="Add Variable", command=add_variable).grid(row=0, column=1, padx=5, pady=5)
+
+    # LGV Range Frame
+    lgv_frame = ttk.LabelFrame(read_write_window)
+    lgv_frame.grid(row=1, column=0, padx=10, pady=5, sticky="ew")
+
+    ttk.Label(lgv_frame, text="Enter Range:").grid(row=0, column=0, padx=5, pady=5)
     lgv_range_entry = ttk.Entry(lgv_frame)
     lgv_range_entry.grid(row=0, column=1, padx=5, pady=5)
 
-    # Variables Frame
-    variable_frame = ttk.LabelFrame(read_write_window, text="Variables")
-    variable_frame.grid(row=1, column=0, padx=10, pady=5, sticky="nsew")
-
-    ttk.Label(variable_frame, text="Select or Add Variable:").grid(row=0, column=0, padx=5, pady=5)
-    variable_menu = ttk.Combobox(variable_frame)
-    variable_menu.grid(row=1, column=0, padx=5, pady=5)
-    update_variable_menu()
-
-    ttk.Button(variable_frame, text="Add Variable", command=add_variable).grid(row=2, column=0, padx=5, pady=5)
-
     # Value Input Frame
     value_frame = ttk.LabelFrame(read_write_window, text="Set Variable Value")
-    value_frame.grid(row=1, column=1, padx=10, pady=5, sticky="nsew")
+    value_frame.grid(row=2, column=0, padx=10, pady=5, sticky="nsew")
+
+    bool_value_frame = ttk.Frame(value_frame)
+    bool_value_frame.grid(row=0, column=0, padx=5, pady=5)
 
     var_type = tk.StringVar()
-    true_radio = ttk.Radiobutton(value_frame, text="True", variable=var_type, value="True", command=on_radio_selection)
+    true_radio = ttk.Radiobutton(bool_value_frame, text="True", variable=var_type, value="True", command=on_radio_selection)
     true_radio.grid(row=0, column=0, padx=5, pady=5)
 
-    false_radio = ttk.Radiobutton(value_frame, text="False", variable=var_type, value="False", command=on_radio_selection)
+    false_radio = ttk.Radiobutton(bool_value_frame, text="False", variable=var_type, value="False", command=on_radio_selection)
     false_radio.grid(row=0, column=1, padx=5, pady=5)
 
     value_entry = ttk.Entry(value_frame)
-    value_entry.grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
+    value_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
     value_entry.bind("<FocusIn>", lambda event: on_value_entry())
-    # value_entry.bind("<FocusOut>", on_entry_focus_out)
 
     # Buttons Frame
     button_frame = ttk.Frame(read_write_window)
-    button_frame.grid(row=2, column=0, columnspan=2, pady=10)
+    button_frame.grid(row=3, column=0, columnspan=2, pady=10)
 
     read_button = ttk.Button(button_frame, text="Read", command=read_variable).grid(row=0, column=0, padx=10)
     write_button = ttk.Button(button_frame, text="Write", command=write_variable).grid(row=0, column=1, padx=10)
 
     # Result Display Frame
     result_frame = ttk.LabelFrame(read_write_window, text="Result")
-    result_frame.grid(row=3, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
+    result_frame.grid(row=4, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
 
-    result_label = ttk.Label(result_frame, textvariable=result_var, relief="sunken")
+    result_label = ttk.Label(result_frame, textvariable=result_var)
     result_label.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
 
     # Make the grid layout expand properly
