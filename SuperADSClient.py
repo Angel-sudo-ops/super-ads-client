@@ -13,7 +13,7 @@ import json
 from queue import Queue, Empty
 import copy
 
-__version__ = '2.2.7'
+__version__ = '2.2.8'
 __icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
@@ -341,7 +341,9 @@ def on_treeview_select(event):
         return
     
     # If the same item is selected, do nothing
-    if (previous_selection == selected_item) and current_ads_connection and connection_active and not connection_in_progress:
+    if ((previous_selection == selected_item) 
+            and current_ads_connection and connection_active 
+            and not connection_in_progress):
         print("Target already connected")
         # messagebox.showinfo("Attention", "Target already connected")
         return
@@ -368,6 +370,9 @@ def on_treeview_select(event):
         disable_control_buttons()
         close_current_connection()
             
+    with connection_lock:
+        connection_in_progress = False
+
     update_status_in_queue("Disconnected", "red")
 
 # Enable control buttons after a successful connection
