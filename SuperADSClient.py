@@ -14,7 +14,7 @@ import json
 from queue import Queue, Empty
 import copy
 
-__version__ = '2.2.9'
+__version__ = '2.3.1'
 __icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
@@ -1101,6 +1101,7 @@ def open_read_write_window():
 
     result_var = tk.StringVar()
 
+    
     def parse_lgv_range(range_str):
         """Parse LGV range input into a list of LGV numbers."""
         lgv_numbers = set()
@@ -1115,29 +1116,45 @@ def open_read_write_window():
 
     def validate_and_link_lgv():
         try:
+            if lgv_range_entry.get().strip() == '':
+                messagebox.showerror("Error", "LGV range is empty!")
+                return
+            
             lgv_numbers = parse_lgv_range(lgv_range_entry.get())
             found_entries = []
 
+            remaining_children = list(treeview.get_children())
+
             # Iterate through Treeview to find matching LGVs
             for lgv in lgv_numbers:
-                for child in treeview.get_children():
+                for child in remaining_children:
                     name = treeview.item(child)["values"][0]  # e.g., "LGV01"
                     match = re.search(r"\d+", name)
+
                     if match and int(match.group()) == lgv:
                         amsnet_id = treeview.item(child)["values"][1]
                         tc_type = treeview.item(child)["values"][2]
                         found_entries.append((lgv, amsnet_id, tc_type))
 
-            if len(found_entries) == len(lgv_numbers):
+                        # Remove matched child from remaining children list 
+                        remaining_children.remove(child)
+                        break
+
+            if len(found_entries) == len(lgv_numbers) and found_entries != []:
                 # Display AMS Net IDs and types for the found LGVs
                 print("LGV data found!")
                 return found_entries
             else:
-                raise ValueError("Range not matching LGV list.")
+                overflow = len(lgv_numbers) - len(found_entries)
+                if overflow > 0:
+                    raise ValueError(f"Range not matching LGV list. \nContains {overflow} extra elements than in list")
+                else:
+                    raise ValueError(f"Some LGVs were not found, check range")
         except ValueError as e:
             # messagebox.showerror("Invalid Input", f"Error: {e}")
             print(f"Invalid input. Error: {e}")
-            lgv_range_entry.delete(0, tk.END)
+            messagebox.showerror("Error", f"Invalid input. Error: {e}")
+            # lgv_range_entry.delete(0, tk.END)
             return None
 
     def check_type(value):
@@ -1204,7 +1221,19 @@ def open_read_write_window():
         """Start the write operation for all selected LGVs."""
         clear_status()
 
-        variable_name = variable_menu.get()  # Directly get the variable name
+        variable_name = variable_menu.get().strip()  # Directly get the variable name
+
+        if variable_name == '':
+            messagebox.showerror("Error", "Variable name missing!")
+            return
+
+        # Get the validated LGV data
+        lgv_data = validate_and_link_lgv()
+        if lgv_data is None:
+            # messagebox.showerror("Error", "LGV range is empty")
+            return  # Exit if validation failed
+
+        
         radio_value = var_type.get()
         entry_value = value_entry.get().strip()
 
@@ -1215,11 +1244,6 @@ def open_read_write_window():
             # Try to convert to a number, otherwise keep it as a string
             value = convert_to_number(entry_value) or entry_value
         
-        # Get the validated LGV data
-        lgv_data = validate_and_link_lgv()
-        if lgv_data is None:
-            messagebox.showerror("Error", "LGV range is empty")
-            return  # Exit if validation failed
         
         # Start a thread for each LGV to perform the write operation
         for lgv, ams_net_id, tc_type in lgv_data:
@@ -1241,34 +1265,7 @@ def open_read_write_window():
 
     def on_radio_selection():
         """Disable value entry if True/False radio is selected."""
-        value_entry.config(state="disabled")
-
-    def on_value_entry(event):
-        """Disable radio buttons if a value is being entered."""
-        true_radio.config(state="disabled")
-        false_radio.config(state="disabled")
-
-    def reset_to_default(event):
-        """Reset radio buttons and entry field to their default states."""
-        widget = event.widget
-        if widget not in exceptions and not any(is_descendant(widget, exception) for exception in exceptions):
-            var_type.set(False)  # Use False as a safe default
-            true_radio.state(['!selected'])  # Deselect manually
-            false_radio.state(['!selected'])  # Deselect manually
-            value_entry.delete(0, tk.END)  # Clear the entry field
-            value_entry.config(state="normal")  # Re-enable entry field
-            true_radio.config(state="normal")  # Re-enable radio buttons
-            false_radio.config(state="normal")
-
-    def is_descendant(widget, parent):
-        while widget:
-            if widget == parent:
-                return True
-            widget = widget.master
-        return False
-        
-    # Bind click event to the entire read/write window to reset on outside click
-    read_write_window.bind("<Button-1>", reset_to_default)
+        value_entry.delete(0, tk.END)  # Clear the entry field
 
     def log_message(message):
         """Insert log messages into the status widget in a thread-safe way."""
@@ -1315,7 +1312,6 @@ def open_read_write_window():
 
     value_entry = ttk.Entry(value_frame)
     value_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
-    value_entry.bind("<FocusIn>", on_value_entry)
 
     # Buttons Frame
     button_frame = ttk.Frame(read_write_window)
@@ -1324,9 +1320,6 @@ def open_read_write_window():
     read_button = ttk.Button(button_frame, text="Read", command=read_variable).grid(row=0, column=0, padx=10)
     write_button = ttk.Button(button_frame, text="Write", command=write_variable).grid(row=0, column=1, padx=10)
 
-    # Result Display Frame
-    # result_frame = ttk.LabelFrame(read_write_window, text="Result")
-    # result_frame.grid(row=4, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
 
     status_widget = scrolledtext.ScrolledText(
         read_write_window, undo=True, wrap=tk.WORD, height=7, width=50
