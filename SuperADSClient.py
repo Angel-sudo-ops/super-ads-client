@@ -1,6 +1,7 @@
 import sqlite3
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from tkinter import ttk, font, messagebox, filedialog
+import tkinter.scrolledtext as scrolledtext
 import re
 import os
 import xml.etree.ElementTree as ET
@@ -1132,22 +1133,28 @@ def open_read_write_window():
                 print("LGV data found!")
                 return found_entries
             else:
-                raise ValueError("No matching LGVs found.")
+                raise ValueError("Range not matching LGV list.")
         except ValueError as e:
-            messagebox.showerror("Invalid Input", f"Error: {e}")
+            # messagebox.showerror("Invalid Input", f"Error: {e}")
+            print(f"Invalid input. Error: {e}")
             lgv_range_entry.delete(0, tk.END)
             return None
 
     def check_type(value):
-        try:
-            int(value)
-            return "Integer"
-        except ValueError:
-            try:
-                float(value)
-                return "Float"
-            except ValueError:
-                return "String"
+        """Determine the appropriate PLC data type based on the value."""
+        if isinstance(value, bool):
+            return pyads.PLCTYPE_BOOL
+        elif isinstance(value, int):
+            # Use INT or DINT depending on the size of the integer
+            return pyads.PLCTYPE_INT if -32768 <= value <= 32767 else pyads.PLCTYPE_DINT
+        elif isinstance(value, float):
+            # Use REAL or LREAL based on precision
+            return pyads.PLCTYPE_REAL if abs(value) < 3.4e38 else pyads.PLCTYPE_LREAL
+        elif isinstance(value, str):
+            # Use STRING type for string inputs
+            return pyads.PLCTYPE_STRING
+        else:
+            raise ValueError(f"Unsupported type: {type(value)}")
 
     def write_variable_for_lgv(lgv, ams_net_id, tc_type, variable_name, value):
         """Handle writing for each LGV in its own thread."""
@@ -1157,52 +1164,63 @@ def open_read_write_window():
             with pyads.Connection(ams_net_id, port) as ads_connection:
                 print(f"Connection established for LGV {lgv} with AMS Net ID: {ams_net_id}")
 
-                value_type = check_type(value)
-                if value_type == "String":
-                    type_var = pyads.PLCTYPE_BOOL
-                elif value_type == "Integer":
-                    type_var = pyads.PLCTYPE_INT
-                elif value_type == "Float":
-                    type_var = pyads.PLCTYPE_INT
+                type_var = check_type(value)
 
                 # Write the value to the PLC using the provided variable name
                 ads_connection.write_by_name(variable_name, value, type_var)
                 print(f"Successfully wrote {value} to {variable_name} for LGV {lgv}")
+                log_message(f"Successfully wrote {value} to {variable_name} for LGV{lgv:02d}")
+
+        except pyads.ADSError as ads_err:
+            # Handle ADS-specific errors with more detail
+            error_message = f"Error writing to LGV{lgv:02d}: {ads_err}"
+            print(error_message)
+            log_message(error_message)
+
+        except ValueError as val_err:
+            # Handle type-related errors
+            error_message = f"Value Error for LGV{lgv:02d}: {val_err}"
+            print(error_message)
+            log_message(error_message)
 
         except Exception as e:
-            messagebox.showerror("Write Error", f"Failed to write to LGV {lgv}: {str(e)}")
-            print(f"Error writing to LGV {lgv}: {str(e)}")
+            # Handle any other general exceptions
+            error_message = f"Unexpected error for LGV{lgv:02d}: {str(e)}"
+            print(error_message)
+            log_message(error_message)
+
     
     def convert_to_number(user_input):
+        """Convert input to int or float; return None if conversion fails."""
         try:
-            # Try to convert to an integer first
-            number = int(user_input)
-            print(f"Converted to integer: {number}")
-            return number
+            return int(user_input)
         except ValueError:
             try:
-                # If it fails, try to convert to a float
-                number = float(user_input)
-                print(f"Converted to float: {number}")
-                return number
+                return float(user_input)
             except ValueError:
-                # If both conversions fail, it's not a valid number
-                print(f"'{user_input}' is not a valid number.")
+                return None  # Not a number, possibly a string
 
     def write_variable():
         """Start the write operation for all selected LGVs."""
+        clear_status()
+
         variable_name = variable_menu.get()  # Directly get the variable name
         radio_value = var_type.get()
-        entry_value = convert_to_number(value_entry.get())
+        entry_value = value_entry.get().strip()
 
-        value = radio_value if radio_value != '' else entry_value
+        # Validate the entry value: Ignore if it's "True" or "False"
+        if entry_value.lower() in ["true", "false", ""]:
+            value = radio_value  # Use the radio button value if the entry is empty or boolean-like
+        else:
+            # Try to convert to a number, otherwise keep it as a string
+            value = convert_to_number(entry_value) or entry_value
         
-
         # Get the validated LGV data
         lgv_data = validate_and_link_lgv()
         if lgv_data is None:
+            messagebox.showerror("Error", "LGV range is empty")
             return  # Exit if validation failed
-
+        
         # Start a thread for each LGV to perform the write operation
         for lgv, ams_net_id, tc_type in lgv_data:
             threading.Thread(
@@ -1213,6 +1231,7 @@ def open_read_write_window():
 
 
     def read_variable():
+        clear_status()
         threading.Thread(target=_read_variable_thread).start()
 
     def _read_variable_thread():
@@ -1224,7 +1243,7 @@ def open_read_write_window():
         """Disable value entry if True/False radio is selected."""
         value_entry.config(state="disabled")
 
-    def on_value_entry():
+    def on_value_entry(event):
         """Disable radio buttons if a value is being entered."""
         true_radio.config(state="disabled")
         false_radio.config(state="disabled")
@@ -1233,8 +1252,10 @@ def open_read_write_window():
         """Reset radio buttons and entry field to their default states."""
         widget = event.widget
         if widget not in exceptions and not any(is_descendant(widget, exception) for exception in exceptions):
-            # var_type.set("")  # Deselect both radio buttons
-            # value_entry.delete(0, tk.END)  # Clear the entry field
+            var_type.set(False)  # Use False as a safe default
+            true_radio.state(['!selected'])  # Deselect manually
+            false_radio.state(['!selected'])  # Deselect manually
+            value_entry.delete(0, tk.END)  # Clear the entry field
             value_entry.config(state="normal")  # Re-enable entry field
             true_radio.config(state="normal")  # Re-enable radio buttons
             false_radio.config(state="normal")
@@ -1245,10 +1266,19 @@ def open_read_write_window():
                 return True
             widget = widget.master
         return False
+        
     # Bind click event to the entire read/write window to reset on outside click
     read_write_window.bind("<Button-1>", reset_to_default)
 
-    
+    def log_message(message):
+        """Insert log messages into the status widget in a thread-safe way."""
+        read_write_window.after(0, lambda: status_widget.insert(tk.END, message + "\n"))
+        read_write_window.after(0, status_widget.see, tk.END)  # Scroll to the bottom
+
+    def clear_status():
+        """Clear the content of the status widget."""
+        status_widget.delete(1.0, tk.END)  # Clear all content
+
     # Variables Frame
     variable_frame = ttk.LabelFrame(read_write_window, text="Variables")
     variable_frame.grid(row=0, column=0, columnspan=2, padx=10, pady=5, sticky="nsew")
@@ -1275,16 +1305,17 @@ def open_read_write_window():
     bool_value_frame = ttk.Frame(value_frame)
     bool_value_frame.grid(row=0, column=0, padx=5, pady=5)
 
-    var_type = tk.StringVar()
-    true_radio = ttk.Radiobutton(bool_value_frame, text="True", variable=var_type, value="True", command=on_radio_selection)
+    var_type = tk.BooleanVar()
+    true_radio = ttk.Radiobutton(bool_value_frame, text="True", variable=var_type, value=True, command=on_radio_selection)
     true_radio.grid(row=0, column=0, padx=5, pady=5)
 
-    false_radio = ttk.Radiobutton(bool_value_frame, text="False", variable=var_type, value="False", command=on_radio_selection)
+
+    false_radio = ttk.Radiobutton(bool_value_frame, text="False", variable=var_type, value=False, command=on_radio_selection)
     false_radio.grid(row=0, column=1, padx=5, pady=5)
 
     value_entry = ttk.Entry(value_frame)
     value_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
-    value_entry.bind("<FocusIn>", lambda event: on_value_entry())
+    value_entry.bind("<FocusIn>", on_value_entry)
 
     # Buttons Frame
     button_frame = ttk.Frame(read_write_window)
@@ -1294,20 +1325,27 @@ def open_read_write_window():
     write_button = ttk.Button(button_frame, text="Write", command=write_variable).grid(row=0, column=1, padx=10)
 
     # Result Display Frame
-    result_frame = ttk.LabelFrame(read_write_window, text="Result")
-    result_frame.grid(row=4, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
+    # result_frame = ttk.LabelFrame(read_write_window, text="Result")
+    # result_frame.grid(row=4, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
 
-    result_label = ttk.Label(result_frame, textvariable=result_var)
-    result_label.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
+    status_widget = scrolledtext.ScrolledText(
+        read_write_window, undo=True, wrap=tk.WORD, height=7, width=50
+    )
+    status_font = font.Font(family="Consolas", size=10)
+    status_widget.configure(font=status_font)
+    status_widget.grid(row=4, column=0, columnspan=2, padx=15, pady=15, sticky="ew")
+
+    # Disable manual editing of the status widget
+    status_widget.bind("<Key>", lambda e: "break")
 
     # Make the grid layout expand properly
     read_write_window.grid_columnconfigure(0, weight=1)
     read_write_window.grid_columnconfigure(1, weight=1)
     value_frame.grid_columnconfigure(0, weight=1)
     value_frame.grid_columnconfigure(1, weight=1)
-    result_frame.grid_columnconfigure(0, weight=1)
+    # result_frame.grid_columnconfigure(0, weight=1)
 
-    exceptions = [value_frame]
+    exceptions = [value_frame, read_button, write_button]
 
     # Handle window close event to reset the reference
     read_write_window.protocol("WM_DELETE_WINDOW", on_read_write_window_close)
