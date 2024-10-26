@@ -238,6 +238,9 @@ def background_connect(plc_data):
         # Check PLC status
         if connection_active:
 
+            # Start monitoring the connection after connecting
+            monitor_connection_status()
+
             connection_in_progress = False
 
             update_status_in_queue("Connected", "green")
@@ -249,8 +252,7 @@ def background_connect(plc_data):
             # update_buttons()
             update_buttons_from_plc_thread()
 
-            # Start monitoring the connection after connecting
-            monitor_connection_status()
+            
 
         else:
             raise Exception("PLC not in a valid state")
@@ -1157,6 +1159,38 @@ def open_read_write_window():
             # lgv_range_entry.delete(0, tk.END)
             return None
 
+
+    # Mapping of symbol type strings to pyads data types
+    SYMBOL_TYPE_MAP = {
+        'BOOL'   : pyads.PLCTYPE_BOOL,
+        'INT'    : pyads.PLCTYPE_INT,
+        'DINT'   : pyads.PLCTYPE_DINT,
+        'REAL'   : pyads.PLCTYPE_REAL,
+        'LREAL'  : pyads.PLCTYPE_LREAL,
+        'STRING' : pyads.PLCTYPE_STRING,
+        'BYTE'   : pyads.PLCTYPE_BYTE,
+        'WORD'   : pyads.PLCTYPE_WORD,
+        'DWORD'  : pyads.PLCTYPE_DWORD,
+        # 'LWORD'  : pyads.PLCTYPE_LWORD,
+        'SINT'   : pyads.PLCTYPE_SINT,
+        'USINT'  : pyads.PLCTYPE_USINT,
+        'UINT'   : pyads.PLCTYPE_UINT,
+        'UDINT'  : pyads.PLCTYPE_UDINT,
+        'LINT'   : pyads.PLCTYPE_LINT,
+        'ULINT'  : pyads.PLCTYPE_ULINT,
+        'TIME'   : pyads.PLCTYPE_TIME,
+        # 'LTIME'  : pyads.PLCTYPE_LTIME,
+        'DATE'   : pyads.PLCTYPE_DATE,
+        'TOD'    : pyads.PLCTYPE_TOD,  # Time of Day
+        'DT'     : pyads.PLCTYPE_DT,    # Date and Time
+        'WSTRING': pyads.PLCTYPE_WSTRING,
+    }
+
+    def get_pyads_type(symbol_type_str):
+        """Convert symbol type string to corresponding pyads type."""
+        return SYMBOL_TYPE_MAP.get(symbol_type_str, pyads.PLCTYPE_STRING)  # Default to STRING if unknown
+
+
     def check_type(value):
         """Determine the appropriate PLC data type based on the value."""
         if isinstance(value, bool):
@@ -1173,6 +1207,7 @@ def open_read_write_window():
         else:
             raise ValueError(f"Unsupported type: {type(value)}")
 
+
     def write_variable_for_lgv(lgv, ams_net_id, tc_type, variable_name, value):
         """Handle writing for each LGV in its own thread."""
         try:
@@ -1181,12 +1216,19 @@ def open_read_write_window():
             with pyads.Connection(ams_net_id, port) as ads_connection:
                 print(f"Connection established for LGV {lgv} with AMS Net ID: {ams_net_id}")
 
-                type_var = check_type(value)
+                # type_var = check_type(value)
+
+                # Get symbol info and determine the appropriate pyads type
+                symbol_info = ads_connection.get_symbol(variable_name)
+                symbol_type_str = symbol_info.symbol_type
+                expected_type = get_pyads_type(symbol_type_str)
 
                 # Write the value to the PLC using the provided variable name
-                ads_connection.write_by_name(variable_name, value, type_var)
+                ads_connection.write_by_name(variable_name, value, expected_type)
+                
                 print(f"Successfully wrote {value} to {variable_name} for LGV {lgv}")
-                log_message(f"Successfully wrote {value} to {variable_name} for LGV{lgv:02d}")
+                # log_message(f"Successfully wrote {value} to {variable_name} for LGV{lgv:02d}")
+                log_message(f"Variable value is now {value} for LGV{lgv:02d}")
 
         except pyads.ADSError as ads_err:
             # Handle ADS-specific errors with more detail
@@ -1217,6 +1259,7 @@ def open_read_write_window():
             except ValueError:
                 return None  # Not a number, possibly a string
 
+    
     def write_variable():
         """Start the write operation for all selected LGVs."""
         clear_status()
@@ -1254,14 +1297,65 @@ def open_read_write_window():
 
 
 
-    def read_variable():
-        clear_status()
-        threading.Thread(target=_read_variable_thread).start()
+    def read_variable_for_lgv(lgv, ams_net_id, tc_type, variable_name):
+        """Handle reading for each LGV in its own thread."""
+        try:
+            port = 851 if tc_type == "TC3" else 801
+            # Create a new connection for this LGV
+            with pyads.Connection(ams_net_id, port) as ads_connection:
+                print(f"Connection established for LGV {lgv} with AMS Net ID: {ams_net_id}")
 
-    def _read_variable_thread():
-        selected_variable = variable_menu.get()
-        result_var.set(f"Reading {selected_variable}...")
-        read_write_window.after(1000, lambda: result_var.set(f"Value of {selected_variable}: OK"))
+                # Get symbol info to validate type and existence
+                symbol_info = ads_connection.get_symbol(variable_name)
+                symbol_type_str = symbol_info.symbol_type
+                expected_type = get_pyads_type(symbol_type_str)
+
+                # Read the value from the PLC
+                value = ads_connection.read_by_name(variable_name, expected_type)
+                print(f"Successfully read {value} from {variable_name} for LGV {lgv}")
+                
+                # Log the read value
+                log_message(f"Variable value is {value} for LGV{lgv:02d}")
+
+        except pyads.ADSError as ads_err:
+            # Handle ADS-specific errors with more detail
+            error_message = f"Error reading from LGV{lgv:02d}: {ads_err}"
+            print(error_message)
+            log_message(error_message)
+
+        except ValueError as val_err:
+            # Handle type-related errors
+            error_message = f"Value Error for LGV{lgv:02d}: {val_err}"
+            print(error_message)
+            log_message(error_message)
+
+        except Exception as e:
+            # Handle any other general exceptions
+            error_message = f"Unexpected error for LGV{lgv:02d}: {str(e)}"
+            print(error_message)
+            log_message(error_message)
+
+    def read_variable():
+        """Start the read operation for all selected LGVs."""
+        clear_status()
+
+        variable_name = variable_menu.get().strip()  # Get the variable name directly
+
+        if variable_name == '':
+            messagebox.showerror("Error", "Variable name missing!")
+            return
+
+        # Get the validated LGV data
+        lgv_data = validate_and_link_lgv()
+        if lgv_data is None:
+            return  # Exit if validation failed
+
+        # Start a thread for each LGV to perform the read operation
+        for lgv, ams_net_id, tc_type in lgv_data:
+            threading.Thread(
+                target=read_variable_for_lgv, 
+                args=(lgv, ams_net_id, tc_type, variable_name)
+            ).start()
 
     def on_radio_selection():
         """Disable value entry if True/False radio is selected."""
