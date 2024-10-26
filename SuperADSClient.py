@@ -1037,26 +1037,68 @@ def open_read_write_window():
 
     read_write_window.resizable(False,False)
 
-    # Predefined and custom variables
-    default_variables = ['PressureGVLs.weightPar.touchingWeight',
-                          'CoreGVL.AutoReboot.startRequest', 
-                          'CoreGVL.AutoReboot.autorebootDone',
-                          'Shutdown.DEBUG_forceShutdown',
-                          'LibraryInterfaces.FileManagement.loadRequest[3]']
-    custom_variables = []
-    result_var = tk.StringVar()
+    RW_VARIABLES_FILE = "rw_variables.json"
 
+    # Predefined and custom variables
+    default_rw_variables = [
+        'PressureGVLs.weightPar.touchingWeight',
+        'CoreGVL.AutoReboot.startRequest', 
+        'CoreGVL.AutoReboot.autorebootDone',
+        'Shutdown.DEBUG_forceShutdown',
+        'LibraryInterfaces.FileManagement.loadRequest[3]']
     
+    
+
+    def load_custom_variables():
+        if os.path.exists(RW_VARIABLES_FILE):
+            try:
+                with open(RW_VARIABLES_FILE, "r") as file:
+                    data = json.load(file)
+                    if isinstance(data, list):  # Ensure the data is a list
+                        return data
+                    else:
+                        print("Invalid data format in JSON, resetting to empty list.")
+                        return []
+            except json.JSONDecodeError:
+                print("JSON file is empty or invalid, resetting to empty list.")
+                return []  # Return empty list if the file is invalid
+        else:
+            # Default variables if JSON does not exist
+            return []
+                
+    # Save variables to JSON
+    def save_variables(variables):
+        with open(RW_VARIABLES_FILE, "w") as file:
+            json.dump(variables, file, indent=4)
+            file.write('\n')
+
+    def update_variable_menu(event=None):
+        custom_rw_variables = load_custom_variables()
+
+        combined_rw_variables = sorted (
+            default_rw_variables + custom_rw_variables, key=str.lower
+        )
+        variable_menu["values"] = combined_rw_variables
+
     # Functions
     def add_variable():
-        variable_name = variable_menu.get()
-        if variable_name and variable_name not in custom_variables:
-            custom_variables.append(variable_name)
-            update_variable_menu()
+        custom_rw_variables = load_custom_variables()
 
-    def update_variable_menu():
-        all_variables = default_variables + custom_variables
-        variable_menu["values"] = all_variables
+        new_variable = variable_menu.get().strip()
+        if new_variable:
+            if any(new_variable.lower() == var.lower() for var in default_rw_variables + custom_rw_variables):
+                # messagebox.showwarning("Duplicate Entry", "This variable already exists.")
+                print("Variable already exists")
+            else:
+                custom_rw_variables.append(new_variable)
+                save_variables(custom_rw_variables)
+                update_variable_menu()
+                print(f"Variable {new_variable} successfully added!")
+        else:
+            print("Please enter a valid variable name.")
+        
+
+    result_var = tk.StringVar()
 
     def parse_lgv_range(range_str):
         """Parse LGV range input into a list of LGV numbers."""
@@ -1214,7 +1256,7 @@ def open_read_write_window():
     # ttk.Label(variable_frame, text="Select or Add Variable:").grid(row=0, column=0, padx=5, pady=5)
     variable_menu = ttk.Combobox(variable_frame, width=55)
     variable_menu.grid(row=0, column=0, padx=5, pady=5)
-    update_variable_menu()
+    variable_menu.bind('<ButtonPress>', update_variable_menu)
 
     ttk.Button(variable_frame, text="Add Variable", command=add_variable).grid(row=0, column=1, padx=5, pady=5)
 
