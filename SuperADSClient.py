@@ -15,7 +15,7 @@ from queue import Queue, Empty
 import copy
 from ctypes import sizeof
 
-__version__ = '2.3.3'
+__version__ = '2.3.4'
 __icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
@@ -1191,8 +1191,16 @@ def open_read_write_window():
     }
 
     def get_pyads_type(symbol_type_str):
-        """Convert symbol type string to corresponding pyads type."""
-        return SYMBOL_TYPE_MAP.get(symbol_type_str, pyads.PLCTYPE_STRING)  # Default to STRING if unknown
+        """Map the symbol type string to a pyads type."""
+        # Check if the type is a known standard type
+        standard_type = SYMBOL_TYPE_MAP.get(symbol_type_str.strip())
+        if standard_type:
+            return standard_type
+
+        # If it's not a standard type, assume it could be an enum or custom type
+        # Default to BYTE for enums or custom types unless otherwise needed
+        print(f"Unknown type detected: {symbol_type_str}. Defaulting to BYTE.")
+        return pyads.PLCTYPE_BYTE  # Adjust if other types like INT are more appropriate
 
 
     def check_type(value):
@@ -1273,7 +1281,7 @@ def open_read_write_window():
                 #     log_message(f"Error: {variable_name} not confirmed for LGV{lgv:02d}")
                 # else:
                 #     print(f"Successfully wrote {value} to {variable_name} for LGV {lgv}")
-                log_message(f"Variable value is now {value} in LGV{lgv:02d}")
+                log_message(f"Variable value in LGV{lgv:02d} is now {value}")
 
                 # Remove the notification after use
                 # ads_connection.del_device_notification(notification_handle, handle_id)
@@ -1359,13 +1367,13 @@ def open_read_write_window():
                 symbol_info = ads_connection.get_symbol(variable_name)
                 symbol_type_str = symbol_info.symbol_type
                 expected_type = get_pyads_type(symbol_type_str)
-
+                
                 # Read the value from the PLC
                 value = ads_connection.read_by_name(variable_name, expected_type)
                 print(f"Successfully read {value} from {variable_name} for LGV {lgv}")
                 
                 # Log the read value
-                log_message(f"Variable value is {value} in LGV{lgv:02d}")
+                log_message(f"Variable value in LGV{lgv:02d} is {value}")
 
         except pyads.ADSError as ads_err:
             # Handle ADS-specific errors with more detail
@@ -1421,6 +1429,14 @@ def open_read_write_window():
     def clear_status():
         """Clear the content of the status widget."""
         status_widget.delete(1.0, tk.END)  # Clear all content
+
+
+    # def on_variable_select(event):
+    #     variable_name = variable_menu.get().strip()  # Directly get the variable name
+    #     symbol_info = ads_connection.get_symbol(variable_name)
+    #     symbol_type_str = symbol_info.symbol_type
+    #     expected_type = get_pyads_type(symbol_type_str)
+
 
     # Variables Frame
     variable_frame = ttk.LabelFrame(read_write_window, text="Variables")
