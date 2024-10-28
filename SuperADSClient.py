@@ -13,8 +13,9 @@ import time
 import json
 from queue import Queue, Empty
 import copy
+from ctypes import sizeof
 
-__version__ = '2.3.1'
+__version__ = '2.3.3'
 __icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
@@ -1119,7 +1120,9 @@ def open_read_write_window():
     def validate_and_link_lgv():
         try:
             if lgv_range_entry.get().strip() == '':
-                messagebox.showerror("Error", "LGV range is empty!")
+                # messagebox.showerror("Error", "LGV range is empty!")
+                print("LGV range is empty!")
+                log_message("LGV range is empty!")
                 return
             
             lgv_numbers = parse_lgv_range(lgv_range_entry.get())
@@ -1155,7 +1158,8 @@ def open_read_write_window():
         except ValueError as e:
             # messagebox.showerror("Invalid Input", f"Error: {e}")
             print(f"Invalid input. Error: {e}")
-            messagebox.showerror("Error", f"Invalid input. Error: {e}")
+            # messagebox.showerror("Error", f"Invalid input. Error: {e}")
+            log_message(f"Invalid input. Error: {e}")
             # lgv_range_entry.delete(0, tk.END)
             return None
 
@@ -1207,11 +1211,38 @@ def open_read_write_window():
         else:
             raise ValueError(f"Unsupported type: {type(value)}")
 
+    # Global dictionary to store handles with context
+    handles = {}
+    next_handle_id = 0  # Unique integer handle ID generator
+
+    def get_new_handle_id():
+        """Generate a new unique handle ID."""
+        nonlocal next_handle_id
+        handle_id = next_handle_id
+        next_handle_id += 1
+        return handle_id
+
+    def on_notification(adr, notification, user_handle):
+        """Callback function to detect when the variable changes."""
+        value = notification.contents.value
+        print(f"Notification: Variable changed to {value}")
+
+        # Access the stop event and expected value from the handles dictionary
+        if handles[user_handle]["expected_value"] == value:
+            handles[user_handle]["stop_event"].set()  # Signal to stop notification
 
     def write_variable_for_lgv(lgv, ams_net_id, tc_type, variable_name, value):
-        """Handle writing for each LGV in its own thread."""
+        """Write a variable and confirm it via ADS notification."""
+        # stop_event = threading.Event()  # Event to track when the notification should stop
+        handle_id = get_new_handle_id()
+        print(f"Generated handle: {handle_id}, Type: {type(handle_id)}")
+
+        # Store the context in the global handles dictionary
+        # handles[handle_id] = {"expected_value": value, "stop_event": stop_event}
+
+        port = 851 if tc_type == "TC3" else 801
+
         try:
-            port = 851 if tc_type == "TC3" else 801
             # Create a new connection for this LGV
             with pyads.Connection(ams_net_id, port) as ads_connection:
                 print(f"Connection established for LGV {lgv} with AMS Net ID: {ams_net_id}")
@@ -1223,12 +1254,29 @@ def open_read_write_window():
                 symbol_type_str = symbol_info.symbol_type
                 expected_type = get_pyads_type(symbol_type_str)
 
+                print(f"Handle ID: {handle_id}, Type: {type(handle_id)}")  # Verify the type
+
+                # Add a notification with a user handle containing the expected value and stop event
+
+                # attr = pyads.NotificationAttrib(sizeof(expected_type))  # Adjust length as needed
+                # notification_handle = ads_connection.add_device_notification(
+                #     variable_name, attr, on_notification, handle_id
+                # )
+
                 # Write the value to the PLC using the provided variable name
                 ads_connection.write_by_name(variable_name, value, expected_type)
-                
-                print(f"Successfully wrote {value} to {variable_name} for LGV {lgv}")
-                # log_message(f"Successfully wrote {value} to {variable_name} for LGV{lgv:02d}")
-                log_message(f"Variable value is now {value} for LGV{lgv:02d}")
+                print(f"Attempting to write {value} to {variable_name} for LGV {lgv}")
+
+                # # Wait for the notification to confirm the change or timeout after 5 seconds
+                # if not stop_event.wait(timeout=5):
+                #     print(f"Write confirmation timed out for {variable_name} on LGV {lgv}")
+                #     log_message(f"Error: {variable_name} not confirmed for LGV{lgv:02d}")
+                # else:
+                #     print(f"Successfully wrote {value} to {variable_name} for LGV {lgv}")
+                log_message(f"Variable value is now {value} in LGV{lgv:02d}")
+
+                # Remove the notification after use
+                # ads_connection.del_device_notification(notification_handle, handle_id)
 
         except pyads.ADSError as ads_err:
             # Handle ADS-specific errors with more detail
@@ -1267,7 +1315,9 @@ def open_read_write_window():
         variable_name = variable_menu.get().strip()  # Directly get the variable name
 
         if variable_name == '':
-            messagebox.showerror("Error", "Variable name missing!")
+            # messagebox.showerror("Error", "Variable name missing!")
+            print("Variable name missing!")
+            log_message("Variable name missing!")
             return
 
         # Get the validated LGV data
@@ -1315,7 +1365,7 @@ def open_read_write_window():
                 print(f"Successfully read {value} from {variable_name} for LGV {lgv}")
                 
                 # Log the read value
-                log_message(f"Variable value is {value} for LGV{lgv:02d}")
+                log_message(f"Variable value is {value} in LGV{lgv:02d}")
 
         except pyads.ADSError as ads_err:
             # Handle ADS-specific errors with more detail
@@ -1342,7 +1392,9 @@ def open_read_write_window():
         variable_name = variable_menu.get().strip()  # Get the variable name directly
 
         if variable_name == '':
-            messagebox.showerror("Error", "Variable name missing!")
+            # messagebox.showerror("Error", "Variable name missing!")
+            print("Variable name missing!")
+            log_message("Variable name missing!")
             return
 
         # Get the validated LGV data
@@ -1372,7 +1424,7 @@ def open_read_write_window():
 
     # Variables Frame
     variable_frame = ttk.LabelFrame(read_write_window, text="Variables")
-    variable_frame.grid(row=0, column=0, columnspan=2, padx=10, pady=5, sticky="nsew")
+    variable_frame.grid(row=0, column=0, padx=10, pady=5, sticky="nsew")
 
     # ttk.Label(variable_frame, text="Select or Add Variable:").grid(row=0, column=0, padx=5, pady=5)
     variable_menu = ttk.Combobox(variable_frame, width=55)
@@ -1381,17 +1433,9 @@ def open_read_write_window():
 
     ttk.Button(variable_frame, text="Add Variable", command=add_variable).grid(row=0, column=1, padx=5, pady=5)
 
-    # LGV Range Frame
-    lgv_frame = ttk.LabelFrame(read_write_window)
-    lgv_frame.grid(row=1, column=0, padx=10, pady=5, sticky="ew")
-
-    ttk.Label(lgv_frame, text="Enter Range:").grid(row=0, column=0, padx=5, pady=5)
-    lgv_range_entry = ttk.Entry(lgv_frame)
-    lgv_range_entry.grid(row=0, column=1, padx=5, pady=5)
-
     # Value Input Frame
-    value_frame = ttk.LabelFrame(read_write_window, text="Set Variable Value")
-    value_frame.grid(row=2, column=0, padx=10, pady=5, sticky="nsew")
+    value_frame = ttk.LabelFrame(read_write_window, text="Set Value")
+    value_frame.grid(row=1, column=0, padx=10, pady=5, sticky="nsew")
 
     bool_value_frame = ttk.Frame(value_frame)
     bool_value_frame.grid(row=0, column=0, padx=5, pady=5)
@@ -1400,23 +1444,37 @@ def open_read_write_window():
     true_radio = ttk.Radiobutton(bool_value_frame, text="True", variable=var_type, value=True, command=on_radio_selection)
     true_radio.grid(row=0, column=0, padx=5, pady=5)
 
-
     false_radio = ttk.Radiobutton(bool_value_frame, text="False", variable=var_type, value=False, command=on_radio_selection)
     false_radio.grid(row=0, column=1, padx=5, pady=5)
 
-    value_entry = ttk.Entry(value_frame)
+    entry_value_frame = ttk.Frame(value_frame)
+    entry_value_frame.grid(row=0, column=1, padx=5, pady=5)
+    ttk.Label(entry_value_frame, text="Other:").grid(row=0, column=0, padx=5, pady=5)
+    value_entry = ttk.Entry(entry_value_frame)
     value_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
 
-    # Buttons Frame
-    button_frame = ttk.Frame(read_write_window)
-    button_frame.grid(row=3, column=0, columnspan=2, pady=10)
+    # LGV Range Frame
+    lgv_frame = ttk.Frame(read_write_window)
+    lgv_frame.grid(row=2, column=0, padx=10, pady=5, sticky="ew")
 
-    read_button = ttk.Button(button_frame, text="Read", command=read_variable).grid(row=0, column=0, padx=10)
-    write_button = ttk.Button(button_frame, text="Write", command=write_variable).grid(row=0, column=1, padx=10)
+    input_frame = ttk.Frame(lgv_frame)
+    input_frame.grid(row=0, column=0, padx=5, pady=5)
+    ttk.Label(input_frame, text="LGV:").grid(row=0, column=0, padx=5, pady=5)
+    lgv_range_entry = ttk.Entry(input_frame)
+    lgv_range_entry.grid(row=0, column=1, padx=5, pady=5)
+
+    # Buttons Frame
+    button_frame = ttk.Frame(lgv_frame)
+    button_frame.grid(row=0, column=2, columnspan=2, pady=10, padx=30, sticky='e')
+
+    read_button = ttk.Button(button_frame, text="Read", command=read_variable)
+    read_button.grid(row=0, column=0, padx=10, ipadx=2, ipady=2)
+    write_button = ttk.Button(button_frame, text="Write", command=write_variable)
+    write_button.grid(row=0, column=1, padx=10, ipadx=2, ipady=2)
 
 
     status_widget = scrolledtext.ScrolledText(
-        read_write_window, undo=True, wrap=tk.WORD, height=7, width=50
+        read_write_window, undo=True, wrap=tk.WORD, height=10, width=50
     )
     status_font = font.Font(family="Consolas", size=10)
     status_widget.configure(font=status_font)
@@ -1479,6 +1537,11 @@ if getattr(sys, 'frozen', False):
 else:
     icon_path = os.path.abspath(__icon__)
 # root.iconbitmap(icon_path)
+
+window_width = 490
+window_lenght = 420
+root.geometry(f"{window_width}x{window_lenght}")
+root.minsize(window_width, window_lenght)
 
 # Apply the icon after the window is initialized
 root.after(100, set_icon)
