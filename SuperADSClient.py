@@ -15,7 +15,7 @@ from queue import Queue, Empty
 import copy
 from ctypes import sizeof
 
-__version__ = '2.3.4'
+__version__ = '2.3.6'
 __icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
@@ -121,6 +121,9 @@ def populate_table_from_db3():
 
     # Save data to custom xml to avoid reloading .db3 everytime app is open
     save_table_data_to_xml(treeview)
+    
+    # Enable menu for Read/Write if table is updated
+    update_menu()
 
 
 # Save data to XML
@@ -474,6 +477,11 @@ def update_menu():
     else:
         options_menu.entryconfig("Reset to Defaults ", state="disabled")  # Disable if file doesn't exist
 
+    if os.path.exists("lgv_data.xml"):
+        more_menu.entryconfig("Read/Write    ", state="normal")  # Enable if file exists
+    else:
+        more_menu.entryconfig("Read/Write    ", state="disabled")  # Disable if file doesn't exist
+
 
 # Load variables from JSON or fall back to defaults
 def load_variables():
@@ -663,7 +671,7 @@ def end_cooldown():
     cooldown_active = False  # Cooldown ended, button can be pressed again
 
 
-def bind_button_actions(button, action, press_value=True, release_value=False):
+def bind_button_actions(button, action, shortcuts=None, press_value=True, release_value=False):
     global press_successful
 
     def on_button_press(event):
@@ -681,6 +689,13 @@ def bind_button_actions(button, action, press_value=True, release_value=False):
 
     button.bind("<ButtonPress>", lambda event: on_button_press(event))
     button.bind("<ButtonRelease>", lambda event: on_button_release(event))
+
+
+    # Bind keyboard shortcuts (Control + Key press and release)
+    if shortcuts:
+        for press_shortcut, release_shortcut in shortcuts:
+            button.winfo_toplevel().bind(press_shortcut, on_button_press)
+            button.winfo_toplevel().bind(release_shortcut, on_button_release)
 
 # def on_button_action_wrapper(action, press_value, release_value, button):
 #     global press_successful
@@ -1688,28 +1703,37 @@ reset_button = ttk.Button(button_frame,
                         #   command=lambda: bind_button_actions(reset_button, 'reset'))
                         #   command=lambda: on_button_action_wrapper('reset', True, False, reset_button))
 reset_button.pack(pady=5, fill='both', expand=True, ipady=3)
-bind_button_actions(reset_button, 'reset')
+bind_button_actions(reset_button, 'reset', 
+                    shortcuts=[('<Control-r>', '<KeyRelease-r>'),
+                               ('<Control-R>', '<KeyRelease-R>')])
 
 run_button = ttk.Button(button_frame, 
                         text="Run",
                         style='LGV.TButton')
                         # command=lambda: on_button_action_wrapper('run', True, False, run_button))
 run_button.pack(pady=5, fill='both', expand=True, ipady=3)
-bind_button_actions(run_button, 'run')
+bind_button_actions(run_button, 'run', 
+                    shortcuts=[('<Control-g>', '<KeyRelease-g>'),
+                               ('<Control-G>', '<KeyRelease-G>')])
 
 stop_button = ttk.Button(button_frame, 
                          text="Stop", 
                          style='LGV.Pressed.TButton')
                         #  command=lambda: on_button_action_wrapper('stop', False, True, stop_button))
 stop_button.pack(pady=5, fill='both', expand=True, ipady=3)
-bind_button_actions(stop_button, 'stop', press_value=False, release_value=True)
+bind_button_actions(stop_button, 'stop', 
+                    shortcuts=[('<Control-s>', '<KeyRelease-s>'),
+                               ('<Control-S>', '<KeyRelease-S>')], 
+                    press_value=False, release_value=True)
 
 man_auto_button = ttk.Button(button_frame, 
                              text="Man/Auto",
                              style='LGV.TButton')
                             #  command=lambda: on_button_action_wrapper('man_auto', True, False, man_auto_button))
 man_auto_button.pack(pady=5, fill='both', expand=True, ipady=3)
-bind_button_actions(man_auto_button, 'man_auto')
+bind_button_actions(man_auto_button, 'man_auto', 
+                    shortcuts=[('<Control-m>', '<KeyRelease-m>'),
+                               ('<Control-M>', '<KeyRelease-M>')])
 
 dis_horn_button = ttk.Button(button_frame, 
                              text="Disable Horn", 
@@ -1753,3 +1777,6 @@ root.mainloop()
 # Add colors to the buttons, at least for the horn, and reset that variable whenever there's a new connection
 
 # Connected/Disconnedted label doesn't change from conencted to disconnected when another selection is made, maybe set this to default when connection is closed
+
+# Ponerle keyboard shortcut a los botones
+# Ctrl + R, G, S, M, D
