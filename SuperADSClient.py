@@ -121,7 +121,7 @@ def populate_table_from_db3():
 
     # Save data to custom xml to avoid reloading .db3 everytime app is open
     save_table_data_to_xml(treeview)
-    
+
     # Enable menu for Read/Write if table is updated
     update_menu()
 
@@ -697,6 +697,38 @@ def bind_button_actions(button, action, shortcuts=None, press_value=True, releas
             button.winfo_toplevel().bind(press_shortcut, on_button_press)
             button.winfo_toplevel().bind(release_shortcut, on_button_release)
 
+def bind_connect_button_action(button, connect_function, shortcuts=None):
+    """Bind connect behavior to both button click and keyboard shortcuts."""
+    
+    def on_connect(event=None):
+        """Trigger the connect function."""
+        connect_function()
+
+    # Bind the button click directly to the connect function
+    button.bind("<ButtonPress>", on_connect)
+
+    # Bind keyboard shortcuts if provided
+    if shortcuts:
+        for shortcut in shortcuts:
+            button.winfo_toplevel().bind(shortcut, lambda event: on_connect())
+
+
+def bind_toggle_button_action(button, function=None, shortcuts=None):
+    """Bind toggle behavior to both button click and keyboard shortcuts."""
+
+    def on_toggle(event=None):
+        """Trigger the toggle function (mouse or shortcut)."""
+        if function:
+            function(button)  # Call the toggle function with the button reference
+
+    # Bind the button click to toggle
+    button.bind("<ButtonPress>", on_toggle)
+
+    # Bind keyboard shortcuts if provided
+    if shortcuts:
+        for shortcut in shortcuts:
+            button.winfo_toplevel().bind(shortcut, lambda event: on_toggle())
+
 # def on_button_action_wrapper(action, press_value, release_value, button):
 #     global press_successful
 #     on_button_action(action, press_value, button)
@@ -731,6 +763,26 @@ def on_button_release(action, release_value, button):
             # release_bound = False
 
 
+def bind_treeview_focus_action(treeview, focus_shortcuts=None):
+    """Bind focus behavior to Treeview for keyboard navigation."""
+    
+    def focus_and_select_first(event=None):
+        """Set focus on the Treeview and select the first item."""
+        treeview.focus_set()  # Set focus to the Treeview
+
+        # Select the first item in the Treeview
+        first_item = treeview.get_children()[0] if treeview.get_children() else None
+        if first_item:
+            treeview.selection_set(first_item)  # Select the first item
+            treeview.focus(first_item)  # Set the focus on the first item
+            print("Treeview focused, first item selected")
+        else:
+            print("Treeview is empty, nothing to select")
+
+    # Bind keyboard shortcuts if provided
+    if focus_shortcuts:
+        for shortcut in focus_shortcuts:
+            treeview.winfo_toplevel().bind(shortcut, focus_and_select_first)
 
 ####################################################################################################################################################################
 ##################################################################### Read variables ###############################################################################
@@ -1641,8 +1693,11 @@ frame_connect = ttk.Frame(root, width=100)
 frame_connect.grid(row=0, column=0, padx=20, pady=5)
 
 # Add a button to connect to the PLC
-connect_button = ttk.Button(frame_connect, text="Connect", command=lambda: connect_to_plc(), style='Connect.TButton')
+connect_button = ttk.Button(frame_connect, text="Connect", style='Connect.TButton')
 connect_button.grid(row=0, column=1, padx=10, ipady=4, sticky='w')
+bind_connect_button_action(connect_button, connect_function=connect_to_plc,
+                            shortcuts=['<Control-c>', '<Control-C>'])
+
 
 # Create a label as an indicator
 core_status_label = ttk.Label(frame_connect, text="No Core Lib", foreground="#4682B4") # #3CB371, #6495ED, 4682B4
@@ -1681,6 +1736,8 @@ setup_treeview()
 treeview.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
 treeview.bind("<<TreeviewSelect>>", on_treeview_select)
+
+bind_treeview_focus_action(treeview, focus_shortcuts=['<Control-t>', '<Control-T>'])
 
 # Create a vertical scrollbar for the table
 scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=treeview.yview)
@@ -1737,13 +1794,15 @@ bind_button_actions(man_auto_button, 'man_auto',
 
 dis_horn_button = ttk.Button(button_frame, 
                              text="Disable Horn", 
-                             style='LGV.TButton',
-                             command=lambda: on_dis_horn_button_click(dis_horn_button))
+                             style='LGV.TButton')
 dis_horn_button.pack(pady=5, fill='both', expand=True, ipady=3)
+
+bind_toggle_button_action(dis_horn_button, function=on_dis_horn_button_click, 
+                          shortcuts=[('<Control-d>', '<Control-D>')])
 
 
 disable_control_buttons()
-# enable_control_buttons()
+enable_control_buttons()
 
 load_table_data_from_xml(treeview)
 
