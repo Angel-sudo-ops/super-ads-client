@@ -1179,8 +1179,7 @@ def open_read_write_window():
 
         variable_menu['values'] = filtered_variables
         
-        if filtered_variables:
-            # variable_menu.tk.call('ttk::combobox::drop', variable_menu)
+        if filtered_variables and not variable_menu['state'] == 'readonly':
             variable_menu.event_generate('<Down>')
 
     # Functions
@@ -1546,7 +1545,7 @@ def open_read_write_window():
     variable_menu.grid(row=0, column=0, padx=5, pady=5)
     variable_menu.bind('<ButtonPress>', update_variable_menu)
     # Bind the filter function to update on key release
-    variable_menu.bind('<KeyRelease>', filter_combobox)
+    variable_menu.bind('<Tab>', filter_combobox)
 
     # variable_menu.configure(postcommand=lambda:filter_combobox(None))
 
