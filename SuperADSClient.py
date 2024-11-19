@@ -1171,13 +1171,16 @@ def open_read_write_window():
         custom_rw_variables = load_custom_variables()
         combined_rw_variables = sorted (default_rw_variables + custom_rw_variables, key=str.lower)
 
+
         if typed_text == '':
-            variable_menu['values'] = combined_rw_variables
+            filtered_variables = combined_rw_variables
         else:
             filtered_variables = [var for var in combined_rw_variables if typed_text.lower() in var.lower()]
-            variable_menu['values'] = filtered_variables
+
+        variable_menu['values'] = filtered_variables
         
         if filtered_variables:
+            # variable_menu.tk.call('ttk::combobox::drop', variable_menu)
             variable_menu.event_generate('<Down>')
 
     # Functions
@@ -1544,6 +1547,8 @@ def open_read_write_window():
     variable_menu.bind('<ButtonPress>', update_variable_menu)
     # Bind the filter function to update on key release
     variable_menu.bind('<KeyRelease>', filter_combobox)
+
+    # variable_menu.configure(postcommand=lambda:filter_combobox(None))
 
     ttk.Button(variable_frame, text="Add Variable", command=add_variable).grid(row=0, column=1, padx=5, pady=5)
 
