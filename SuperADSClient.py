@@ -1165,12 +1165,26 @@ def open_read_write_window():
             default_rw_variables + custom_rw_variables, key=str.lower
         )
         variable_menu["values"] = combined_rw_variables
+    
+    def filter_combobox(event):
+        typed_text = variable_menu.get()
+        custom_rw_variables = load_custom_variables()
+        combined_rw_variables = sorted (default_rw_variables + custom_rw_variables, key=str.lower)
+
+        if typed_text == '':
+            variable_menu['values'] = combined_rw_variables
+        else:
+            filtered_variables = [var for var in combined_rw_variables if typed_text.lower() in var.lower()]
+            variable_menu['values'] = filtered_variables
+        
+        if filtered_variables:
+            variable_menu.event_generate('<Down>')
 
     # Functions
     def add_variable():
         custom_rw_variables = load_custom_variables()
-
         new_variable = variable_menu.get().strip()
+
         if new_variable:
             if any(new_variable.lower() == var.lower() for var in default_rw_variables + custom_rw_variables):
                 # messagebox.showwarning("Duplicate Entry", "This variable already exists.")
@@ -1528,6 +1542,8 @@ def open_read_write_window():
     variable_menu = ttk.Combobox(variable_frame, width=55)
     variable_menu.grid(row=0, column=0, padx=5, pady=5)
     variable_menu.bind('<ButtonPress>', update_variable_menu)
+    # Bind the filter function to update on key release
+    variable_menu.bind('<KeyRelease>', filter_combobox)
 
     ttk.Button(variable_frame, text="Add Variable", command=add_variable).grid(row=0, column=1, padx=5, pady=5)
 
