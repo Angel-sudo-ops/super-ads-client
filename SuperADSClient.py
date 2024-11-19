@@ -597,6 +597,10 @@ def write_variable(action, tc_type, is_core, value, button):
 
 # Variable to track toggle state for disable_horn
 
+def on_test_button_click(button):
+    """Function to simulate toggle behavior for testing the shortcut."""
+    print("Test button shortcut triggered")
+
 def on_dis_horn_button_click(button):
     global dis_horn_state
 
@@ -717,6 +721,7 @@ def bind_toggle_button_action(button, function=None, shortcuts=None):
     """Bind toggle behavior to both button click and keyboard shortcuts."""
 
     def on_toggle(event=None):
+        print("Shortcut triggered in on_toggle")  # Debugging statement
         """Trigger the toggle function (mouse or shortcut)."""
         if function:
             function(button)  # Call the toggle function with the button reference
@@ -727,7 +732,7 @@ def bind_toggle_button_action(button, function=None, shortcuts=None):
     # Bind keyboard shortcuts if provided
     if shortcuts:
         for shortcut in shortcuts:
-            button.winfo_toplevel().bind(shortcut, lambda event: on_toggle())
+            button.winfo_toplevel().bind(shortcut, lambda event: function(button))
 
 # def on_button_action_wrapper(action, press_value, release_value, button):
 #     global press_successful
@@ -736,6 +741,7 @@ def bind_toggle_button_action(button, function=None, shortcuts=None):
 #     if press_successful:
 #         # Attempt write release value only if press value was successful
 #         on_button_action(action, release_value, button, is_release=True)
+
 
 
 # release_bound = False # Track is released event was bound
@@ -770,12 +776,21 @@ def bind_treeview_focus_action(treeview, focus_shortcuts=None):
         """Set focus on the Treeview and select the first item."""
         treeview.focus_set()  # Set focus to the Treeview
 
-        # Select the first item in the Treeview
-        first_item = treeview.get_children()[0] if treeview.get_children() else None
-        if first_item:
-            treeview.selection_set(first_item)  # Select the first item
-            treeview.focus(first_item)  # Set the focus on the first item
-            print("Treeview focused, first item selected")
+        # Get the Treeview's scroll position
+        yview = treeview.yview()
+        if not yview:
+            print("Treeview is empty or has no scroll position")
+            return
+        
+        # Calculate the first visible item based on yview
+        all_items = treeview.get_children()
+        visible_item_index = int(yview[0] * len(all_items))  # Calculate the starting index
+
+        if all_items:
+            first_visible_item = all_items[visible_item_index]
+            treeview.selection_set(first_visible_item)  # Select the first item
+            treeview.focus(first_visible_item)  # Set the focus on the first item
+            print("Treeview focused, first visible item selected")
         else:
             print("Treeview is empty, nothing to select")
 
@@ -1797,12 +1812,20 @@ dis_horn_button = ttk.Button(button_frame,
                              style='LGV.TButton')
 dis_horn_button.pack(pady=5, fill='both', expand=True, ipady=3)
 
-bind_toggle_button_action(dis_horn_button, function=on_dis_horn_button_click, 
-                          shortcuts=[('<Control-d>', '<Control-D>')])
+bind_toggle_button_action(dis_horn_button, 
+                        #   function=on_test_button_click, 
+                          function=on_dis_horn_button_click,
+                          shortcuts=[('<Control-h>', '<Control-H>')])
+
+# Test to ensure that <Control-h> triggers
+root.bind('<Control-h>', lambda event: print("Ctrl+H shortcut detected in root"))  # Test at the root level
+
+# Test to ensure that <Control-h> triggers
+root.bind('<Control-d>', lambda event: print("Ctrl+D shortcut detected in root"))  # Test at the root level
 
 
 disable_control_buttons()
-enable_control_buttons()
+enable_control_buttons() #Uncomment for testing
 
 load_table_data_from_xml(treeview)
 

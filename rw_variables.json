@@ -1,0 +1,11 @@
+[
+    "PressureGVLs.weightPar.filterTimeTouchingError",
+    "LibraryInterfaces.FileManagement.loadRequest[10]",
+    "Devices.Pressure.tilt.weight",
+    "Devices.Pressure.lift.weight",
+    "SafetyGlobals.plsRearHandler.testCase",
+    "SafetyGlobals.plsRearHandler.testCaseNumber",
+    "SafetyGlobals.plsLateralHandler.testCaseNumberLeft",
+    "SafetyGlobals.plsLateralHandler.testCaseNumberRight",
+    "InfoMovements.Mov.lift.curPosition"
+]
