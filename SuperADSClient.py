@@ -1,6 +1,7 @@
 import sqlite3
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from tkinter import ttk, font, messagebox, filedialog
+import tkinter.scrolledtext as scrolledtext
 import re
 import os
 import xml.etree.ElementTree as ET
@@ -9,12 +10,18 @@ import pyads
 import sys
 import threading
 import time
+import json
+from queue import Queue, Empty
+import copy
+from ctypes import sizeof
 
-__version__ = '2.1.2 Beta 12'
+__version__ = '2.3.6'
 __icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
 current_ads_connection = None
+
+connection_active = False
 
 ####################################################################################################################################################################
 ########################################################## Initial data reading from db3 file ######################################################################
@@ -115,6 +122,9 @@ def populate_table_from_db3():
     # Save data to custom xml to avoid reloading .db3 everytime app is open
     save_table_data_to_xml(treeview)
 
+    # Enable menu for Read/Write if table is updated
+    update_menu()
+
 
 # Save data to XML
 def save_table_data_to_xml(tree, filename="lgv_data.xml"):
@@ -150,26 +160,33 @@ def load_table_data_from_xml(tree, filename="lgv_data.xml"):
 ####################################################################################################################################################################
 ################################################################# ADS connection setup #############################################################################
 ####################################################################################################################################################################
+
+monitor_timer = None
+
 def monitor_connection_status():
-    global current_ads_connection
+    global current_ads_connection, monitor_timer
 
     if current_ads_connection is None:
         return
     
     try:
-        if check_plc_status(current_ads_connection):
-            root.after(0, update_ui_connection_status, "Connected", "green", status_label)
-        else:
+        if not check_plc_status(current_ads_connection):
             raise Exception("PLC not in valid state")
+        
+        update_status_in_queue("Connected", "green")
+
     except Exception as e:
         # assume connection is lost if not status 5 is read
         disable_control_buttons()
-        root.after(0, update_ui_connection_status, "Disconnected", "red", status_label)
+        update_status_in_queue("Disconnected", "red")
         close_current_connection()
 
-    t = threading.Timer(1.0, monitor_connection_status)
-    t.daemon = True
-    t.start()  
+    if monitor_timer:
+        monitor_timer.cancel()
+
+    monitor_timer = threading.Timer(1.0, monitor_connection_status)
+    monitor_timer.daemon = True
+    monitor_timer.start()  
 
     
 def check_plc_status(ads_connection):
@@ -180,38 +197,57 @@ def check_plc_status(ads_connection):
 
 # Close the current connection if it exists
 def close_current_connection():
-    global current_ads_connection, dis_horn_state, connection_in_progress, is_core
-    # with read_lock:
-    connection_in_progress = False
-    update_ui_connection_status("Disconnected", "red", status_label)
-    if current_ads_connection:
-        current_ads_connection.close()
-        current_ads_connection = None
-        dis_horn_state = False #reset horn state
-        is_core = False
-        core_status_label.config(text="No Core Lib")
+    global current_ads_connection, dis_horn_state, connection_in_progress, is_core, monitor_timer
+
+    with connection_lock:
+        connection_in_progress = False
+
+        if current_ads_connection:
+            current_ads_connection.close()
+            current_ads_connection = None
+
+            dis_horn_state = False #reset horn state
+            is_core = False
+            core_status_label.config(text="No Core Lib")
+
+            # Stop the read thread
+            stop_read_thread()  # Stop and join the thread
+        
+        if monitor_timer:
+            monitor_timer.cancel()
+            monitor_timer = None
+
+        update_status_in_queue("Disconnected", "red")
 
 # Background connection handler (runs in a separate thread)
-def background_connect(plc_data, label):
-    global current_ads_connection, connection_in_progress
-
-    # If already connected, don't try to reconnect
-    if current_ads_connection is not None:
-        return
+def background_connect(plc_data):
+    global current_ads_connection, connection_in_progress, connection_active
     
-    lgv_name, ams_net_id, tc_type = plc_data
-    port = 851 if tc_type == 'TC3' else 801
-
-    update_ui_connection_status("Connecting...", "orange", label)
-
     try:        
+        # If already connected, don't try to reconnect
+        if current_ads_connection is not None:
+            return
+        
+        lgv_name, ams_net_id, tc_type = plc_data
+        port = 851 if tc_type == 'TC3' else 801
+        # ip_address = ".".join(str(ams_net_id).split(".")[:4])
+        update_status_in_queue("Connecting...", "orange")
+
         # Attempt to open a new connection
         current_ads_connection = pyads.Connection(ams_net_id, port)
         current_ads_connection.open()
 
+        connection_active = check_plc_status(current_ads_connection)
+
         # Check PLC status
-        if check_plc_status(current_ads_connection):
-            update_ui_connection_status("Connected", "green", label)
+        if connection_active:
+
+            # Start monitoring the connection after connecting
+            monitor_connection_status()
+
+            connection_in_progress = False
+
+            update_status_in_queue("Connected", "green")
             enable_control_buttons()
 
             # Automatically detect core variable
@@ -220,8 +256,7 @@ def background_connect(plc_data, label):
             # update_buttons()
             update_buttons_from_plc_thread()
 
-            # Start monitoring the connection after connecting
-            monitor_connection_status()
+            
 
         else:
             raise Exception("PLC not in a valid state")
@@ -229,48 +264,74 @@ def background_connect(plc_data, label):
     except Exception as e:
         current_ads_connection = None
         disable_control_buttons()
-        update_ui_connection_status("Disconnected", "red", label)
+        update_status_in_queue("Disconnected", "red")
         messagebox.showerror("Connection Error", f"Failed to connect to {lgv_name}: {str(e)}")
         treeview.selection_remove(treeview.selection())
-        is_core = False
 
     finally:
-        connection_in_progress = False
-        if current_ads_connection is None:
-            update_ui_connection_status("Disconnected", "red", label)
+        with connection_lock:
+            connection_in_progress = False
+
+
+current_status = None
 
 # Update the UI status label (called from the main thread)
-def update_ui_connection_status(text, color, label):
-    label.config(text=text, foreground=color)
+def update_ui_connection_status(text, color):
+    global current_status
+    if current_status != text:
+        current_status = text
+        status_label.config(text=text, foreground=color)
 
+status_queue = Queue()
+
+def process_status_updates():
+    try:
+        status, color = status_queue.get_nowait()
+        update_ui_connection_status(status, color)
+    except Empty:
+        pass
+    root.after(100, process_status_updates)
+
+status_lock = threading.Lock()
+# Use the queue for updating the status
+def update_status_in_queue(status, color):
+    with status_lock:
+        status_queue.put((status, color))
+
+
+connection_lock = threading.Lock()
 # Attempt to connect to the selected PLC (starts in a new thread)
-def connect_to_plc(tree, label):
-    global connection_in_progress, current_ads_connection
+def connect_to_plc():
+    global connection_in_progress
     
-    if connection_in_progress:
-        print("Connection in progress. Waiting for it to finish. Triggered on connect")
-        messagebox.showinfo("Attention", "Connection in progress. Waiting for it to finish. Triggered on connect")
-        return
-    
-    # If already connected, don't try to reconnect
-    if current_ads_connection is not None:
-        print("Target already connected")
-        messagebox.showinfo("Attention", "Target already connected")
-        return
-    
-    # Get the selected PLC data
-    selected_item = tree.selection()
-    if not selected_item:
-        # messagebox.showinfo("Attention", "Select LGV")
-        print("No LGV selected")
-        return
+    with connection_lock:
 
-    lgv_data = tree.item(selected_item)["values"]
+        # If already connected, don't try to reconnect
+        if current_ads_connection and not connection_in_progress:
+            print("Target already connected")
+            # messagebox.showinfo("Attention", "Target already connected")
+            return
+
+        if connection_in_progress:
+            print("Connection in progress. Waiting for it to finish. Triggered on connect")
+            # messagebox.showinfo("Attention", "Connection in progress. Waiting for it to finish. Triggered on connect")
+            return
+        
+
+        # Get the selected PLC data
+        selected_item = treeview.selection()
+        if not selected_item:
+            # messagebox.showinfo("Attention", "Select LGV")
+            print("No LGV selected")
+            return
+
+        lgv_data = treeview.item(selected_item)["values"]
+
+        connection_in_progress = True
 
     # Start the connection in a new thread
-    connection_thread = threading.Thread(target=background_connect, args=(lgv_data, label))
+    connection_thread = threading.Thread(target=background_connect, args=(lgv_data,))
     connection_thread.start()
-    connection_in_progress = True
 
 
 previous_selection = None # track previous connection
@@ -278,37 +339,48 @@ previous_selection = None # track previous connection
 connection_in_progress = False
 # Close the current connection when selection changes
 def on_treeview_select(event):
-    global current_ads_connection, previous_selection, connection_in_progress, dis_horn_state
+    global current_ads_connection, previous_selection, connection_in_progress, connection_active
     # Get the currently selected LGV
     
     selected_item = treeview.selection()
     if not selected_item:
+        print("No item selected.")
         return
     
-    if connection_in_progress:
-        treeview.selection_remove(treeview.selection())
-        print("Connection in progress. Waiting for it to finish. Triggered on select")
-        messagebox.showinfo("Attention", "Connection in progress. Waiting for it to finish. Triggered on select")
-        return
-
     # If the same item is selected, do nothing
-    if (previous_selection == selected_item) and current_ads_connection:
+    if ((previous_selection == selected_item) 
+            and current_ads_connection and connection_active 
+            and not connection_in_progress):
         print("Target already connected")
-        messagebox.showinfo("Attention", "Target already connected")
+        # messagebox.showinfo("Attention", "Target already connected")
         return
 
-    previous_selection = selected_item  # Update the previously selected item
+
+    if connection_in_progress:
+        print("Connection in progress. Waiting for it to finish. Triggered on select")
+        # messagebox.showinfo("Attention", "Connection in progress. Waiting for it to finish. Triggered on select")
+        treeview.selection_remove(treeview.selection())
+        return
     
+    old_selection = previous_selection
+    previous_selection = selected_item  # Update the previously selected item
+
     # Close any existing connection when the selection changes
-    if  current_ads_connection:
-        # status_label.update_idletasks()
+    if  current_ads_connection and connection_active:
+        if read_variable('disable_horn'):
+            old_lgv_name = treeview.item(old_selection)["values"][0]
+            messagebox.showwarning("Attention", f"Horn in {old_lgv_name} is disabled!")
+        
+        print("Stopping read thread and closing current connection.")
+        stop_read_thread()  # Ensure the read thread is stopped
+
         disable_control_buttons()
         close_current_connection()
-        # messagebox.showinfo("Attention", "Connection Closed")
-        if dis_horn_state:
-            messagebox.showwarning("Attention", "Horn is disabled!!")
-    
-    update_ui_connection_status("Disconnected", "red", status_label)
+            
+    with connection_lock:
+        connection_in_progress = False
+
+    update_status_in_queue("Disconnected", "red")
 
 # Enable control buttons after a successful connection
 def enable_control_buttons():
@@ -336,34 +408,162 @@ def on_core_check():
 #################################################################### Write variables ###############################################################################
 ####################################################################################################################################################################
 # Dictionary to map variable names for each action based on conditions
-variable_write = {
+default_variable_write = {
     'reset': {
         'TC2': ".ADS_Reset",
-        ('TC3', False): "Load_Handling.ADS_Reset",
-        ('TC3', True): "CoreGVL.ADS_Reset"
+        'TC3': {
+            'core': "CoreGVL.ADS_Reset",
+            'no_core': "Load_Handling.ADS_Reset"
+        }
     },
     'run': {
         'TC2': ".ADS_Run",
-        ('TC3', False): "Load_Handling.ADS_Run",
-        ('TC3', True): "CoreGVL.ADS_Run"
+        'TC3': {
+            'core': "CoreGVL.ADS_Run",
+            'no_core': "Load_Handling.ADS_Run"
+        }
     },
     'stop': {
         'TC2': ".ADS_Stop",
-        ('TC3', False): "Load_Handling.ADS_Stop",
-        ('TC3', True): "CoreGVL.ADS_Stop"
+        'TC3': {
+            'core': "CoreGVL.ADS_Stop",
+            'no_core': "Load_Handling.ADS_Stop"
+        }
     },
     'man_auto': {
         'TC2': ".ADS_MCD_Mode",
-        ('TC3', False): "Load_Handling.ADS_MCD_Mode",
-        ('TC3', True): "CoreGVL.ADS_MCD_Mode"
+        'TC3': {
+            'core': "CoreGVL.ADS_MCD_Mode",
+            'no_core': "Load_Handling.ADS_MCD_Mode"
+        }
     },
-    'dis_horn': {
+    'disable_horn': {
         'TC2': ".ADS_DisableHorn",
-        ('TC3', False): "Output.DisableHorn",
-        ('TC3', True): "Output.disableHorn"
+        'TC3': {
+            'core': "Output.disableHorn",
+            'no_core': "Output.DisableHorn"
+        }
     }
 }
 
+def reset_to_defaults():
+    global variable_write, read_thread
+
+    # Stop the read thread before resetting variables
+    stop_read_thread()
+
+    if os.path.exists("variables_config.json"):
+        os.remove("variables_config.json")
+
+    variable_write = copy.deepcopy(default_variable_write)
+    print(F"Variable write after reset: {variable_write}")
+    # print(f"Variables reset to defaults: {variable_write['disable_horn']['TC3']['core']}")
+
+    update_menu()
+
+    stop_thread_event.clear()
+    start_read_thread()
+
+    messagebox.showinfo("Reset", "Variables have been reset to defaults.")
+          
+
+    # else:
+        # messagebox.showinfo("Reset", "No saved configuration found.")
+
+# Function to update the menu item based on whether the JSON file exists
+def update_menu():
+    if os.path.exists("variables_config.json"):
+        options_menu.entryconfig("Reset to Defaults ", state="normal")  # Enable if file exists
+    else:
+        options_menu.entryconfig("Reset to Defaults ", state="disabled")  # Disable if file doesn't exist
+
+    if os.path.exists("lgv_data.xml"):
+        more_menu.entryconfig("Read/Write    ", state="normal")  # Enable if file exists
+    else:
+        more_menu.entryconfig("Read/Write    ", state="disabled")  # Disable if file doesn't exist
+
+
+# Load variables from JSON or fall back to defaults
+def load_variables():
+    """Load variables from JSON or return defaults if the file is missing."""
+    if not os.path.exists("variables_config.json"):
+        # If file doesn't exist, return the defaults
+        vars = copy.deepcopy(default_variable_write)
+        print(f"Default vars: {vars}")
+        return vars
+
+    # Load from JSON if the file exists
+    with open("variables_config.json", "r") as json_file:
+        user_variables = json.load(json_file)
+
+    # Merge user-modified values into the defaults
+    merge_vars = merge_dicts(copy.deepcopy(default_variable_write), user_variables)
+    print(f"Merged vars: {merge_vars}")
+    return merge_vars
+
+
+def save_user_input(plc_type, is_core, variables):
+    global variable_write
+    # Load the existing variables from the JSON file if it exists
+    existing_vars = {}
+    if os.path.exists("variables_config.json"):
+        with open("variables_config.json", "r") as json_file:
+            existing_vars = json.load(json_file)
+
+    non_empty_found = False  # Track if the user has entered valid input
+    user_variables = {}  # Store only user-modified variables
+
+    # Iterate through user input and process based on selection
+    for key, value in variables.items():
+        if value.strip():  # Ignore empty values
+            non_empty_found = True
+
+            if plc_type == "TC2":
+                # Save only if the new value differs from the current one
+                if existing_vars.get(key, {}).get('TC2') != value:
+                    user_variables.setdefault(key, {})['TC2'] = value
+
+            elif plc_type == "TC3":
+                core_key = 'core' if is_core else 'no_core'
+                # Save only if the new value differs from the current one
+                if existing_vars.get(key, {}).get('TC3', {}).get(core_key) != value:
+                    user_variables.setdefault(key, {}).setdefault('TC3', {})[core_key] = value
+
+    # If no valid input was provided, do not save anything
+    if not non_empty_found:
+        print("No non-empty values found, skipping save.")
+        messagebox.showwarning("Attention", "Add a value to save.")
+        return
+
+   # Recursively merge existing variables with user-modified variables
+    merged_vars = merge_dicts(existing_vars, user_variables)
+    print(f"Merged vars input: {merged_vars}")
+
+    # Save only if there are new or modified variables
+    if user_variables:  # Save only user-modified content, no defaults
+        with open("variables_config.json", "w") as json_file:
+            json.dump(merged_vars, json_file, indent=4)  # Save the final state
+        print(f"Variables saved for {plc_type} {'' if plc_type == 'TC2' else 'with core' if is_core else 'with no core'}")
+        messagebox.showinfo("Success", f"Variables saved for {plc_type} {'' if plc_type == 'TC2' else 'with core' if is_core else 'with no core'}")
+    else:
+        print("No changes detected, nothing to save.")
+
+    # Reload variables after saving to reflect the latest state
+    variable_write = load_variables()
+    print(f"Variable write: {variable_write}")
+    update_menu()  # Update the reset button state
+
+
+def merge_dicts(existing, new):
+    """Recursively merge two dictionaries."""
+    for key, value in new.items():
+        if isinstance(value, dict) and key in existing:
+            # Recursively merge nested dictionaries
+            existing[key] = merge_dicts(existing.get(key, {}), value)
+        else:
+            # Update or add the new value
+            existing[key] = value
+    return existing
 
 def write_variable(action, tc_type, is_core, value, button):
     global current_ads_connection
@@ -372,7 +572,8 @@ def write_variable(action, tc_type, is_core, value, button):
     if tc_type == 'TC2':
         variable_name = variable_write[action]['TC2']  # For TC2, ignore is_core
     else:
-        variable_name = variable_write[action][('TC3', is_core)]  # For TC3, consider is_core
+        core_key = 'core' if is_core else 'no_core'
+        variable_name = variable_write[action]['TC3'][core_key]  # For TC3, use core/no_core
 
     if current_ads_connection is not None:
         try:
@@ -394,13 +595,17 @@ def write_variable(action, tc_type, is_core, value, button):
     return False
     
 
-# Variable to track toggle state for dis_horn
+# Variable to track toggle state for disable_horn
+
+def on_test_button_click(button):
+    """Function to simulate toggle behavior for testing the shortcut."""
+    print(f"Test {button} shortcut triggered")
 
 def on_dis_horn_button_click(button):
     global dis_horn_state
 
-    # Get initial state of dis_horn variable to toggle it
-    dis_horn_state = read_variable('dis_horn') 
+    # Get initial state of disable_horn variable to toggle it
+    dis_horn_state = read_variable('disable_horn') 
 
     lgv_data = get_lgv_data()
     
@@ -408,9 +613,9 @@ def on_dis_horn_button_click(button):
         return
     tc_type = lgv_data[2]
 
-    # Toggle the state of dis_horn
+    # Toggle the state of disable_horn
     dis_horn_state = not dis_horn_state
-    success_write = write_variable('dis_horn', tc_type, is_core, dis_horn_state, button)
+    success_write = write_variable('disable_horn', tc_type, is_core, dis_horn_state, button)
     if success_write:   
         print(f"Disable Horn pressed, value: {dis_horn_state}")
     else:
@@ -470,7 +675,7 @@ def end_cooldown():
     cooldown_active = False  # Cooldown ended, button can be pressed again
 
 
-def bind_button_actions(button, action, press_value=True, release_value=False):
+def bind_button_actions(button, action, shortcuts=None, press_value=True, release_value=False):
     global press_successful
 
     def on_button_press(event):
@@ -489,6 +694,49 @@ def bind_button_actions(button, action, press_value=True, release_value=False):
     button.bind("<ButtonPress>", lambda event: on_button_press(event))
     button.bind("<ButtonRelease>", lambda event: on_button_release(event))
 
+
+    # Bind keyboard shortcuts (Control + Key press and release)
+    if shortcuts:
+        for press_shortcut, release_shortcut in shortcuts:
+            button.winfo_toplevel().bind(press_shortcut, on_button_press)
+            button.winfo_toplevel().bind(release_shortcut, on_button_release)
+
+def bind_connect_button_action(button, connect_function, shortcuts=None):
+    """Bind connect behavior to both button click and keyboard shortcuts."""
+    
+    def on_connect(event=None):
+        """Trigger the connect function."""
+        connect_function()
+
+    # Bind the button click directly to the connect function
+    button.bind("<ButtonPress>", on_connect)
+
+    # Bind keyboard shortcuts if provided
+    if shortcuts:
+        for shortcut in shortcuts:
+            button.winfo_toplevel().bind(shortcut, lambda event: on_connect())
+
+
+def bind_toggle_button_action(button, function=None, shortcuts=None):
+    """Bind toggle behavior to both button click and keyboard shortcuts."""
+
+    def on_toggle(event=None):
+        print("Shortcut triggered in on_toggle")  # Debugging statement
+        """Trigger the toggle function (mouse or shortcut)."""
+        if function:
+            print("Function is not None, calling function(button)")  # Debugging statement
+            function(button)  # Call the function with the button reference
+        else:
+            print("Function is None")  # Debugging statement
+
+    # Bind the button click to toggle
+    button.bind("<ButtonPress>", on_toggle)
+
+    # Bind keyboard shortcuts if provided
+    if shortcuts:
+        for shortcut in shortcuts:
+            button.winfo_toplevel().bind_all(shortcut, lambda event: on_toggle())
+
 # def on_button_action_wrapper(action, press_value, release_value, button):
 #     global press_successful
 #     on_button_action(action, press_value, button)
@@ -496,6 +744,7 @@ def bind_button_actions(button, action, press_value=True, release_value=False):
 #     if press_successful:
 #         # Attempt write release value only if press value was successful
 #         on_button_action(action, release_value, button, is_release=True)
+
 
 
 # release_bound = False # Track is released event was bound
@@ -523,6 +772,35 @@ def on_button_release(action, release_value, button):
             # release_bound = False
 
 
+def bind_treeview_focus_action(treeview, focus_shortcuts=None):
+    """Bind focus behavior to Treeview for keyboard navigation."""
+    
+    def focus_and_select_first(event=None):
+        """Set focus on the Treeview and select the first item."""
+        treeview.focus_set()  # Set focus to the Treeview
+
+        # Get the Treeview's scroll position
+        yview = treeview.yview()
+        if not yview:
+            print("Treeview is empty or has no scroll position")
+            return
+        
+        # Calculate the first visible item based on yview
+        all_items = treeview.get_children()
+        visible_item_index = int(yview[0] * len(all_items))  # Calculate the starting index
+
+        if all_items:
+            first_visible_item = all_items[visible_item_index]
+            treeview.selection_set(first_visible_item)  # Select the first item
+            treeview.focus(first_visible_item)  # Set the focus on the first item
+            print("Treeview focused, first visible item selected")
+        else:
+            print("Treeview is empty, nothing to select")
+
+    # Bind keyboard shortcuts if provided
+    if focus_shortcuts:
+        for shortcut in focus_shortcuts:
+            treeview.winfo_toplevel().bind(shortcut, focus_and_select_first)
 
 ####################################################################################################################################################################
 ##################################################################### Read variables ###############################################################################
@@ -548,7 +826,7 @@ variable_read = {
         ('TC3', False): "LGV.Status.MCD_Mode",
         ('TC3', True): "LibraryInterfaces.LGV.Status.MCD_Mode"
     },
-    'dis_horn': {
+    'disable_horn': {
         'TC2': ".ADS_DisableHorn",
         ('TC3', False): "Output.DisableHorn",
         ('TC3', True): "Output.disableHorn"
@@ -567,7 +845,7 @@ def check_for_core_variable():
         # If the core variable is read successfully, set the variable and update the label
         if core_value is not None:
             is_core = True  # Set the variable to True (core detected)
-            core_status_label.config(text="Core Lib")
+            core_status_label.config(text="      Core Lib")
         else:
             is_core = False  # Set the variable to False (core not detected)
             core_status_label.config(text="No Core Lib")
@@ -579,6 +857,8 @@ def check_for_core_variable():
 
 def read_variable(action):
     lgv_data = get_lgv_data()
+    if not lgv_data:
+        return
     tc_type = lgv_data[2]
     is_core_value = is_core
 
@@ -594,20 +874,12 @@ def read_variable(action):
             return None
     return None
 
-def update_button_color(action, button, read_value):
-    if read_value is None:
-        return
-    # Change the button's foreground color based on the read_value
-    if read_value:  # If the PLC variable is True
-        button.configure(style='LGV.Connected.TButton')
-    else:  # If the PLC variable is False
-        button.configure(style='LGV.Disconnected.TButton')
 
 def update_buttons():
     if current_ads_connection is None:
         return
     # Read variables and update button colors for all actions
-    actions = ['reset', 'run', 'stop', 'man_auto', 'dis_horn']
+    actions = ['reset', 'run', 'stop', 'man_auto', 'disable_horn']
     
     # Mapping actions to buttons
     button_mapping = {
@@ -615,7 +887,7 @@ def update_buttons():
         'run': run_button,
         'stop': stop_button,
         'man_auto': man_auto_button,
-        'dis_horn': dis_horn_button
+        'disable_horn': dis_horn_button
     }
     
     for action in actions:
@@ -626,40 +898,68 @@ def update_buttons():
     # Schedule the function to run again after 2s
     root.after(50, update_buttons)
 
+def update_button_color(action, button, read_value):
+    if read_value is None:
+        return
+    # Change the button's foreground color based on the read_value
+    if read_value:  # If the PLC variable is True
+        button.configure(style='LGV.Connected.TButton')
+    else:  # If the PLC variable is False
+        button.configure(style='LGV.Disconnected.TButton')
+
 read_lock = threading.Lock()
+stop_thread_event = threading.Event()
 
 def update_buttons_from_plc_thread():
     global current_ads_connection
 
-    # if current_ads_connection is None:
-    #     return
-        
-    # Read variables and update button colors for all actions
-    # actions = ['reset', 'run', 'stop', 'man_auto', 'dis_horn']
-    actions = ['run', 'dis_horn']
+    actions = ['run', 'disable_horn']
     
     # Mapping actions to buttons
     button_mapping = {
-        # 'reset': reset_button,
         'run': run_button,
-        # 'stop': stop_button,
-        # 'man_auto': man_auto_button,
-        'dis_horn': dis_horn_button
+        'disable_horn': dis_horn_button
     }
     
     # with read_lock:
-    for action in actions:
+    while not stop_thread_event.is_set():
         if current_ads_connection is None:
             return
-        read_value = read_variable(action)  # Read value from PLC
-        button = button_mapping[action]
-    
-        root.after(0, update_button_color, action, button, read_value)
-    
+        
+        # print(f"Current state of variable write: {variable_write['disable_horn']['TC3']['core']}")
+        for action in actions:
+            read_value = read_variable(action)  # Read value from PLC
+            button = button_mapping[action]
+            root.after(0, update_button_color, action, button, read_value)
 
-    t = threading.Timer(0.1, update_buttons_from_plc_thread)
-    t.daemon = True 
-    t.start()
+        stop_thread_event.wait(0.1)
+    
+    print("Read thread stopped...")
+
+    # t = threading.Timer(0.1, update_buttons_from_plc_thread)
+    # t.daemon = True 
+    # t.start()
+read_thread = None
+
+def start_read_thread():
+    global read_thread
+    stop_thread_event.clear()
+
+    read_thread = threading.Thread(target=update_buttons_from_plc_thread)
+    read_thread.daemon = True
+    read_thread.start()
+
+
+def stop_read_thread():
+    global read_thread
+
+    if read_thread is not None and read_thread.is_alive():
+        print("Stopping read thread.")
+        stop_thread_event.set()
+        read_thread.join()  # Wait for the thread to finish
+        read_thread = None  # Reset the thread reference
+    else:
+        print("No active read thread to stop.")
 
 ####################################################################################################################################################################
 ############################################################## Treeview setup and sorting ##########################################################################
@@ -712,6 +1012,632 @@ def natural_keys(text):
 
 
 ####################################################################################################################################################################
+################################################################ Window To Set Variables ###########################################################################
+####################################################################################################################################################################
+
+variable_window = None 
+
+def open_variable_window_cond():
+    global variable_window
+
+    if variable_window is not None and variable_window.winfo_exists():
+        variable_window.lift()
+        variable_window.focus_force()
+    else:
+        open_variable_window()
+
+def open_variable_window():
+    global variable_window
+
+    variable_window = tk.Toplevel(root)
+    variable_window.title("Set Variables")
+
+    variable_window.resizable(False,False)
+
+    def clear_entries():
+        for entry in entries.values():
+            entry.delete(0, tk.END)
+
+    def radio_button_changed(*args):
+        print(f"Radio button selected: {plc_type.get()}")
+        clear_entries()
+
+    def checkbox_changed(*args):
+        print(f"Checkbox selected: {is_core.get()}")
+        clear_entries()
+
+    # Radio buttons for TC2 and TC3
+    plc_type = tk.StringVar(value="TC2") # Default is TC2
+
+    plc_type.trace_add("write", radio_button_changed)
+
+    def toggle_is_core():
+        if plc_type.get() == "TC3":
+            core_checkbox.config(state="normal")
+        else:
+            core_checkbox.config(state="disabled")
+            is_core.set(False)  # Reset core to False when TC2 is selected
+
+    frame_tc_type = tk.Frame(variable_window)
+    frame_tc_type.grid(row=0, column=0, columnspan=3, padx=5, pady=5)
+     # PLC Type Selection (TC2 or TC3)
+    ttk.Radiobutton(frame_tc_type, text="TC2", variable=plc_type, value="TC2", command=toggle_is_core).grid(row=0, column=0, padx=10)
+    ttk.Radiobutton(frame_tc_type, text="TC3", variable=plc_type, value="TC3", command=toggle_is_core).grid(row=0, column=1, padx=10)
+
+    # Core Selection (only enabled for TC3)
+    is_core = tk.BooleanVar(value=False)
+
+    is_core.trace_add("write", checkbox_changed)
+    core_checkbox = ttk.Checkbutton(frame_tc_type, text="Is Core", variable=is_core, state="disabled")
+    core_checkbox.grid(row=0, column=3, padx=15)
+
+    entries = {}
+    frame_vars = tk.Frame(variable_window)
+    frame_vars.grid(row=2, column=0, pady=5, padx=5)
+    # Labels and Entries
+    labels = ["Reset", "Run", "Stop", "Man Auto", "Disable Horn"]
+    for i, label_text in enumerate(labels):
+        ttk.Label(frame_vars, text=label_text).grid(row=i, column=0, padx=5, pady=10, sticky='e')
+        entry = ttk.Entry(frame_vars, width=50)
+        entry.grid(row=i, column=1, padx=10, pady=10)
+        entries[label_text] = entry
+
+
+    # Save button to capture and save the inputs
+    def save():
+        # Gather variables using the entries dictionary
+        variables = {key.lower().replace(" ", "_"): entry.get() for key, entry in entries.items()}
+
+        # Call the function to save user input
+        save_user_input(plc_type.get(), is_core.get(), variables)
+
+    frame_setvar = tk.Frame(variable_window)
+    frame_setvar.grid(row=3, column=0, padx=5, pady=5)
+    ttk.Button(frame_setvar, text="Save", command=save).grid(row=0, column=0, pady=10, padx=10, ipadx=5, ipady=5)
+    # ttk.Button(frame_setvar, text="Reset", command=reset_to_defaults).grid(row=0, column=1, pady=10, padx=10, ipadx=5, ipady=5)
+
+    # Handle window close event to reset the reference
+    variable_window.protocol("WM_DELETE_WINDOW", on_variable_window_close)
+
+def on_variable_window_close():
+    global variable_window
+    variable_window.destroy()  # Destroy the window
+    variable_window = None  # Reset the reference so it can be reopened
+   
+
+####################################################################################################################################################################
+######################################################## Window To Read/Write Custom Variables #####################################################################
+####################################################################################################################################################################
+read_write_window = None 
+
+def open_read_write_window_cond():
+    global read_write_window
+
+    if read_write_window is not None and read_write_window.winfo_exists():
+        read_write_window.lift()
+        read_write_window.focus_force()
+    else:
+        open_read_write_window()
+
+
+def open_read_write_window():
+    global read_write_window
+
+    read_write_window = tk.Toplevel(root)
+    read_write_window.title("Read/Write ")
+
+    read_write_window.resizable(False,False)
+
+    RW_VARIABLES_FILE = "rw_variables.json"
+
+    # Predefined and custom variables
+    default_rw_variables = [
+        'PressureGVLs.weightPar.touchingWeight',
+        'CoreGVL.AutoReboot.startRequest', 
+        'CoreGVL.AutoReboot.autorebootDone',
+        'Shutdown.DEBUG_forceShutdown',
+        'LibraryInterfaces.FileManagement.loadRequest[3]']
+    
+    
+
+    def load_custom_variables():
+        if os.path.exists(RW_VARIABLES_FILE):
+            try:
+                with open(RW_VARIABLES_FILE, "r") as file:
+                    data = json.load(file)
+                    if isinstance(data, list):  # Ensure the data is a list
+                        return data
+                    else:
+                        print("Invalid data format in JSON, resetting to empty list.")
+                        return []
+            except json.JSONDecodeError:
+                print("JSON file is empty or invalid, resetting to empty list.")
+                return []  # Return empty list if the file is invalid
+        else:
+            # Default variables if JSON does not exist
+            return []
+                
+    # Save variables to JSON
+    def save_variables(variables):
+        with open(RW_VARIABLES_FILE, "w") as file:
+            json.dump(variables, file, indent=4)
+            file.write('\n')
+
+    def update_variable_menu(event=None):
+        custom_rw_variables = load_custom_variables()
+
+        combined_rw_variables = sorted (
+            default_rw_variables + custom_rw_variables, key=str.lower
+        )
+        variable_menu["values"] = combined_rw_variables
+    
+    def filter_combobox(event):
+        typed_text = variable_menu.get()
+        custom_rw_variables = load_custom_variables()
+        combined_rw_variables = sorted (default_rw_variables + custom_rw_variables, key=str.lower)
+
+
+        if typed_text == '':
+            filtered_variables = combined_rw_variables
+        else:
+            filtered_variables = [var for var in combined_rw_variables if typed_text.lower() in var.lower()]
+
+        variable_menu['values'] = filtered_variables
+        
+        if filtered_variables and not variable_menu['state'] == 'readonly':
+            variable_menu.event_generate('<Down>')
+
+    # Functions
+    def add_variable():
+        custom_rw_variables = load_custom_variables()
+        new_variable = variable_menu.get().strip()
+
+        if new_variable:
+            if any(new_variable.lower() == var.lower() for var in default_rw_variables + custom_rw_variables):
+                # messagebox.showwarning("Duplicate Entry", "This variable already exists.")
+                print("Variable already exists")
+            else:
+                custom_rw_variables.append(new_variable)
+                save_variables(custom_rw_variables)
+                update_variable_menu()
+                print(f"Variable {new_variable} successfully added!")
+        else:
+            print("Please enter a valid variable name.")
+        
+
+    result_var = tk.StringVar()
+
+    
+    def parse_lgv_range(range_str):
+        """Parse LGV range input into a list of LGV numbers."""
+        lgv_numbers = set()
+        parts = range_str.split(",")
+        for part in parts:
+            if "-" in part:
+                start, end = map(int, part.split("-"))
+                lgv_numbers.update(range(start, end + 1))
+            else:
+                lgv_numbers.add(int(part))
+        return lgv_numbers
+
+    def validate_and_link_lgv():
+        try:
+            if lgv_range_entry.get().strip() == '':
+                # messagebox.showerror("Error", "LGV range is empty!")
+                print("LGV range is empty!")
+                log_message("LGV range is empty!")
+                return
+            
+            lgv_numbers = parse_lgv_range(lgv_range_entry.get())
+            found_entries = []
+
+            remaining_children = list(treeview.get_children())
+
+            # Iterate through Treeview to find matching LGVs
+            for lgv in lgv_numbers:
+                for child in remaining_children:
+                    name = treeview.item(child)["values"][0]  # e.g., "LGV01"
+                    match = re.search(r"\d+", name)
+
+                    if match and int(match.group()) == lgv:
+                        amsnet_id = treeview.item(child)["values"][1]
+                        tc_type = treeview.item(child)["values"][2]
+                        found_entries.append((lgv, amsnet_id, tc_type))
+
+                        # Remove matched child from remaining children list 
+                        remaining_children.remove(child)
+                        break
+
+            if len(found_entries) == len(lgv_numbers) and found_entries != []:
+                # Display AMS Net IDs and types for the found LGVs
+                print("LGV data found!")
+                return found_entries
+            else:
+                overflow = len(lgv_numbers) - len(found_entries)
+                if overflow > 0:
+                    raise ValueError(f"Range not matching LGV list. \nContains {overflow} extra elements than in list")
+                else:
+                    raise ValueError(f"Some LGVs were not found, check range")
+        except ValueError as e:
+            # messagebox.showerror("Invalid Input", f"Error: {e}")
+            print(f"Invalid input. Error: {e}")
+            # messagebox.showerror("Error", f"Invalid input. Error: {e}")
+            log_message(f"Invalid input. Error: {e}")
+            # lgv_range_entry.delete(0, tk.END)
+            return None
+
+
+    # Mapping of symbol type strings to pyads data types
+    SYMBOL_TYPE_MAP = {
+        'BOOL'   : pyads.PLCTYPE_BOOL,
+        'INT'    : pyads.PLCTYPE_INT,
+        'DINT'   : pyads.PLCTYPE_DINT,
+        'REAL'   : pyads.PLCTYPE_REAL,
+        'LREAL'  : pyads.PLCTYPE_LREAL,
+        'STRING' : pyads.PLCTYPE_STRING,
+        'BYTE'   : pyads.PLCTYPE_BYTE,
+        'WORD'   : pyads.PLCTYPE_WORD,
+        'DWORD'  : pyads.PLCTYPE_DWORD,
+        # 'LWORD'  : pyads.PLCTYPE_LWORD,
+        'SINT'   : pyads.PLCTYPE_SINT,
+        'USINT'  : pyads.PLCTYPE_USINT,
+        'UINT'   : pyads.PLCTYPE_UINT,
+        'UDINT'  : pyads.PLCTYPE_UDINT,
+        'LINT'   : pyads.PLCTYPE_LINT,
+        'ULINT'  : pyads.PLCTYPE_ULINT,
+        'TIME'   : pyads.PLCTYPE_TIME,
+        # 'LTIME'  : pyads.PLCTYPE_LTIME,
+        'DATE'   : pyads.PLCTYPE_DATE,
+        'TOD'    : pyads.PLCTYPE_TOD,  # Time of Day
+        'DT'     : pyads.PLCTYPE_DT,    # Date and Time
+        'WSTRING': pyads.PLCTYPE_WSTRING,
+    }
+
+    def get_pyads_type(symbol_type_str):
+        """Map the symbol type string to a pyads type."""
+        # Check if the type is a known standard type
+        standard_type = SYMBOL_TYPE_MAP.get(symbol_type_str.strip())
+        if standard_type:
+            return standard_type
+
+        # If it's not a standard type, assume it could be an enum or custom type
+        # Default to BYTE for enums or custom types unless otherwise needed
+        print(f"Unknown type detected: {symbol_type_str}. Defaulting to BYTE.")
+        return pyads.PLCTYPE_BYTE  # Adjust if other types like INT are more appropriate
+
+
+    def check_type(value):
+        """Determine the appropriate PLC data type based on the value."""
+        if isinstance(value, bool):
+            return pyads.PLCTYPE_BOOL
+        elif isinstance(value, int):
+            # Use INT or DINT depending on the size of the integer
+            return pyads.PLCTYPE_INT if -32768 <= value <= 32767 else pyads.PLCTYPE_DINT
+        elif isinstance(value, float):
+            # Use REAL or LREAL based on precision
+            return pyads.PLCTYPE_REAL if abs(value) < 3.4e38 else pyads.PLCTYPE_LREAL
+        elif isinstance(value, str):
+            # Use STRING type for string inputs
+            return pyads.PLCTYPE_STRING
+        else:
+            raise ValueError(f"Unsupported type: {type(value)}")
+
+    # Global dictionary to store handles with context
+    handles = {}
+    next_handle_id = 0  # Unique integer handle ID generator
+
+    def get_new_handle_id():
+        """Generate a new unique handle ID."""
+        nonlocal next_handle_id
+        handle_id = next_handle_id
+        next_handle_id += 1
+        return handle_id
+
+    def on_notification(adr, notification, user_handle):
+        """Callback function to detect when the variable changes."""
+        value = notification.contents.value
+        print(f"Notification: Variable changed to {value}")
+
+        # Access the stop event and expected value from the handles dictionary
+        if handles[user_handle]["expected_value"] == value:
+            handles[user_handle]["stop_event"].set()  # Signal to stop notification
+
+    def write_variable_for_lgv(lgv, ams_net_id, tc_type, variable_name, value):
+        """Write a variable and confirm it via ADS notification."""
+        # stop_event = threading.Event()  # Event to track when the notification should stop
+        handle_id = get_new_handle_id()
+        print(f"Generated handle: {handle_id}, Type: {type(handle_id)}")
+
+        # Store the context in the global handles dictionary
+        # handles[handle_id] = {"expected_value": value, "stop_event": stop_event}
+
+        port = 851 if tc_type == "TC3" else 801
+
+        try:
+            # Create a new connection for this LGV
+            with pyads.Connection(ams_net_id, port) as ads_connection:
+                print(f"Connection established for LGV {lgv} with AMS Net ID: {ams_net_id}")
+
+                # type_var = check_type(value)
+
+                # Get symbol info and determine the appropriate pyads type
+                symbol_info = ads_connection.get_symbol(variable_name)
+                symbol_type_str = symbol_info.symbol_type
+                expected_type = get_pyads_type(symbol_type_str)
+
+                print(f"Handle ID: {handle_id}, Type: {type(handle_id)}")  # Verify the type
+
+                # Add a notification with a user handle containing the expected value and stop event
+
+                # attr = pyads.NotificationAttrib(sizeof(expected_type))  # Adjust length as needed
+                # notification_handle = ads_connection.add_device_notification(
+                #     variable_name, attr, on_notification, handle_id
+                # )
+
+                # Write the value to the PLC using the provided variable name
+                ads_connection.write_by_name(variable_name, value, expected_type)
+                print(f"Attempting to write {value} to {variable_name} for LGV {lgv}")
+
+                # # Wait for the notification to confirm the change or timeout after 5 seconds
+                # if not stop_event.wait(timeout=5):
+                #     print(f"Write confirmation timed out for {variable_name} on LGV {lgv}")
+                #     log_message(f"Error: {variable_name} not confirmed for LGV{lgv:02d}")
+                # else:
+                #     print(f"Successfully wrote {value} to {variable_name} for LGV {lgv}")
+                log_message(f"Variable value in LGV{lgv:02d} is now {value}")
+
+                # Remove the notification after use
+                # ads_connection.del_device_notification(notification_handle, handle_id)
+
+        except pyads.ADSError as ads_err:
+            # Handle ADS-specific errors with more detail
+            error_message = f"Error writing to LGV{lgv:02d}: {ads_err}"
+            print(error_message)
+            log_message(error_message)
+
+        except ValueError as val_err:
+            # Handle type-related errors
+            error_message = f"Value Error for LGV{lgv:02d}: {val_err}"
+            print(error_message)
+            log_message(error_message)
+
+        except Exception as e:
+            # Handle any other general exceptions
+            error_message = f"Unexpected error for LGV{lgv:02d}: {str(e)}"
+            print(error_message)
+            log_message(error_message)
+
+    
+    def convert_to_number(user_input):
+        """Convert input to int or float; return None if conversion fails."""
+        try:
+            return int(user_input)
+        except ValueError:
+            try:
+                return float(user_input)
+            except ValueError:
+                return None  # Not a number, possibly a string
+
+    
+    def write_variable():
+        """Start the write operation for all selected LGVs."""
+        clear_status()
+
+        variable_name = variable_menu.get().strip()  # Directly get the variable name
+
+        if variable_name == '':
+            # messagebox.showerror("Error", "Variable name missing!")
+            print("Variable name missing!")
+            log_message("Variable name missing!")
+            return
+
+        # Get the validated LGV data
+        lgv_data = validate_and_link_lgv()
+        if lgv_data is None:
+            # messagebox.showerror("Error", "LGV range is empty")
+            return  # Exit if validation failed
+
+        
+        radio_value = var_type.get()
+        entry_value = value_entry.get().strip()
+
+        # Validate the entry value: Ignore if it's "True" or "False"
+        if entry_value.lower() in ["true", "false", ""]:
+            value = radio_value  # Use the radio button value if the entry is empty or boolean-like
+        else:
+            # Try to convert to a number, otherwise keep it as a string
+            value = convert_to_number(entry_value) or entry_value
+        
+        
+        # Start a thread for each LGV to perform the write operation
+        for lgv, ams_net_id, tc_type in lgv_data:
+            threading.Thread(
+                target=write_variable_for_lgv, 
+                args=(lgv, ams_net_id, tc_type, variable_name, value)
+            ).start()
+
+
+
+    def read_variable_for_lgv(lgv, ams_net_id, tc_type, variable_name):
+        """Handle reading for each LGV in its own thread."""
+        try:
+            port = 851 if tc_type == "TC3" else 801
+            # Create a new connection for this LGV
+            with pyads.Connection(ams_net_id, port) as ads_connection:
+                print(f"Connection established for LGV {lgv} with AMS Net ID: {ams_net_id}")
+
+                # Get symbol info to validate type and existence
+                symbol_info = ads_connection.get_symbol(variable_name)
+                symbol_type_str = symbol_info.symbol_type
+                expected_type = get_pyads_type(symbol_type_str)
+                
+                # Read the value from the PLC
+                value = ads_connection.read_by_name(variable_name, expected_type)
+                print(f"Successfully read {value} from {variable_name} for LGV {lgv}")
+                
+                # Log the read value
+                log_message(f"Variable value in LGV{lgv:02d} is {value}")
+
+        except pyads.ADSError as ads_err:
+            # Handle ADS-specific errors with more detail
+            error_message = f"Error reading from LGV{lgv:02d}: {ads_err}"
+            print(error_message)
+            log_message(error_message)
+
+        except ValueError as val_err:
+            # Handle type-related errors
+            error_message = f"Value Error for LGV{lgv:02d}: {val_err}"
+            print(error_message)
+            log_message(error_message)
+
+        except Exception as e:
+            # Handle any other general exceptions
+            error_message = f"Unexpected error for LGV{lgv:02d}: {str(e)}"
+            print(error_message)
+            log_message(error_message)
+
+    def read_variable():
+        """Start the read operation for all selected LGVs."""
+        clear_status()
+
+        variable_name = variable_menu.get().strip()  # Get the variable name directly
+
+        if variable_name == '':
+            # messagebox.showerror("Error", "Variable name missing!")
+            print("Variable name missing!")
+            log_message("Variable name missing!")
+            return
+
+        # Get the validated LGV data
+        lgv_data = validate_and_link_lgv()
+        if lgv_data is None:
+            return  # Exit if validation failed
+
+        # Start a thread for each LGV to perform the read operation
+        for lgv, ams_net_id, tc_type in lgv_data:
+            threading.Thread(
+                target=read_variable_for_lgv, 
+                args=(lgv, ams_net_id, tc_type, variable_name)
+            ).start()
+
+    def on_radio_selection():
+        """Disable value entry if True/False radio is selected."""
+        value_entry.delete(0, tk.END)  # Clear the entry field
+
+    def log_message(message):
+        """Insert log messages into the status widget in a thread-safe way."""
+        read_write_window.after(0, lambda: status_widget.insert(tk.END, message + "\n"))
+        read_write_window.after(0, status_widget.see, tk.END)  # Scroll to the bottom
+
+    def clear_status():
+        """Clear the content of the status widget."""
+        status_widget.delete(1.0, tk.END)  # Clear all content
+
+
+    # def on_variable_select(event):
+    #     variable_name = variable_menu.get().strip()  # Directly get the variable name
+    #     symbol_info = ads_connection.get_symbol(variable_name)
+    #     symbol_type_str = symbol_info.symbol_type
+    #     expected_type = get_pyads_type(symbol_type_str)
+
+
+    # Variables Frame
+    variable_frame = ttk.LabelFrame(read_write_window, text="Variables")
+    variable_frame.grid(row=0, column=0, padx=10, pady=5, sticky="nsew")
+
+    # ttk.Label(variable_frame, text="Select or Add Variable:").grid(row=0, column=0, padx=5, pady=5)
+    variable_menu = ttk.Combobox(variable_frame, width=55)
+    variable_menu.grid(row=0, column=0, padx=5, pady=5)
+    variable_menu.bind('<ButtonPress>', update_variable_menu)
+    # Bind the filter function to update on key release
+    variable_menu.bind('<Tab>', filter_combobox)
+
+    # variable_menu.configure(postcommand=lambda:filter_combobox(None))
+
+    ttk.Button(variable_frame, text="Add Variable", command=add_variable).grid(row=0, column=1, padx=5, pady=5)
+
+    # Value Input Frame
+    value_frame = ttk.LabelFrame(read_write_window, text="Set Value")
+    value_frame.grid(row=1, column=0, padx=10, pady=5, sticky="nsew")
+
+    bool_value_frame = ttk.Frame(value_frame)
+    bool_value_frame.grid(row=0, column=0, padx=5, pady=5)
+
+    var_type = tk.BooleanVar()
+    true_radio = ttk.Radiobutton(bool_value_frame, text="True", variable=var_type, value=True, command=on_radio_selection)
+    true_radio.grid(row=0, column=0, padx=5, pady=5)
+
+    false_radio = ttk.Radiobutton(bool_value_frame, text="False", variable=var_type, value=False, command=on_radio_selection)
+    false_radio.grid(row=0, column=1, padx=5, pady=5)
+
+    entry_value_frame = ttk.Frame(value_frame)
+    entry_value_frame.grid(row=0, column=1, padx=5, pady=5)
+    ttk.Label(entry_value_frame, text="Other:").grid(row=0, column=0, padx=5, pady=5)
+    value_entry = ttk.Entry(entry_value_frame)
+    value_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
+
+    # LGV Range Frame
+    lgv_frame = ttk.Frame(read_write_window)
+    lgv_frame.grid(row=2, column=0, padx=10, pady=5, sticky="ew")
+
+    input_frame = ttk.Frame(lgv_frame)
+    input_frame.grid(row=0, column=0, padx=5, pady=5)
+    ttk.Label(input_frame, text="LGV:").grid(row=0, column=0, padx=5, pady=5)
+    lgv_range_entry = ttk.Entry(input_frame)
+    lgv_range_entry.grid(row=0, column=1, padx=5, pady=5)
+
+    # Buttons Frame
+    button_frame = ttk.Frame(lgv_frame)
+    button_frame.grid(row=0, column=2, columnspan=2, pady=10, padx=30, sticky='e')
+
+    read_button = ttk.Button(button_frame, text="Read", command=read_variable)
+    read_button.grid(row=0, column=0, padx=10, ipadx=2, ipady=2)
+    write_button = ttk.Button(button_frame, text="Write", command=write_variable)
+    write_button.grid(row=0, column=1, padx=10, ipadx=2, ipady=2)
+
+
+    status_widget = scrolledtext.ScrolledText(
+        read_write_window, undo=True, wrap=tk.WORD, height=10, width=50
+    )
+    status_font = font.Font(family="Consolas", size=10)
+    status_widget.configure(font=status_font)
+    status_widget.grid(row=4, column=0, columnspan=2, padx=15, pady=15, sticky="ew")
+
+    # Disable manual editing of the status widget
+    status_widget.bind("<Key>", lambda e: "break")
+
+    # Make the grid layout expand properly
+    read_write_window.grid_columnconfigure(0, weight=1)
+    read_write_window.grid_columnconfigure(1, weight=1)
+    value_frame.grid_columnconfigure(0, weight=1)
+    value_frame.grid_columnconfigure(1, weight=1)
+    # result_frame.grid_columnconfigure(0, weight=1)
+
+    exceptions = [value_frame, read_button, write_button]
+
+    # Handle window close event to reset the reference
+    read_write_window.protocol("WM_DELETE_WINDOW", on_read_write_window_close)
+
+def on_read_write_window_close():
+    global read_write_window
+    read_write_window.destroy()
+    read_write_window = None
+
+
+    # entry to input LGV range
+
+    # drop down menu to add and save variables
+
+    # frame to add radio buttons for TRUE FALSE or Value (in a entry) when writing
+
+    # Frame with two buttons (read / write)
+
+    # Widget to show results when reading (enable only with reading)
+
+    # Read and write will be multi thread
+
+
+####################################################################################################################################################################
 ####################################################################### Create UI ##################################################################################
 ####################################################################################################################################################################
 
@@ -735,8 +1661,14 @@ else:
     icon_path = os.path.abspath(__icon__)
 # root.iconbitmap(icon_path)
 
+window_width = 490
+window_lenght = 420
+root.geometry(f"{window_width}x{window_lenght}")
+root.minsize(window_width, window_lenght)
+
 # Apply the icon after the window is initialized
 root.after(100, set_icon)
+
 
 style = ttk.Style()
 
@@ -770,39 +1702,46 @@ style.configure("Connect.TButton",
                 font=("Segoe UI", 13))
 
 
-# menu_bar = tk.Menu(root)
-# file_menu = tk.Menu(menu_bar, 
-#                     tearoff=0)
-# file_menu.add_command(label="Load Config.db3", command=populate_table_from_db3)
-# menu_bar.add_cascade(label="File", menu=file_menu)
-# root.config(menu=menu_bar)
+# Create the menu bar
+menu_bar = tk.Menu(root)
+
+file_menu = tk.Menu(menu_bar, tearoff=0)
+file_menu.add_command(label=" Load Config.db3 ", command=populate_table_from_db3)  # Add Load Config option
+file_menu.add_command(label=" Exit ", command=root.quit)  # Add Exit option
+menu_bar.add_cascade(label="  File ", menu=file_menu)
 
 
-# load_config_button = ttk.Button(root, text="Load Config.db3", command=populate_table_from_db3)
-# load_config_button.grid(row=0, column=0, padx=5, pady=5)
+options_menu = tk.Menu(menu_bar, tearoff=0)
+options_menu.add_command(label="Set Variables    ", command=open_variable_window_cond)
+options_menu.add_command(label="Reset to Defaults ", command=reset_to_defaults)
+menu_bar.add_cascade(label=" Options  ", menu=options_menu) 
 
-footer_frame = ttk.Frame(root)
-footer_frame.grid(row=0, column=0, sticky='nsw', padx=5, pady=5)
-load_config_button = ttk.Button(footer_frame, text="     Load \nconfig.db3", command=populate_table_from_db3)
-load_config_button.pack()
+more_menu = tk.Menu(menu_bar, tearoff=0)
+more_menu.add_command(label="Read/Write    ", command=open_read_write_window_cond)
+menu_bar.add_cascade(label="More", menu=more_menu)
 
-separator = ttk.Separator(root, orient='vertical')
-separator.grid(row=0, column=0, sticky='ns', pady=10)
+   
 
-frame_connect = ttk.Frame(root)
-frame_connect.grid(row=0, column=0, padx=0, pady=0, sticky='e')
+root.config(menu=menu_bar)
+
+# Update the menu based on whether the file exists
+update_menu()
+
+
+frame_connect = ttk.Frame(root, width=100)
+# frame_connect.grid_propagate(False)
+frame_connect.grid(row=0, column=0, padx=20, pady=5)
+
 # Add a button to connect to the PLC
-connect_button = ttk.Button(frame_connect, text="Connect", command=lambda: connect_to_plc(treeview, status_label), style='Connect.TButton')
-connect_button.grid(row=0, column=1, padx=5, ipady=4, sticky='e')
+connect_button = ttk.Button(frame_connect, text="Connect", style='Connect.TButton')
+connect_button.grid(row=0, column=1, padx=10, ipady=4, sticky='w')
+bind_connect_button_action(connect_button, connect_function=connect_to_plc,
+                            shortcuts=['<Control-c>', '<Control-C>'])
 
-# is_core = tk.IntVar()
-# core_check = ttk.Checkbutton(frame_connect, text="IsCore", variable=is_core, command=on_core_check)
-# core_check.grid(row=0, column=0, padx=0, pady=0)
-# core_check.config(state='disabled')
 
 # Create a label as an indicator
 core_status_label = ttk.Label(frame_connect, text="No Core Lib", foreground="#4682B4") # #3CB371, #6495ED, 4682B4
-core_status_label.grid(row=0, column=0, padx=0, pady=0)
+core_status_label.grid(row=0, column=0, padx=20, pady=0, sticky='e')
 
 
 
@@ -815,7 +1754,7 @@ status_label.grid(row=0, column=1, padx=5, pady=5)
 
 # Create a frame for the table (Treeview)
 table_frame = ttk.Frame(root)
-table_frame.grid(row=1, column=0, padx=10, pady=25, sticky='nsew')
+table_frame.grid(row=1, column=0, padx=10, pady=20, sticky='nsew')
 
 treeview_style = ttk.Style()
 treeview_style.configure("Treeview", rowheight=23)  # Increase row height for more space between items
@@ -838,6 +1777,8 @@ treeview.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
 treeview.bind("<<TreeviewSelect>>", on_treeview_select)
 
+bind_treeview_focus_action(treeview, focus_shortcuts=['<Control-t>', '<Control-T>'])
+
 # Create a vertical scrollbar for the table
 scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=treeview.yview)
 treeview.configure(yscroll=scrollbar.set)
@@ -859,41 +1800,70 @@ reset_button = ttk.Button(button_frame,
                         #   command=lambda: bind_button_actions(reset_button, 'reset'))
                         #   command=lambda: on_button_action_wrapper('reset', True, False, reset_button))
 reset_button.pack(pady=5, fill='both', expand=True, ipady=3)
-bind_button_actions(reset_button, 'reset')
+bind_button_actions(reset_button, 'reset', 
+                    shortcuts=[('<Control-r>', '<KeyRelease-r>'),
+                               ('<Control-R>', '<KeyRelease-R>')])
 
 run_button = ttk.Button(button_frame, 
                         text="Run",
                         style='LGV.TButton')
                         # command=lambda: on_button_action_wrapper('run', True, False, run_button))
 run_button.pack(pady=5, fill='both', expand=True, ipady=3)
-bind_button_actions(run_button, 'run')
+bind_button_actions(run_button, 'run', 
+                    shortcuts=[('<Control-g>', '<KeyRelease-g>'),
+                               ('<Control-G>', '<KeyRelease-G>')])
 
 stop_button = ttk.Button(button_frame, 
                          text="Stop", 
                          style='LGV.Pressed.TButton')
                         #  command=lambda: on_button_action_wrapper('stop', False, True, stop_button))
 stop_button.pack(pady=5, fill='both', expand=True, ipady=3)
-bind_button_actions(stop_button, 'stop', press_value=False, release_value=True)
+bind_button_actions(stop_button, 'stop', 
+                    shortcuts=[('<Control-s>', '<KeyRelease-s>'),
+                               ('<Control-S>', '<KeyRelease-S>')], 
+                    press_value=False, release_value=True)
 
 man_auto_button = ttk.Button(button_frame, 
                              text="Man/Auto",
                              style='LGV.TButton')
                             #  command=lambda: on_button_action_wrapper('man_auto', True, False, man_auto_button))
 man_auto_button.pack(pady=5, fill='both', expand=True, ipady=3)
-bind_button_actions(man_auto_button, 'man_auto')
+bind_button_actions(man_auto_button, 'man_auto', 
+                    shortcuts=[('<Control-m>', '<KeyRelease-m>'),
+                               ('<Control-M>', '<KeyRelease-M>')])
 
 dis_horn_button = ttk.Button(button_frame, 
                              text="Disable Horn", 
-                             style='LGV.TButton',
-                             command=lambda: on_dis_horn_button_click(dis_horn_button))
+                             style='LGV.TButton')
 dis_horn_button.pack(pady=5, fill='both', expand=True, ipady=3)
+
+# bind_toggle_button_action(dis_horn_button, 
+#                         #   function=on_test_button_click, 
+#                           function=on_dis_horn_button_click(dis_horn_button),
+#                           shortcuts=[('<Control-h>', '<Control-H>')])
+
+root.bind_all('<Control-h>', lambda event: on_dis_horn_button_click(dis_horn_button))
+root.bind_all('<Control-H>', lambda event: on_dis_horn_button_click(dis_horn_button))
+
+# Test to ensure that <Control-h> triggers
+# root.bind('<Control-h>', lambda event: print("Ctrl+H shortcut detected in root"))  # Test at the root level
+
+# # Test to ensure that <Control-h> triggers
+# root.bind('<Control-d>', lambda event: print("Ctrl+D shortcut detected in root"))  # Test at the root level
+
+# root.bind('<Control-r>', lambda event: print("Ctrl+R shortcut detected in root"))  # Test at the root level
 
 
 disable_control_buttons()
-# enable_control_buttons()
+enable_control_buttons() #Uncomment for testing
 
 load_table_data_from_xml(treeview)
 
+variable_write = load_variables()
+
+start_read_thread()
+
+root.after(100, process_status_updates)
 
 def on_closing():
     close_current_connection()  # Close connection before exiting
@@ -903,8 +1873,9 @@ def on_closing():
 root.protocol("WM_DELETE_WINDOW", on_closing)
 
 
-
 root.mainloop()
+
+# root.focus_set()
 
 
 # 1. select LGV, 
@@ -920,3 +1891,6 @@ root.mainloop()
 # Add colors to the buttons, at least for the horn, and reset that variable whenever there's a new connection
 
 # Connected/Disconnedted label doesn't change from conencted to disconnected when another selection is made, maybe set this to default when connection is closed
+
+# Ponerle keyboard shortcut a los botones
+# Ctrl + R, G, S, M, D
