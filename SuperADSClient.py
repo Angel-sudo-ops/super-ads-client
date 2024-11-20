@@ -599,7 +599,7 @@ def write_variable(action, tc_type, is_core, value, button):
 
 def on_test_button_click(button):
     """Function to simulate toggle behavior for testing the shortcut."""
-    print("Test button shortcut triggered")
+    print(f"Test {button} shortcut triggered")
 
 def on_dis_horn_button_click(button):
     global dis_horn_state
@@ -724,7 +724,10 @@ def bind_toggle_button_action(button, function=None, shortcuts=None):
         print("Shortcut triggered in on_toggle")  # Debugging statement
         """Trigger the toggle function (mouse or shortcut)."""
         if function:
-            function(button)  # Call the toggle function with the button reference
+            print("Function is not None, calling function(button)")  # Debugging statement
+            function(button)  # Call the function with the button reference
+        else:
+            print("Function is None")  # Debugging statement
 
     # Bind the button click to toggle
     button.bind("<ButtonPress>", on_toggle)
@@ -732,7 +735,7 @@ def bind_toggle_button_action(button, function=None, shortcuts=None):
     # Bind keyboard shortcuts if provided
     if shortcuts:
         for shortcut in shortcuts:
-            button.winfo_toplevel().bind(shortcut, lambda event: function(button))
+            button.winfo_toplevel().bind_all(shortcut, lambda event: on_toggle())
 
 # def on_button_action_wrapper(action, press_value, release_value, button):
 #     global press_successful
@@ -854,6 +857,8 @@ def check_for_core_variable():
 
 def read_variable(action):
     lgv_data = get_lgv_data()
+    if not lgv_data:
+        return
     tc_type = lgv_data[2]
     is_core_value = is_core
 
@@ -1832,16 +1837,21 @@ dis_horn_button = ttk.Button(button_frame,
                              style='LGV.TButton')
 dis_horn_button.pack(pady=5, fill='both', expand=True, ipady=3)
 
-bind_toggle_button_action(dis_horn_button, 
-                        #   function=on_test_button_click, 
-                          function=on_dis_horn_button_click,
-                          shortcuts=[('<Control-h>', '<Control-H>')])
+# bind_toggle_button_action(dis_horn_button, 
+#                         #   function=on_test_button_click, 
+#                           function=on_dis_horn_button_click(dis_horn_button),
+#                           shortcuts=[('<Control-h>', '<Control-H>')])
+
+root.bind_all('<Control-h>', lambda event: on_dis_horn_button_click(dis_horn_button))
+root.bind_all('<Control-H>', lambda event: on_dis_horn_button_click(dis_horn_button))
 
 # Test to ensure that <Control-h> triggers
-root.bind('<Control-h>', lambda event: print("Ctrl+H shortcut detected in root"))  # Test at the root level
+# root.bind('<Control-h>', lambda event: print("Ctrl+H shortcut detected in root"))  # Test at the root level
 
-# Test to ensure that <Control-h> triggers
-root.bind('<Control-d>', lambda event: print("Ctrl+D shortcut detected in root"))  # Test at the root level
+# # Test to ensure that <Control-h> triggers
+# root.bind('<Control-d>', lambda event: print("Ctrl+D shortcut detected in root"))  # Test at the root level
+
+# root.bind('<Control-r>', lambda event: print("Ctrl+R shortcut detected in root"))  # Test at the root level
 
 
 disable_control_buttons()
@@ -1864,6 +1874,8 @@ root.protocol("WM_DELETE_WINDOW", on_closing)
 
 
 root.mainloop()
+
+# root.focus_set()
 
 
 # 1. select LGV, 
