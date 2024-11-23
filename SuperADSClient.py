@@ -15,7 +15,7 @@ from queue import Queue, Empty
 import copy
 from ctypes import sizeof
 
-__version__ = '2.3.6'
+__version__ = '2.3.7'
 __icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
@@ -620,7 +620,7 @@ def on_dis_horn_button_click(button):
         print(f"Disable Horn pressed, value: {dis_horn_state}")
     else:
         dis_horn_state= False
-        print(f"Disable Horn presse unsuccessful, value: {dis_horn_state}")
+        print(f"Disable Horn pressed unsuccessful, value: {dis_horn_state}")
 
 press_successful = False
 cooldown_active = False  # Variable to track cooldown state
@@ -1032,7 +1032,12 @@ def open_variable_window():
     variable_window = tk.Toplevel(root)
     variable_window.title("Set Variables")
 
-    variable_window.resizable(False,False)
+    window_width = 420
+    window_lenght = 310
+    variable_window.geometry(f"{window_width}x{window_lenght}")
+    variable_window.minsize(window_width, window_lenght)
+
+    # variable_window.resizable(False,False)
 
     def clear_entries():
         for entry in entries.values():
@@ -1106,6 +1111,63 @@ def on_variable_window_close():
    
 
 ####################################################################################################################################################################
+############################################################## Window To Show Shortcuts ############################################################################
+####################################################################################################################################################################
+shortcuts_window = None 
+
+def open_shortcuts_window_cond():
+    global shortcuts_window
+
+    if shortcuts_window is not None and shortcuts_window.winfo_exists():
+        shortcuts_window.lift()
+        shortcuts_window.focus_force()
+    else:
+        open_shortcuts_window()
+
+def open_shortcuts_window():
+    global shortcuts_window
+
+    shortcuts_window = tk.Toplevel(root)
+    shortcuts_window.title("Shortcuts")
+
+    window_width = 360
+    window_lenght = 300
+    shortcuts_window.geometry(f"{window_width}x{window_lenght}")
+    shortcuts_window.minsize(window_width, window_lenght)
+
+    # Add a label for the title
+    tk.Label(shortcuts_window, text="Available Shortcuts", font=("Segoe UI", 14)).pack(pady=10)
+
+    # Add a frame to contain the shortcuts in a neat layout
+    shortcuts_frame = tk.Frame(shortcuts_window)
+    shortcuts_frame.pack(fill="both", expand=True, padx=10, pady=5)
+
+    # Define the shortcuts and descriptions
+    shortcuts = [
+        ("Ctrl+R", "Reset"),
+        ("Ctrl+G", "Run"),
+        ("Ctrl+S", "Stop"),
+        ("Ctrl+M", "Man/Auto"),
+        ("Ctrl+H", "Disable Horn"),
+        ("Ctrl+C", "Connect to selected LGV"),
+        ("Ctrl+T", "Select first element from the table"),
+    ]
+
+    # Display each shortcut in the frame
+    for shortcut, description in shortcuts:
+        tk.Label(shortcuts_frame, text=shortcut, font=("Segoe UI", 12, "bold")).grid(row=shortcuts.index((shortcut, description)), column=0, sticky="w", padx=10, pady=2)
+        tk.Label(shortcuts_frame, text=description, font=("Segoe UI", 12)).grid(row=shortcuts.index((shortcut, description)), column=1, sticky="w", padx=10, pady=2)
+
+    # Handle window close event to reset the reference
+    shortcuts_window.protocol("WM_DELETE_WINDOW", on_shortcuts_window_close)
+
+
+def on_shortcuts_window_close():
+    global shortcuts_window
+    shortcuts_window.destroy()  # Destroy the window
+    shortcuts_window = None  # Reset the reference so it can be reopened
+
+####################################################################################################################################################################
 ######################################################## Window To Read/Write Custom Variables #####################################################################
 ####################################################################################################################################################################
 read_write_window = None 
@@ -1126,7 +1188,10 @@ def open_read_write_window():
     read_write_window = tk.Toplevel(root)
     read_write_window.title("Read/Write ")
 
-    read_write_window.resizable(False,False)
+    window_width = 475
+    window_lenght = 375
+    read_write_window.geometry(f"{window_width}x{window_lenght}")
+    read_write_window.minsize(window_width, window_lenght)
 
     RW_VARIABLES_FILE = "rw_variables.json"
 
@@ -1139,7 +1204,6 @@ def open_read_write_window():
         'LibraryInterfaces.FileManagement.loadRequest[3]']
     
     
-
     def load_custom_variables():
         if os.path.exists(RW_VARIABLES_FILE):
             try:
@@ -1714,11 +1778,15 @@ menu_bar.add_cascade(label="  File ", menu=file_menu)
 options_menu = tk.Menu(menu_bar, tearoff=0)
 options_menu.add_command(label="Set Variables    ", command=open_variable_window_cond)
 options_menu.add_command(label="Reset to Defaults ", command=reset_to_defaults)
-menu_bar.add_cascade(label=" Options  ", menu=options_menu) 
+menu_bar.add_cascade(label=" Options ", menu=options_menu) 
 
 more_menu = tk.Menu(menu_bar, tearoff=0)
 more_menu.add_command(label="Read/Write    ", command=open_read_write_window_cond)
-menu_bar.add_cascade(label="More", menu=more_menu)
+menu_bar.add_cascade(label=" More ", menu=more_menu)
+
+about_menu = tk.Menu(menu_bar, tearoff=0)
+about_menu.add_command(label="Shortcuts    ", command=open_shortcuts_window_cond)
+menu_bar.add_cascade(label=" About", menu=about_menu)
 
    
 
