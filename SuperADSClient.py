@@ -1902,8 +1902,10 @@ bind_button_actions(man_auto_button, 'man_auto',
 
 dis_horn_button = ttk.Button(button_frame, 
                              text="Disable Horn", 
-                             style='LGV.TButton')
+                             style='LGV.TButton', 
+                             command=lambda: on_dis_horn_button_click(dis_horn_button))
 dis_horn_button.pack(pady=5, fill='both', expand=True, ipady=3)
+
 
 # bind_toggle_button_action(dis_horn_button, 
 #                         #   function=on_test_button_click, 
@@ -1923,7 +1925,7 @@ root.bind_all('<Control-H>', lambda event: on_dis_horn_button_click(dis_horn_but
 
 
 disable_control_buttons()
-enable_control_buttons() #Uncomment for testing
+# enable_control_buttons() #Uncomment for testing
 
 load_table_data_from_xml(treeview)
 
