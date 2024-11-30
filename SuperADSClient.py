@@ -24,6 +24,11 @@ current_ads_connection = None
 connection_active = False
 
 ####################################################################################################################################################################
+########################################################## Initial data reading from xml file ######################################################################
+####################################################################################################################################################################
+def populate_table_from_xml():
+    print("Load StaticRoutes.xml file")
+####################################################################################################################################################################
 ########################################################## Initial data reading from db3 file ######################################################################
 ####################################################################################################################################################################
 
@@ -1771,6 +1776,7 @@ menu_bar = tk.Menu(root)
 
 file_menu = tk.Menu(menu_bar, tearoff=0)
 file_menu.add_command(label=" Load Config.db3 ", command=populate_table_from_db3)  # Add Load Config option
+file_menu.add_command(label=" Load StaticRoutes.xml", command=populate_table_from_xml) # Add Load StaticRoutes option
 file_menu.add_command(label=" Exit ", command=root.quit)  # Add Exit option
 menu_bar.add_cascade(label="  File ", menu=file_menu)
 
