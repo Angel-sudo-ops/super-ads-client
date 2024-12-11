@@ -24,5 +24,6 @@
     "Operation.warehouse.warehousePar.enableStopWithPLSRear",
     "Operation.warehouse.warehousePar.anticipateLift",
     "SpareVariables.boolSpare[0]",
-    "CoreGVL.FlexSeg.Status"
+    "CoreGVL.FlexSeg.Status",
+    "Operation.current.name"
 ]

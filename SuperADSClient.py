@@ -1344,7 +1344,6 @@ def open_read_write_window():
         'REAL'      : pyads.PLCTYPE_REAL,
         'LREAL'     : pyads.PLCTYPE_LREAL,
         'STRING'    : pyads.PLCTYPE_STRING,
-        'STRING(80)': pyads.PLCTYPE_STRING,
         'BYTE'      : pyads.PLCTYPE_BYTE,
         'WORD'      : pyads.PLCTYPE_WORD,
         'DWORD'     : pyads.PLCTYPE_DWORD,
@@ -1365,8 +1364,11 @@ def open_read_write_window():
 
     def get_pyads_type(symbol_type_str):
         """Map the symbol type string to a pyads type."""
+        # Normalize the symbol type string
+        normalized_type = symbol_type_str.strip().split('(')[0]
+
         # Check if the type is a known standard type
-        standard_type = SYMBOL_TYPE_MAP.get(symbol_type_str.strip())
+        standard_type = SYMBOL_TYPE_MAP.get(normalized_type)
         if standard_type:
             return standard_type
 
