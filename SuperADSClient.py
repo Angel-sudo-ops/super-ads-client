@@ -15,7 +15,7 @@ from queue import Queue, Empty
 import copy
 from ctypes import sizeof
 
-__version__ = '2.3.7'
+__version__ = '2.3.8'
 __icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
@@ -1180,11 +1180,11 @@ read_write_window = None
 def open_read_write_window_cond():
     global read_write_window
 
-    if read_write_window is not None and read_write_window.winfo_exists():
-        read_write_window.lift()
-        read_write_window.focus_force()
-    else:
-        open_read_write_window()
+    # if read_write_window is not None and read_write_window.winfo_exists():
+    #     read_write_window.lift()
+    #     read_write_window.focus_force()
+    # else:
+    open_read_write_window()
 
 
 def open_read_write_window():
@@ -1338,28 +1338,29 @@ def open_read_write_window():
 
     # Mapping of symbol type strings to pyads data types
     SYMBOL_TYPE_MAP = {
-        'BOOL'   : pyads.PLCTYPE_BOOL,
-        'INT'    : pyads.PLCTYPE_INT,
-        'DINT'   : pyads.PLCTYPE_DINT,
-        'REAL'   : pyads.PLCTYPE_REAL,
-        'LREAL'  : pyads.PLCTYPE_LREAL,
-        'STRING' : pyads.PLCTYPE_STRING,
-        'BYTE'   : pyads.PLCTYPE_BYTE,
-        'WORD'   : pyads.PLCTYPE_WORD,
-        'DWORD'  : pyads.PLCTYPE_DWORD,
-        # 'LWORD'  : pyads.PLCTYPE_LWORD,
-        'SINT'   : pyads.PLCTYPE_SINT,
-        'USINT'  : pyads.PLCTYPE_USINT,
-        'UINT'   : pyads.PLCTYPE_UINT,
-        'UDINT'  : pyads.PLCTYPE_UDINT,
-        'LINT'   : pyads.PLCTYPE_LINT,
-        'ULINT'  : pyads.PLCTYPE_ULINT,
-        'TIME'   : pyads.PLCTYPE_TIME,
-        # 'LTIME'  : pyads.PLCTYPE_LTIME,
-        'DATE'   : pyads.PLCTYPE_DATE,
-        'TOD'    : pyads.PLCTYPE_TOD,  # Time of Day
-        'DT'     : pyads.PLCTYPE_DT,    # Date and Time
-        'WSTRING': pyads.PLCTYPE_WSTRING,
+        'BOOL'      : pyads.PLCTYPE_BOOL,
+        'INT'       : pyads.PLCTYPE_INT,
+        'DINT'      : pyads.PLCTYPE_DINT,
+        'REAL'      : pyads.PLCTYPE_REAL,
+        'LREAL'     : pyads.PLCTYPE_LREAL,
+        'STRING'    : pyads.PLCTYPE_STRING,
+        'STRING(80)': pyads.PLCTYPE_STRING,
+        'BYTE'      : pyads.PLCTYPE_BYTE,
+        'WORD'      : pyads.PLCTYPE_WORD,
+        'DWORD'     : pyads.PLCTYPE_DWORD,
+        # 'LWORD'     : pyads.PLCTYPE_LWORD,
+        'SINT'      : pyads.PLCTYPE_SINT,
+        'USINT'     : pyads.PLCTYPE_USINT,
+        'UINT'      : pyads.PLCTYPE_UINT,
+        'UDINT'     : pyads.PLCTYPE_UDINT,
+        'LINT'      : pyads.PLCTYPE_LINT,
+        'ULINT'     : pyads.PLCTYPE_ULINT,
+        'TIME'      : pyads.PLCTYPE_TIME,
+        # 'LTIME'     : pyads.PLCTYPE_LTIME,
+        'DATE'      : pyads.PLCTYPE_DATE,
+        'TOD'       : pyads.PLCTYPE_TOD,  # Time of Day
+        'DT'        : pyads.PLCTYPE_DT,    # Date and Time
+        'WSTRING'   : pyads.PLCTYPE_WSTRING,
     }
 
     def get_pyads_type(symbol_type_str):
@@ -1970,3 +1971,7 @@ root.mainloop()
 
 # Ponerle keyboard shortcut a los botones
 # Ctrl + R, G, S, M, D
+
+
+
+# Usar coma para separar varias variables y leerlas al mismo tiempo, para escribir solo una

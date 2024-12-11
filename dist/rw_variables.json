@@ -23,5 +23,10 @@
     "Devices.Pressure.tilt.rawValue",
     "Operation.warehouse.warehousePar.enableStopWithPLSRear",
     "Operation.warehouse.warehousePar.anticipateLift",
-    "SpareVariables.boolSpare[0]"
+    "SpareVariables.boolSpare[0]",
+    "LibraryInterfaces.LGV.Guid.Rout.remDistToOP",
+    "LibraryInterfaces.LGV.Guid.Rout.Allocated_Segment_Info.Remaining_Segment_Num",
+    "FlexSegPhaseHandler.preOpDistFromTheEnd",
+    "FlexSegPhaseHandler.segDistAvailable",
+    "CoreGVL.FlexSeg.Status"
 ]
