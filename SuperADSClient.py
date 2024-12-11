@@ -1363,19 +1363,32 @@ def open_read_write_window():
     }
 
     def get_pyads_type(symbol_type_str):
-        """Map the symbol type string to a pyads type."""
-        # Normalize the symbol type string
-        normalized_type = symbol_type_str.strip().split('(')[0]
+        """
+        Map the symbol type string to a pyads type, handling arrays and other variations.
+        """
+        # Normalize the type string: Remove array and dimensions, strip whitespace
+        array_match = re.search(r'ARRAY\s*\[.*?\]\s*OF\s*(\w+)', symbol_type_str.strip(), re.IGNORECASE)
+        
+        if array_match:
+            # Extract the base type from the array declaration
+            base_type = array_match.group(1).strip()
+            if base_type in SYMBOL_TYPE_MAP:
+                return SYMBOL_TYPE_MAP[base_type]
+            else:
+                print(f"Unknown array type detected: {symbol_type_str}. Defaulting to BYTE.")
+                return pyads.PLCTYPE_BYTE  # Default for unknown array types
 
-        # Check if the type is a known standard type
+        # Remove any other dimensions or custom suffixes (e.g., STRING(80))
+        normalized_type = re.sub(r'\(.*?\)', '', symbol_type_str.strip())
+
+        # Map to a known type
         standard_type = SYMBOL_TYPE_MAP.get(normalized_type)
         if standard_type:
             return standard_type
 
-        # If it's not a standard type, assume it could be an enum or custom type
-        # Default to BYTE for enums or custom types unless otherwise needed
+        # Handle unknown or custom types
         print(f"Unknown type detected: {symbol_type_str}. Defaulting to BYTE.")
-        return pyads.PLCTYPE_BYTE  # Adjust if other types like INT are more appropriate
+        return pyads.PLCTYPE_BYTE  # Default for unknown types
 
 
     def check_type(value):

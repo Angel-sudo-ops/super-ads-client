@@ -25,5 +25,6 @@
     "Operation.warehouse.warehousePar.anticipateLift",
     "SpareVariables.boolSpare[0]",
     "CoreGVL.FlexSeg.Status",
-    "Operation.current.name"
+    "Operation.current.name",
+    "SpareVariables.boolSpare"
 ]
