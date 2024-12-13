@@ -15,7 +15,7 @@ from queue import Queue, Empty
 import copy
 from ctypes import sizeof
 
-__version__ = '2.3.8'
+__version__ = '2.3.9'
 __icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
@@ -1561,7 +1561,8 @@ def open_read_write_window():
                 print(f"Successfully read {value} from {variable_name} for LGV {lgv}")
 
                 # Extract the last part of the variable name for the log
-                variable_last_part = variable_name.split('.')[-1]
+                variable_parts = variable_name.split('.')
+                variable_last_part = '.'.join(variable_parts[-2:])  # e.g., "lift.weight"
                 
                 # Add result to queue
                 result_queue.put((lgv, f"{variable_last_part} value in LGV{lgv:02d} is {value}"))
@@ -1627,33 +1628,50 @@ def open_read_write_window():
                     target=read_variable_for_lgv, 
                     args=(lgv, ams_net_id, tc_type, variable_name, result_queue)
                 )
+                thread.daemon = True
                 thread.start()
-                threads.apppend(thread)
+                threads.append(thread)
 
-        # Wait for threads to complete with a timeout
-        timeout = 5  # seconds
+        # Start a background thread to monitor results
+        threading.Thread(
+            target=process_results_in_background,
+            args=(threads, result_queue, lgv_data),
+            daemon=True
+        ).start()
+
+    def process_results_in_background(threads, result_queue, lgv_data):
+        """Monitor threads and process results in the background."""
+        timeout = 1
         start_time = time.time()
+
+        # Wait for threads to finish or timeout
         while any(t.is_alive() for t in threads):
             if time.time() - start_time > timeout:
-                print("Timeout reached, skipping remaining threads.")
                 break
-            time.sleep(0.1)  # Prevent busy-waiting
+            time.sleep(0.1)
 
-        # Collect results and log them in order
+        # Collect results
         results = {}
         while not result_queue.empty():
             lgv, result = result_queue.get()
-            results[lgv] = result
+            results.setdefault(lgv, []).append(result)
 
-        # Log results in order
-        for lgv in sorted(results):
-            log_message(results[lgv])
-
-        # Handle missing LGVs
+        # Update the UI with results
         all_lgvs = {lgv for lgv, _, _ in lgv_data}
         missing_lgvs = all_lgvs - set(results.keys())
+
+        # Use tkinter's `after` method to update UI safely
+        root.after(0, update_results_in_ui, results, missing_lgvs)
+    
+    def update_results_in_ui(results, missing_lgvs):
+        """Update the UI with results."""
+        for lgv, logs in sorted(results.items()):
+            for log in logs:
+                log_message(log)
+
         for lgv in sorted(missing_lgvs):
             log_message(f"LGV{lgv:02d} did not respond or timed out.")
+
 
     def on_radio_selection():
         """Disable value entry if True/False radio is selected."""
