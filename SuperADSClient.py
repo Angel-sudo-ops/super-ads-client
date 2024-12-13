@@ -1542,9 +1542,38 @@ def open_read_write_window():
                 args=(lgv, ams_net_id, tc_type, variable_name, value)
             ).start()
 
+    
+    def process_variable_names(variables):
+        """
+        Process variable names to determine how many parts to include for uniqueness.
+        If the last parts are unique, keep only the last part.
+        If duplicates exist, include the second-to-last part for disambiguation.
+        """
+        last_parts = {}
+        processed_variables = {}
+
+        # Collect occurrences of last parts
+        for variable in variables:
+            parts = variable.split('.')
+            last_part = parts[-1]
+            last_parts.setdefault(last_part, []).append(variable)
+
+        # Determine the display names for variables
+        for last_part, full_vars in last_parts.items():
+            if len(full_vars) > 1:  # Duplicate last parts found
+                # Include the second-to-last part for these variables
+                for var in full_vars:
+                    parts = var.split('.')
+                    processed_variables[var] = '.'.join(parts[-2:])  # Take last two parts
+            else:  # No duplicate, keep only the last part
+                var = full_vars[0]
+                parts = var.split('.')
+                processed_variables[var] = parts[-1]  # Keep only the last part
+
+        return processed_variables
 
 
-    def read_variable_for_lgv(lgv, ams_net_id, tc_type, variable_name, result_queue):
+    def read_variable_for_lgv(lgv, ams_net_id, tc_type, variable_name, display_name, result_queue):
         """Handle reading for each LGV in its own thread."""
         try:
             port = 851 if tc_type == "TC3" else 801
@@ -1560,13 +1589,9 @@ def open_read_write_window():
                 # Read the value from the PLC
                 value = ads_connection.read_by_name(variable_name, expected_type)
                 print(f"Successfully read {value} from {variable_name} for LGV {lgv}")
-
-                # Extract the last part of the variable name for the log
-                variable_parts = variable_name.split('.')
-                variable_last_part = '.'.join(variable_parts[-2:])  # e.g., "lift.weight"
                 
                 # Add result to queue
-                result_queue.put((lgv, f"{variable_last_part} value in LGV{lgv:02d} is {value}"))
+                result_queue.put((lgv, f"LGV{lgv:02d}: {display_name} is {value}"))
 
                 # # Log the read value
                 # log_message(f"{variable_last_part} value in LGV{lgv:02d} is {value}")
@@ -1574,24 +1599,6 @@ def open_read_write_window():
         except Exception as e:
             # Add error result to queue
             result_queue.put((lgv, f"Error reading LGV{lgv:02d}: {e}"))
-
-        # except pyads.ADSError as ads_err:
-        #     # Handle ADS-specific errors with more detail
-        #     error_message = f"Error reading from LGV{lgv:02d}: {ads_err}"
-        #     print(error_message)
-        #     log_message(error_message)
-
-        # except ValueError as val_err:
-        #     # Handle type-related errors
-        #     error_message = f"Value Error for LGV{lgv:02d}: {val_err}"
-        #     print(error_message)
-        #     log_message(error_message)
-
-        # except Exception as e:
-        #     # Handle any other general exceptions
-        #     error_message = f"Unexpected error for LGV{lgv:02d}: {str(e)}"
-        #     print(error_message)
-        #     log_message(error_message)
 
     def read_variable():
         """Start the read operation for all selected LGVs."""
@@ -1612,6 +1619,9 @@ def open_read_write_window():
             print("No valid variable names found!")
             log_message("No valid variable names found!")
             return
+        
+        # Preprocess variable names for unique representation
+        processed_variables = process_variable_names(variables)
 
         # Get the validated LGV data
         lgv_data = validate_and_link_lgv()
@@ -1624,10 +1634,10 @@ def open_read_write_window():
 
         # Start a thread for each LGV to perform the read operation
         for lgv, ams_net_id, tc_type in lgv_data:
-            for variable_name in variables:
+            for variable_name, display_name in processed_variables.items():
                 thread = threading.Thread(
                     target=read_variable_for_lgv, 
-                    args=(lgv, ams_net_id, tc_type, variable_name, result_queue)
+                    args=(lgv, ams_net_id, tc_type, variable_name, display_name, result_queue)
                 )
                 thread.daemon = True
                 thread.start()
