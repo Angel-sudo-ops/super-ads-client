@@ -336,6 +336,7 @@ def connect_to_plc():
 
     # Start the connection in a new thread
     connection_thread = threading.Thread(target=background_connect, args=(lgv_data,))
+
     connection_thread.start()
 
 
@@ -1641,7 +1642,7 @@ def open_read_write_window():
 
     def process_results_in_background(threads, result_queue, lgv_data):
         """Monitor threads and process results in the background."""
-        timeout = 1
+        timeout = 0.5
         start_time = time.time()
 
         # Wait for threads to finish or timeout
