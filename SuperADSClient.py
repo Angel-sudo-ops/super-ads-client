@@ -1543,7 +1543,7 @@ def open_read_write_window():
 
 
 
-    def read_variable_for_lgv(lgv, ams_net_id, tc_type, variable_name):
+    def read_variable_for_lgv(lgv, ams_net_id, tc_type, variable_name, result_queue):
         """Handle reading for each LGV in its own thread."""
         try:
             port = 851 if tc_type == "TC3" else 801
@@ -1563,26 +1563,33 @@ def open_read_write_window():
                 # Extract the last part of the variable name for the log
                 variable_last_part = variable_name.split('.')[-1]
                 
-                # Log the read value
-                log_message(f"{variable_last_part} value in LGV{lgv:02d} is {value}")
+                # Add result to queue
+                result_queue.put((lgv, f"{variable_last_part} value in LGV{lgv:02d} is {value}"))
 
-        except pyads.ADSError as ads_err:
-            # Handle ADS-specific errors with more detail
-            error_message = f"Error reading from LGV{lgv:02d}: {ads_err}"
-            print(error_message)
-            log_message(error_message)
-
-        except ValueError as val_err:
-            # Handle type-related errors
-            error_message = f"Value Error for LGV{lgv:02d}: {val_err}"
-            print(error_message)
-            log_message(error_message)
+                # # Log the read value
+                # log_message(f"{variable_last_part} value in LGV{lgv:02d} is {value}")
 
         except Exception as e:
-            # Handle any other general exceptions
-            error_message = f"Unexpected error for LGV{lgv:02d}: {str(e)}"
-            print(error_message)
-            log_message(error_message)
+            # Add error result to queue
+            result_queue.put((lgv, f"Error reading LGV{lgv:02d}: {e}"))
+
+        # except pyads.ADSError as ads_err:
+        #     # Handle ADS-specific errors with more detail
+        #     error_message = f"Error reading from LGV{lgv:02d}: {ads_err}"
+        #     print(error_message)
+        #     log_message(error_message)
+
+        # except ValueError as val_err:
+        #     # Handle type-related errors
+        #     error_message = f"Value Error for LGV{lgv:02d}: {val_err}"
+        #     print(error_message)
+        #     log_message(error_message)
+
+        # except Exception as e:
+        #     # Handle any other general exceptions
+        #     error_message = f"Unexpected error for LGV{lgv:02d}: {str(e)}"
+        #     print(error_message)
+        #     log_message(error_message)
 
     def read_variable():
         """Start the read operation for all selected LGVs."""
@@ -1609,13 +1616,44 @@ def open_read_write_window():
         if lgv_data is None:
             return  # Exit if validation failed
 
+        # Result queue and thread tracking
+        result_queue = Queue()
+        threads = []
+
         # Start a thread for each LGV to perform the read operation
         for lgv, ams_net_id, tc_type in lgv_data:
             for variable_name in variables:
-                threading.Thread(
+                thread = threading.Thread(
                     target=read_variable_for_lgv, 
-                    args=(lgv, ams_net_id, tc_type, variable_name)
-                ).start()
+                    args=(lgv, ams_net_id, tc_type, variable_name, result_queue)
+                )
+                thread.start()
+                threads.apppend(thread)
+
+        # Wait for threads to complete with a timeout
+        timeout = 5  # seconds
+        start_time = time.time()
+        while any(t.is_alive() for t in threads):
+            if time.time() - start_time > timeout:
+                print("Timeout reached, skipping remaining threads.")
+                break
+            time.sleep(0.1)  # Prevent busy-waiting
+
+        # Collect results and log them in order
+        results = {}
+        while not result_queue.empty():
+            lgv, result = result_queue.get()
+            results[lgv] = result
+
+        # Log results in order
+        for lgv in sorted(results):
+            log_message(results[lgv])
+
+        # Handle missing LGVs
+        all_lgvs = {lgv for lgv, _, _ in lgv_data}
+        missing_lgvs = all_lgvs - set(results.keys())
+        for lgv in sorted(missing_lgvs):
+            log_message(f"LGV{lgv:02d} did not respond or timed out.")
 
     def on_radio_selection():
         """Disable value entry if True/False radio is selected."""
