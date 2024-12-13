@@ -1275,13 +1275,16 @@ def open_read_write_window():
             if normalized_new_variable.lower() in (var.lower() for var in normalized_existing_variables):
                 # messagebox.showwarning("Duplicate Entry", "This variable already exists.")
                 print("Variable already exists")
+                log_message("Variable already exists")
             else:
                 custom_rw_variables.append(normalized_new_variable)
                 save_variables(custom_rw_variables)
                 update_variable_menu()
                 print(f"Variable {new_variable} successfully added!")
+                log_message(f"Variable {new_variable} successfully added!")
         else:
             print("Please enter a valid variable name.")
+            log_message("Please enter a valid variable name.")
         
 
     result_var = tk.StringVar()
