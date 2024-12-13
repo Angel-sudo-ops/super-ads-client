@@ -15,7 +15,7 @@ from queue import Queue, Empty
 import copy
 from ctypes import sizeof
 
-__version__ = '2.3.9'
+__version__ = '2.4.0'
 __icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
@@ -1787,6 +1787,12 @@ def open_read_write_window():
     read_button.grid(row=0, column=0, padx=10, ipadx=2, ipady=2)
     write_button = ttk.Button(button_frame, text="Write", command=write_variable)
     write_button.grid(row=0, column=1, padx=10, ipadx=2, ipady=2)
+
+    # Bind keyboard shortcuts to the toplevel window
+    read_write_window.bind("<Control-r>", lambda event: read_variable())
+    read_write_window.bind("<Control-R>", lambda event: read_variable())
+    read_write_window.bind("<Control-w>", lambda event: write_variable())
+    read_write_window.bind("<Control-W>", lambda event: write_variable())
 
     status_widget = scrolledtext.ScrolledText(
         read_write_window, undo=True, wrap=tk.WORD, height=10, width=50
