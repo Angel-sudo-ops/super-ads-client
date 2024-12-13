@@ -1180,11 +1180,11 @@ read_write_window = None
 def open_read_write_window_cond():
     global read_write_window
 
-    # if read_write_window is not None and read_write_window.winfo_exists():
-    #     read_write_window.lift()
-    #     read_write_window.focus_force()
-    # else:
-    open_read_write_window()
+    if read_write_window is not None and read_write_window.winfo_exists():
+        read_write_window.lift()
+        read_write_window.focus_force()
+    else:
+        open_read_write_window()
 
 
 def open_read_write_window():

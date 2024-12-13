@@ -28,5 +28,8 @@
     "LibraryInterfaces.LGV.Guid.Rout.Allocated_Segment_Info.Remaining_Segment_Num",
     "FlexSegPhaseHandler.preOpDistFromTheEnd",
     "FlexSegPhaseHandler.segDistAvailable",
-    "CoreGVL.FlexSeg.Status"
+    "CoreGVL.FlexSeg.Status",
+    "Guidance.Bypass_Lgt_error",
+    "LibraryInterfaces.LGV.Guid.Rout.remDistToPreOP",
+    "Guidance.force_bypass_lgtErr"
 ]
