@@ -1559,9 +1559,12 @@ def open_read_write_window():
                 # Read the value from the PLC
                 value = ads_connection.read_by_name(variable_name, expected_type)
                 print(f"Successfully read {value} from {variable_name} for LGV {lgv}")
+
+                # Extract the last part of the variable name for the log
+                variable_last_part = variable_name.split('.')[-1]
                 
                 # Log the read value
-                log_message(f"Variable value in LGV{lgv:02d} is {value}")
+                log_message(f"{variable_last_part} value in LGV{lgv:02d} is {value}")
 
         except pyads.ADSError as ads_err:
             # Handle ADS-specific errors with more detail
@@ -1585,12 +1588,20 @@ def open_read_write_window():
         """Start the read operation for all selected LGVs."""
         clear_status()
 
-        variable_name = variable_menu.get().strip()  # Get the variable name directly
+        variable_names = variable_menu.get().strip()  # Get the variable name directly
 
-        if variable_name == '':
+        if variable_names == '':
             # messagebox.showerror("Error", "Variable name missing!")
             print("Variable name missing!")
             log_message("Variable name missing!")
+            return
+
+        # Split the input by commas and strip each variable name
+        variables = [var.strip() for var in variable_names.split(',') if var.strip()]
+
+        if not variables:
+            print("No valid variable names found!")
+            log_message("No valid variable names found!")
             return
 
         # Get the validated LGV data
@@ -1600,10 +1611,11 @@ def open_read_write_window():
 
         # Start a thread for each LGV to perform the read operation
         for lgv, ams_net_id, tc_type in lgv_data:
-            threading.Thread(
-                target=read_variable_for_lgv, 
-                args=(lgv, ams_net_id, tc_type, variable_name)
-            ).start()
+            for variable_name in variables:
+                threading.Thread(
+                    target=read_variable_for_lgv, 
+                    args=(lgv, ams_net_id, tc_type, variable_name)
+                ).start()
 
     def on_radio_selection():
         """Disable value entry if True/False radio is selected."""
