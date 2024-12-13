@@ -336,7 +336,7 @@ def connect_to_plc():
 
     # Start the connection in a new thread
     connection_thread = threading.Thread(target=background_connect, args=(lgv_data,))
-
+    connection_thread.daemon = True
     connection_thread.start()
 
 
