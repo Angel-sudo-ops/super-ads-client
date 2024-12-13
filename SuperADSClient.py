@@ -1428,7 +1428,7 @@ def open_read_write_window():
         if handles[user_handle]["expected_value"] == value:
             handles[user_handle]["stop_event"].set()  # Signal to stop notification
 
-    def write_variable_for_lgv(lgv, ams_net_id, tc_type, variable_name, value):
+    def write_variable_for_lgv(lgv, ams_net_id, tc_type, variable_name, display_name, value, result_queue):
         """Write a variable and confirm it via ADS notification."""
         # stop_event = threading.Event()  # Event to track when the notification should stop
         handle_id = get_new_handle_id()
@@ -1462,7 +1462,7 @@ def open_read_write_window():
 
                 # Write the value to the PLC using the provided variable name
                 ads_connection.write_by_name(variable_name, value, expected_type)
-                print(f"Attempting to write {value} to {variable_name} for LGV {lgv}")
+                # print(f"Attempting to write {value} to {variable_name} for LGV {lgv}")
 
                 # # Wait for the notification to confirm the change or timeout after 5 seconds
                 # if not stop_event.wait(timeout=5):
@@ -1470,28 +1470,32 @@ def open_read_write_window():
                 #     log_message(f"Error: {variable_name} not confirmed for LGV{lgv:02d}")
                 # else:
                 #     print(f"Successfully wrote {value} to {variable_name} for LGV {lgv}")
-                log_message(f"Variable value in LGV{lgv:02d} is now {value}")
+                print(f"Variable value in LGV{lgv:02d} is now {value}")
+                # Add result to queue
+                result_queue.put((lgv, f"LGV{lgv:02d}: {display_name} is now {value}"))
 
                 # Remove the notification after use
                 # ads_connection.del_device_notification(notification_handle, handle_id)
-
-        except pyads.ADSError as ads_err:
-            # Handle ADS-specific errors with more detail
-            error_message = f"Error writing to LGV{lgv:02d}: {ads_err}"
-            print(error_message)
-            log_message(error_message)
-
-        except ValueError as val_err:
-            # Handle type-related errors
-            error_message = f"Value Error for LGV{lgv:02d}: {val_err}"
-            print(error_message)
-            log_message(error_message)
-
         except Exception as e:
-            # Handle any other general exceptions
-            error_message = f"Unexpected error for LGV{lgv:02d}: {str(e)}"
-            print(error_message)
-            log_message(error_message)
+            # Add error result to queue
+            result_queue.put((lgv, f"Error writing to LGV{lgv:02d}: {e}"))   
+        # except pyads.ADSError as ads_err:
+        #     # Handle ADS-specific errors with more detail
+        #     error_message = f"Error writing to LGV{lgv:02d}: {ads_err}"
+        #     print(error_message)
+        #     log_message(error_message)
+
+        # except ValueError as val_err:
+        #     # Handle type-related errors
+        #     error_message = f"Value Error for LGV{lgv:02d}: {val_err}"
+        #     print(error_message)
+        #     log_message(error_message)
+
+        # except Exception as e:
+        #     # Handle any other general exceptions
+        #     error_message = f"Unexpected error for LGV{lgv:02d}: {str(e)}"
+        #     print(error_message)
+        #     log_message(error_message)
 
     
     def convert_to_number(user_input):
@@ -1509,13 +1513,24 @@ def open_read_write_window():
         """Start the write operation for all selected LGVs."""
         clear_status()
 
-        variable_name = variable_menu.get().strip()  # Directly get the variable name
+        variable_names = variable_menu.get().strip()  # Directly get the variable name
 
-        if variable_name == '':
+        if variable_names == '':
             # messagebox.showerror("Error", "Variable name missing!")
             print("Variable name missing!")
             log_message("Variable name missing!")
             return
+
+        # Split the input by commas and strip each variable name
+        variables = [var.strip() for var in variable_names.split(',') if var.strip()]
+
+        if not variables:
+            print("No valid variable names found!")
+            log_message("No valid variable names found!")
+            return
+        
+        # Preprocess variable names for unique representation
+        processed_variables = process_variable_names(variables)
 
         # Get the validated LGV data
         lgv_data = validate_and_link_lgv()
@@ -1523,6 +1538,9 @@ def open_read_write_window():
             # messagebox.showerror("Error", "LGV range is empty")
             return  # Exit if validation failed
 
+        # Result queue and thread tracking
+        result_queue = Queue()
+        threads = []
         
         radio_value = var_type.get()
         entry_value = value_entry.get().strip()
@@ -1537,12 +1555,23 @@ def open_read_write_window():
         
         # Start a thread for each LGV to perform the write operation
         for lgv, ams_net_id, tc_type in lgv_data:
-            threading.Thread(
-                target=write_variable_for_lgv, 
-                args=(lgv, ams_net_id, tc_type, variable_name, value)
-            ).start()
+            for variable_name, display_name in processed_variables.items():
+                thread = threading.Thread(
+                    target=write_variable_for_lgv, 
+                    args=(lgv, ams_net_id, tc_type, variable_name, display_name, value, result_queue)
+                )
+                thread.daemon = True
+                thread.start()
+                threads.append(thread)
 
-    
+        # Start a background thread to monitor results
+        threading.Thread(
+            target=process_results_in_background,
+            args=(threads, result_queue, lgv_data),
+            daemon=True
+        ).start()
+        
+
     def process_variable_names(variables):
         """
         Process variable names to determine how many parts to include for uniqueness.
@@ -1758,7 +1787,6 @@ def open_read_write_window():
     read_button.grid(row=0, column=0, padx=10, ipadx=2, ipady=2)
     write_button = ttk.Button(button_frame, text="Write", command=write_variable)
     write_button.grid(row=0, column=1, padx=10, ipadx=2, ipady=2)
-
 
     status_widget = scrolledtext.ScrolledText(
         read_write_window, undo=True, wrap=tk.WORD, height=10, width=50
