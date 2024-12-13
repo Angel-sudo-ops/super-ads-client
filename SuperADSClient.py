@@ -15,7 +15,7 @@ from queue import Queue, Empty
 import copy
 from ctypes import sizeof
 
-__version__ = '2.4.0'
+__version__ = '2.4.1'
 __icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
@@ -1263,11 +1263,20 @@ def open_read_write_window():
         new_variable = variable_menu.get().strip()
 
         if new_variable:
-            if any(new_variable.lower() == var.lower() for var in default_rw_variables + custom_rw_variables):
+            # Normalize variable names to avoid issues with spaces around commas
+            normalized_new_variable = ','.join(part.strip() for part in new_variable.split(','))
+
+            # Normalize existing variables for comparison
+            normalized_existing_variables = [
+                ','.join(part.strip() for part in var.split(','))
+                for var in default_rw_variables + custom_rw_variables
+            ]
+
+            if normalized_new_variable.lower() in (var.lower() for var in normalized_existing_variables):
                 # messagebox.showwarning("Duplicate Entry", "This variable already exists.")
                 print("Variable already exists")
             else:
-                custom_rw_variables.append(new_variable)
+                custom_rw_variables.append(normalized_new_variable)
                 save_variables(custom_rw_variables)
                 update_variable_menu()
                 print(f"Variable {new_variable} successfully added!")
