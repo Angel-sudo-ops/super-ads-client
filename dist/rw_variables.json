@@ -31,5 +31,7 @@
     "CoreGVL.FlexSeg.Status",
     "Guidance.Bypass_Lgt_error",
     "LibraryInterfaces.LGV.Guid.Rout.remDistToPreOP",
-    "Guidance.force_bypass_lgtErr"
+    "Guidance.force_bypass_lgtErr",
+    "LibraryInterfaces.LGV.Guid.Rout.remDistToPreOP, LibraryInterfaces.LGV.Guid.Rout.remDistToOP",
+    "Devices.Pressure.tilt.weight, Devices.Pressure.lift.weight"
 ]
