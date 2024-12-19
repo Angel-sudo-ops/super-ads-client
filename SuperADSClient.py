@@ -15,9 +15,10 @@ from queue import Queue, Empty
 import copy
 from ctypes import sizeof
 
-__version__ = '2.4.2'
+__version__ = '2.4.3'
 __icon__ = "./plc.ico"
 
+LGV_DATA = "lgv_data.xml"
 # Variable to hold the current ads connection
 current_ads_connection = None
 
@@ -223,8 +224,15 @@ def populate_table_from_db3():
 
 
 # Save data to XML
-def save_table_data_to_xml(tree, filename="lgv_data.xml"):
+def save_table_data_to_xml(tree, filename=LGV_DATA):
+
+    # Check if there is any data in the Treeview
+    if not tree.get_children():
+        print("Treeview is empty. No data to save.")
+        return  # Exit the function if the Treeview is empty
+    
     lgv_list = ET.Element("LGVData")
+
     for row in tree.get_children():
         lgv = ET.SubElement(lgv_list, "LGV")
         lgv_data = tree.item(row)["values"]
@@ -239,11 +247,22 @@ def save_table_data_to_xml(tree, filename="lgv_data.xml"):
     with open(filename, "w", encoding='utf-8') as f:
         f.write(xmlstr)
 
+    print(f"Data successfully saved to {filename}.")
+
 # Load data from XML
-def load_table_data_from_xml(tree, filename="lgv_data.xml"):
-    if os.path.exists(filename):
+def load_table_data_from_xml(tree, filename=LGV_DATA):
+    if os.path.exists(filename):       
         tree_xml = ET.parse(filename)
         lgv_list = tree_xml.getroot()
+
+        # Check if there are any <LGV> elements
+        if not lgv_list.findall("LGV"):
+            print("The XML file has no LGV data, loading default table.")
+            # messagebox.showwarning("Warning", "The XML file contains no LGV data. Loading default table.")
+            messagebox.showinfo("Attention", "Default StaticRoutes.xml file loaded")
+            populate_table_from_xml("C:\\TwinCAT\\3.1\\Target\\StaticRoutes.xml")
+            return
+
         for lgv in lgv_list.findall("LGV"):
             lgv_name = lgv.find("Name").text
             ams_net_id = lgv.find("AMSNetId").text
@@ -584,7 +603,7 @@ def update_menu():
     else:
         options_menu.entryconfig("Reset to Defaults ", state="disabled")  # Disable if file doesn't exist
 
-    if os.path.exists("lgv_data.xml"):
+    if os.path.exists(LGV_DATA):
         more_menu.entryconfig("Read/Write    ", state="normal")  # Enable if file exists
     else:
         more_menu.entryconfig("Read/Write    ", state="disabled")  # Disable if file doesn't exist
