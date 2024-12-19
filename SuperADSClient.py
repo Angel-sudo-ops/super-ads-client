@@ -15,7 +15,7 @@ from queue import Queue, Empty
 import copy
 from ctypes import sizeof
 
-__version__ = '2.4.1'
+__version__ = '2.4.2'
 __icon__ = "./plc.ico"
 
 # Variable to hold the current ads connection
@@ -23,11 +23,105 @@ current_ads_connection = None
 
 connection_active = False
 
+
 ####################################################################################################################################################################
 ########################################################## Initial data reading from xml file ######################################################################
 ####################################################################################################################################################################
-def populate_table_from_xml():
+def extract_lgv_name(input_name):
+    # Regex pattern to capture 'LGV' followed by numbers
+    pattern = r"(LGV\d+)"
+    match = re.search(pattern, input_name)
+    if match:
+        return match.group(1)  # Return the matched 'LGVxx' or 'LGVxxx'
+    return None
+
+def populate_table_from_xml_test():
     print("Load StaticRoutes.xml file")
+
+def populate_table_from_xml(path=None):
+    if not path:
+        # Ask the user to select an XML file
+        file_path = filedialog.askopenfilename(title="Select StaticRoutes file", 
+                                            initialdir="C:\\TwinCAT\\3.1\\Target",
+                                            filetypes=[("XML files", "*.xml")])
+    else:
+        file_path = path
+
+    if file_path and not os.path.exists(file_path):
+        print(f"The file {path} does not exist.")
+        return
+    
+    if file_path:
+        try:
+            tree = ET.parse(file_path)
+            root = tree.getroot()
+        except ET.ParseError:
+            messagebox.showerror("Error", "The selected file is not a valid XML file.")
+            return
+
+        # Check for the expected root elements
+        remote_connections = root.find('RemoteConnections')
+        if remote_connections is None:
+            messagebox.showerror("Error", "XML file does not contain the expected 'RemoteConnections' structure.")
+            return
+        
+        data = treeview.get_children()
+        # Clear the existing table data
+        if data is not None:
+            for i in data:
+                treeview.delete(i)
+            
+        # Initialize an empty list to hold the data
+        routes_data = []
+        seen_lgv_names = set()
+        invalid_routes = []
+        
+        # Iterate through each <Route> element in the XML
+        for route in remote_connections.findall('Route'):
+            name = route.find('Name')
+            address = route.find('Address')
+            net_id = route.find('NetId')
+
+            if None in (name, address, net_id):
+                messagebox.showwarning("Warning", "One or more routes are missing required fields (Name, Address, NetId).")
+                invalid_routes.append("Missing fields (Name, Address, NetId)")
+                continue  # Skip this route and move to the next
+
+            name = name.text
+            address = address.text
+            net_id = net_id.text
+
+            # Extract the LGV name
+            lgv_name = extract_lgv_name(name)
+            if not lgv_name:
+                invalid_routes.append(f"Invalid name format: {name}")
+                continue
+
+            # Check for duplicate LGV names
+            if lgv_name in seen_lgv_names:
+                messagebox.showerror("Duplicate Entry", f"Duplicate LGV name found: {lgv_name}. File cannot be loaded.")
+                return None  # Abort loading the file
+
+            # Mark the LGV name as seen
+            seen_lgv_names.add(lgv_name)
+
+            type_tc = "TC3" if route.find('Flags') is not None else "TC2"
+            
+            # Append the tuple to the list
+            routes_data.append((lgv_name, net_id, type_tc))
+        
+        # Warn the user about invalid routes
+        if invalid_routes:
+            messagebox.showwarning(
+                "Invalid Routes",
+                f"The following routes were skipped:\n" + "\n".join(invalid_routes)
+            )
+        
+        # Populate the Treeview with the data
+        for item in routes_data:
+            treeview.insert("", "end", values=item)
+        # messagebox.showinfo("Success", "Data loaded successfully from the XML file.")
+
 ####################################################################################################################################################################
 ########################################################## Initial data reading from db3 file ######################################################################
 ####################################################################################################################################################################
@@ -124,9 +218,6 @@ def populate_table_from_db3():
     for item in routes_data:
         treeview.insert("", "end", values=item)
 
-    # Save data to custom xml to avoid reloading .db3 everytime app is open
-    save_table_data_to_xml(treeview)
-
     # Enable menu for Read/Write if table is updated
     update_menu()
 
@@ -160,6 +251,16 @@ def load_table_data_from_xml(tree, filename="lgv_data.xml"):
             tree.insert("", "end", values=(lgv_name, ams_net_id, tc_type))
     else:
         print("No saved XML data found, loading default table.")
+        # Populate table the first time with current StaticRoutes.xml file
+        messagebox.showinfo("Attention", "Default StaticRoutes.xml file loaded")
+        populate_table_from_xml("C:\\TwinCAT\\3.1\\Target\\StaticRoutes.xml")
+
+# With DEL key
+def delete_selected_record(event):
+    selected_items = treeview.selection()
+    for item in selected_items:
+        if item:
+            treeview.delete(item)
 
 
 ####################################################################################################################################################################
@@ -1991,6 +2092,7 @@ setup_treeview()
 treeview.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
 treeview.bind("<<TreeviewSelect>>", on_treeview_select)
+treeview.bind('<Delete>', delete_selected_record)
 
 bind_treeview_focus_action(treeview, focus_shortcuts=['<Control-t>', '<Control-T>'])
 
@@ -2084,6 +2186,10 @@ root.after(100, process_status_updates)
 
 def on_closing():
     close_current_connection()  # Close connection before exiting
+
+    # Save data to custom xml to avoid reloading .db3 or .xml everytime app is open
+    save_table_data_to_xml(treeview)
+
     root.destroy()  # Close the application
 
 # Bind the window close event to custom close function

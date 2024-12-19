@@ -33,5 +33,13 @@
     "LibraryInterfaces.LGV.Guid.Rout.remDistToPreOP",
     "Guidance.force_bypass_lgtErr",
     "LibraryInterfaces.LGV.Guid.Rout.remDistToPreOP, LibraryInterfaces.LGV.Guid.Rout.remDistToOP",
-    "Devices.Pressure.tilt.weight, Devices.Pressure.lift.weight"
+    "Devices.Pressure.tilt.weight, Devices.Pressure.lift.weight",
+    "LibraryInterfaces.OpInfo.distFromEnd",
+    "LibraryInterfaces.OpInfo.distFromEnd,LibraryInterfaces.OpInfo.rowPos",
+    "LibraryInterfaces.CarrierControl.ForksAreJoined",
+    "InfoMovements.Mov.opCl4.curGroupsInterax[1]",
+    "InfoMovements.Mov.opCl4.curGroupsInterax[1],InfoMovements.Mov.opCl4.curGroupsInterax[2],InfoMovements.Mov.shift.curPosition,InfoMovements.Mov.tilt.curPosition,InfoMovements.Mov.lift.curPosition, LibraryInterfaces.LGV.Guid.Rout.remDistToPreOP, LibraryInterfaces.LGV.Guid.Rout.remDistToOP, Devices.Pressure.tilt.weight, Devices.Pressure.lift.weight,FlexSegPhaseHandler.preOpDistFromTheEnd,FlexSegPhaseHandler.segDistAvailable",
+    "AgvDriveParameters.Drive_Auto_RelaxAcc_Loaded",
+    "SpareVariables.intSpare[0]",
+    "SpareVariables.boolSpare[3]"
 ]
