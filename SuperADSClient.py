@@ -231,6 +231,42 @@ def save_table_data_to_xml(tree, filename=LGV_DATA):
         print("Treeview is empty. No data to save.")
         return  # Exit the function if the Treeview is empty
     
+    # Create the current data structure from the Treeview
+    current_data = []
+    for row in tree.get_children():
+        lgv_data = tree.item(row)["values"]
+        current_data.append({
+            "Name": lgv_data[0],
+            "AMSNetId": lgv_data[1],
+            "Type": lgv_data[2]
+        })
+
+    # Sort the current data to ensure consistent ordering
+    current_data.sort(key=lambda x: (x["Name"], x["AMSNetId"], x["Type"]))
+
+
+    # If the file exists, compare it with the current data
+    if os.path.exists(filename):
+        tree_xml = ET.parse(filename)
+        lgv_list = tree_xml.getroot()
+
+        # Extract the existing data from the XML file
+        existing_data = []
+        for lgv in lgv_list.findall("LGV"):
+            existing_data.append({
+                "Name": lgv.find("Name").text,
+                "AMSNetId": lgv.find("AMSNetId").text,
+                "Type": lgv.find("Type").text
+            })
+
+        # Sort the existing data to ensure consistent ordering
+        existing_data.sort(key=lambda x: (x["Name"], x["AMSNetId"], x["Type"]))
+
+        # Compare existing data with current data
+        if existing_data == current_data:
+            print("No changes detected. Data not saved.")
+            return  # Exit if there are no changes
+        
     lgv_list = ET.Element("LGVData")
 
     for row in tree.get_children():
