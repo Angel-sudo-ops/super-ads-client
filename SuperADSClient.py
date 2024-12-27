@@ -15,7 +15,7 @@ from queue import Queue, Empty
 import copy
 from ctypes import sizeof
 
-__version__ = '2.4.3'
+__version__ = '2.4.4'
 __icon__ = "./plc.ico"
 
 LGV_DATA = "lgv_data.xml"
@@ -122,6 +122,9 @@ def populate_table_from_xml(path=None):
         for item in routes_data:
             treeview.insert("", "end", values=item)
         # messagebox.showinfo("Success", "Data loaded successfully from the XML file.")
+        
+    # Enable menu for Read/Write if table is updated
+    update_menu()
 
 ####################################################################################################################################################################
 ########################################################## Initial data reading from db3 file ######################################################################
@@ -242,7 +245,7 @@ def save_table_data_to_xml(tree, filename=LGV_DATA):
         })
 
     # Sort the current data to ensure consistent ordering
-    current_data.sort(key=lambda x: (x["Name"], x["AMSNetId"], x["Type"]))
+    current_data.sort(key=lambda x: x["Name"])
 
 
     # If the file exists, compare it with the current data
@@ -260,7 +263,7 @@ def save_table_data_to_xml(tree, filename=LGV_DATA):
             })
 
         # Sort the existing data to ensure consistent ordering
-        existing_data.sort(key=lambda x: (x["Name"], x["AMSNetId"], x["Type"]))
+        existing_data.sort(key=lambda x: x["Name"])
 
         # Compare existing data with current data
         if existing_data == current_data:
@@ -268,13 +271,11 @@ def save_table_data_to_xml(tree, filename=LGV_DATA):
             return  # Exit if there are no changes
         
     lgv_list = ET.Element("LGVData")
-
-    for row in tree.get_children():
-        lgv = ET.SubElement(lgv_list, "LGV")
-        lgv_data = tree.item(row)["values"]
-        ET.SubElement(lgv, "Name").text = lgv_data[0]
-        ET.SubElement(lgv, "AMSNetId").text = lgv_data[1]
-        ET.SubElement(lgv, "Type").text = lgv_data[2]
+    for lgv in current_data:
+        lgv_element = ET.SubElement(lgv_list, "LGV")
+        ET.SubElement(lgv_element, "Name").text = lgv["Name"]
+        ET.SubElement(lgv_element, "AMSNetId").text = lgv["AMSNetId"]
+        ET.SubElement(lgv_element, "Type").text = lgv["Type"]
     
     # Convert to a pretty XML string
     xmlstr = minidom.parseString(ET.tostring(lgv_list, 'utf-8')).toprettyxml(indent="    ")
@@ -284,6 +285,7 @@ def save_table_data_to_xml(tree, filename=LGV_DATA):
         f.write(xmlstr)
 
     print(f"Data successfully saved to {filename}.")
+    messagebox.showinfo("Attention", f"LGV data successfully saved to {filename}.")
 
 # Load data from XML
 def load_table_data_from_xml(tree, filename=LGV_DATA):
@@ -639,7 +641,7 @@ def update_menu():
     else:
         options_menu.entryconfig("Reset to Defaults ", state="disabled")  # Disable if file doesn't exist
 
-    if os.path.exists(LGV_DATA):
+    if os.path.exists(LGV_DATA) or (treeview.get_children()):
         more_menu.entryconfig("Read/Write    ", state="normal")  # Enable if file exists
     else:
         more_menu.entryconfig("Read/Write    ", state="disabled")  # Disable if file doesn't exist
