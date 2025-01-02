@@ -123,6 +123,8 @@ def populate_table_from_xml(path=None):
             treeview.insert("", "end", values=item)
         # messagebox.showinfo("Success", "Data loaded successfully from the XML file.")
         
+    save_table_data_to_xml(treeview)
+    
     # Enable menu for Read/Write if table is updated
     update_menu()
 
@@ -221,6 +223,8 @@ def populate_table_from_db3():
     # Populate the Treeview with the data
     for item in routes_data:
         treeview.insert("", "end", values=item)
+
+    save_table_data_to_xml(treeview)
 
     # Enable menu for Read/Write if table is updated
     update_menu()
@@ -641,7 +645,7 @@ def update_menu():
     else:
         options_menu.entryconfig("Reset to Defaults ", state="disabled")  # Disable if file doesn't exist
 
-    if os.path.exists(LGV_DATA) or (treeview.get_children()):
+    if os.path.exists(LGV_DATA):
         more_menu.entryconfig("Read/Write    ", state="normal")  # Enable if file exists
     else:
         more_menu.entryconfig("Read/Write    ", state="disabled")  # Disable if file doesn't exist
