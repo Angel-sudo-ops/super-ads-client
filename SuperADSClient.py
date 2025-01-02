@@ -15,13 +15,118 @@ from queue import Queue, Empty
 import copy
 from ctypes import sizeof
 
-__version__ = '2.3.7'
+__version__ = '2.4.4'
 __icon__ = "./plc.ico"
 
+LGV_DATA = "lgv_data.xml"
 # Variable to hold the current ads connection
 current_ads_connection = None
 
 connection_active = False
+
+
+####################################################################################################################################################################
+########################################################## Initial data reading from xml file ######################################################################
+####################################################################################################################################################################
+def extract_lgv_name(input_name):
+    # Regex pattern to capture 'LGV' followed by numbers
+    pattern = r"(LGV\d+)"
+    match = re.search(pattern, input_name)
+    if match:
+        return match.group(1)  # Return the matched 'LGVxx' or 'LGVxxx'
+    return None
+
+def populate_table_from_xml_test():
+    print("Load StaticRoutes.xml file")
+
+def populate_table_from_xml(path=None):
+    if not path:
+        # Ask the user to select an XML file
+        file_path = filedialog.askopenfilename(title="Select StaticRoutes file", 
+                                            initialdir="C:\\TwinCAT\\3.1\\Target",
+                                            filetypes=[("XML files", "*.xml")])
+    else:
+        file_path = path
+
+    if file_path and not os.path.exists(file_path):
+        print(f"The file {path} does not exist.")
+        return
+    
+    if file_path:
+        try:
+            tree = ET.parse(file_path)
+            root = tree.getroot()
+        except ET.ParseError:
+            messagebox.showerror("Error", "The selected file is not a valid XML file.")
+            return
+
+        # Check for the expected root elements
+        remote_connections = root.find('RemoteConnections')
+        if remote_connections is None:
+            messagebox.showerror("Error", "XML file does not contain the expected 'RemoteConnections' structure.")
+            return
+        
+        data = treeview.get_children()
+        # Clear the existing table data
+        if data is not None:
+            for i in data:
+                treeview.delete(i)
+            
+        # Initialize an empty list to hold the data
+        routes_data = []
+        seen_lgv_names = set()
+        invalid_routes = []
+        
+        # Iterate through each <Route> element in the XML
+        for route in remote_connections.findall('Route'):
+            name = route.find('Name')
+            address = route.find('Address')
+            net_id = route.find('NetId')
+
+            if None in (name, address, net_id):
+                messagebox.showwarning("Warning", "One or more routes are missing required fields (Name, Address, NetId).")
+                invalid_routes.append("Missing fields (Name, Address, NetId)")
+                continue  # Skip this route and move to the next
+
+            name = name.text
+            address = address.text
+            net_id = net_id.text
+
+            # Extract the LGV name
+            lgv_name = extract_lgv_name(name)
+            if not lgv_name:
+                invalid_routes.append(f"Invalid name format: {name}")
+                continue
+
+            # Check for duplicate LGV names
+            if lgv_name in seen_lgv_names:
+                messagebox.showerror("Duplicate Entry", f"Duplicate LGV name found: {lgv_name}. File cannot be loaded.")
+                return None  # Abort loading the file
+
+            # Mark the LGV name as seen
+            seen_lgv_names.add(lgv_name)
+
+            type_tc = "TC3" if route.find('Flags') is not None else "TC2"
+            
+            # Append the tuple to the list
+            routes_data.append((lgv_name, net_id, type_tc))
+        
+        # Warn the user about invalid routes
+        if invalid_routes:
+            messagebox.showwarning(
+                "Invalid Routes",
+                f"The following routes were skipped:\n" + "\n".join(invalid_routes)
+            )
+        
+        # Populate the Treeview with the data
+        for item in routes_data:
+            treeview.insert("", "end", values=item)
+        # messagebox.showinfo("Success", "Data loaded successfully from the XML file.")
+        
+    save_table_data_to_xml(treeview)
+    
+    # Enable menu for Read/Write if table is updated
+    update_menu()
 
 ####################################################################################################################################################################
 ########################################################## Initial data reading from db3 file ######################################################################
@@ -119,7 +224,6 @@ def populate_table_from_db3():
     for item in routes_data:
         treeview.insert("", "end", values=item)
 
-    # Save data to custom xml to avoid reloading .db3 everytime app is open
     save_table_data_to_xml(treeview)
 
     # Enable menu for Read/Write if table is updated
@@ -127,14 +231,55 @@ def populate_table_from_db3():
 
 
 # Save data to XML
-def save_table_data_to_xml(tree, filename="lgv_data.xml"):
-    lgv_list = ET.Element("LGVData")
+def save_table_data_to_xml(tree, filename=LGV_DATA):
+
+    # Check if there is any data in the Treeview
+    if not tree.get_children():
+        print("Treeview is empty. No data to save.")
+        return  # Exit the function if the Treeview is empty
+    
+    # Create the current data structure from the Treeview
+    current_data = []
     for row in tree.get_children():
-        lgv = ET.SubElement(lgv_list, "LGV")
         lgv_data = tree.item(row)["values"]
-        ET.SubElement(lgv, "Name").text = lgv_data[0]
-        ET.SubElement(lgv, "AMSNetId").text = lgv_data[1]
-        ET.SubElement(lgv, "Type").text = lgv_data[2]
+        current_data.append({
+            "Name": lgv_data[0],
+            "AMSNetId": lgv_data[1],
+            "Type": lgv_data[2]
+        })
+
+    # Sort the current data to ensure consistent ordering
+    current_data.sort(key=lambda x: x["Name"])
+
+
+    # If the file exists, compare it with the current data
+    if os.path.exists(filename):
+        tree_xml = ET.parse(filename)
+        lgv_list = tree_xml.getroot()
+
+        # Extract the existing data from the XML file
+        existing_data = []
+        for lgv in lgv_list.findall("LGV"):
+            existing_data.append({
+                "Name": lgv.find("Name").text,
+                "AMSNetId": lgv.find("AMSNetId").text,
+                "Type": lgv.find("Type").text
+            })
+
+        # Sort the existing data to ensure consistent ordering
+        existing_data.sort(key=lambda x: x["Name"])
+
+        # Compare existing data with current data
+        if existing_data == current_data:
+            print("No changes detected. Data not saved.")
+            return  # Exit if there are no changes
+        
+    lgv_list = ET.Element("LGVData")
+    for lgv in current_data:
+        lgv_element = ET.SubElement(lgv_list, "LGV")
+        ET.SubElement(lgv_element, "Name").text = lgv["Name"]
+        ET.SubElement(lgv_element, "AMSNetId").text = lgv["AMSNetId"]
+        ET.SubElement(lgv_element, "Type").text = lgv["Type"]
     
     # Convert to a pretty XML string
     xmlstr = minidom.parseString(ET.tostring(lgv_list, 'utf-8')).toprettyxml(indent="    ")
@@ -143,11 +288,23 @@ def save_table_data_to_xml(tree, filename="lgv_data.xml"):
     with open(filename, "w", encoding='utf-8') as f:
         f.write(xmlstr)
 
+    print(f"Data successfully saved to {filename}.")
+    messagebox.showinfo("Attention", f"LGV data successfully saved to {filename}.")
+
 # Load data from XML
-def load_table_data_from_xml(tree, filename="lgv_data.xml"):
-    if os.path.exists(filename):
+def load_table_data_from_xml(tree, filename=LGV_DATA):
+    if os.path.exists(filename):       
         tree_xml = ET.parse(filename)
         lgv_list = tree_xml.getroot()
+
+        # Check if there are any <LGV> elements
+        if not lgv_list.findall("LGV"):
+            print("The XML file has no LGV data, loading default table.")
+            # messagebox.showwarning("Warning", "The XML file contains no LGV data. Loading default table.")
+            messagebox.showinfo("Attention", "Default StaticRoutes.xml file loaded")
+            populate_table_from_xml("C:\\TwinCAT\\3.1\\Target\\StaticRoutes.xml")
+            return
+
         for lgv in lgv_list.findall("LGV"):
             lgv_name = lgv.find("Name").text
             ams_net_id = lgv.find("AMSNetId").text
@@ -155,6 +312,16 @@ def load_table_data_from_xml(tree, filename="lgv_data.xml"):
             tree.insert("", "end", values=(lgv_name, ams_net_id, tc_type))
     else:
         print("No saved XML data found, loading default table.")
+        # Populate table the first time with current StaticRoutes.xml file
+        messagebox.showinfo("Attention", "Default StaticRoutes.xml file loaded")
+        populate_table_from_xml("C:\\TwinCAT\\3.1\\Target\\StaticRoutes.xml")
+
+# With DEL key
+def delete_selected_record(event):
+    selected_items = treeview.selection()
+    for item in selected_items:
+        if item:
+            treeview.delete(item)
 
 
 ####################################################################################################################################################################
@@ -331,6 +498,7 @@ def connect_to_plc():
 
     # Start the connection in a new thread
     connection_thread = threading.Thread(target=background_connect, args=(lgv_data,))
+    connection_thread.daemon = True
     connection_thread.start()
 
 
@@ -477,7 +645,7 @@ def update_menu():
     else:
         options_menu.entryconfig("Reset to Defaults ", state="disabled")  # Disable if file doesn't exist
 
-    if os.path.exists("lgv_data.xml"):
+    if os.path.exists(LGV_DATA):
         more_menu.entryconfig("Read/Write    ", state="normal")  # Enable if file exists
     else:
         more_menu.entryconfig("Read/Write    ", state="disabled")  # Disable if file doesn't exist
@@ -1257,16 +1425,28 @@ def open_read_write_window():
         new_variable = variable_menu.get().strip()
 
         if new_variable:
-            if any(new_variable.lower() == var.lower() for var in default_rw_variables + custom_rw_variables):
+            # Normalize variable names to avoid issues with spaces around commas
+            normalized_new_variable = ','.join(part.strip() for part in new_variable.split(','))
+
+            # Normalize existing variables for comparison
+            normalized_existing_variables = [
+                ','.join(part.strip() for part in var.split(','))
+                for var in default_rw_variables + custom_rw_variables
+            ]
+
+            if normalized_new_variable.lower() in (var.lower() for var in normalized_existing_variables):
                 # messagebox.showwarning("Duplicate Entry", "This variable already exists.")
                 print("Variable already exists")
+                log_message("Variable already exists")
             else:
-                custom_rw_variables.append(new_variable)
+                custom_rw_variables.append(normalized_new_variable)
                 save_variables(custom_rw_variables)
                 update_variable_menu()
                 print(f"Variable {new_variable} successfully added!")
+                log_message(f"Variable {new_variable} successfully added!")
         else:
             print("Please enter a valid variable name.")
+            log_message("Please enter a valid variable name.")
         
 
     result_var = tk.StringVar()
@@ -1333,41 +1513,57 @@ def open_read_write_window():
 
     # Mapping of symbol type strings to pyads data types
     SYMBOL_TYPE_MAP = {
-        'BOOL'   : pyads.PLCTYPE_BOOL,
-        'INT'    : pyads.PLCTYPE_INT,
-        'DINT'   : pyads.PLCTYPE_DINT,
-        'REAL'   : pyads.PLCTYPE_REAL,
-        'LREAL'  : pyads.PLCTYPE_LREAL,
-        'STRING' : pyads.PLCTYPE_STRING,
-        'BYTE'   : pyads.PLCTYPE_BYTE,
-        'WORD'   : pyads.PLCTYPE_WORD,
-        'DWORD'  : pyads.PLCTYPE_DWORD,
-        # 'LWORD'  : pyads.PLCTYPE_LWORD,
-        'SINT'   : pyads.PLCTYPE_SINT,
-        'USINT'  : pyads.PLCTYPE_USINT,
-        'UINT'   : pyads.PLCTYPE_UINT,
-        'UDINT'  : pyads.PLCTYPE_UDINT,
-        'LINT'   : pyads.PLCTYPE_LINT,
-        'ULINT'  : pyads.PLCTYPE_ULINT,
-        'TIME'   : pyads.PLCTYPE_TIME,
-        # 'LTIME'  : pyads.PLCTYPE_LTIME,
-        'DATE'   : pyads.PLCTYPE_DATE,
-        'TOD'    : pyads.PLCTYPE_TOD,  # Time of Day
-        'DT'     : pyads.PLCTYPE_DT,    # Date and Time
-        'WSTRING': pyads.PLCTYPE_WSTRING,
+        'BOOL'      : pyads.PLCTYPE_BOOL,
+        'INT'       : pyads.PLCTYPE_INT,
+        'DINT'      : pyads.PLCTYPE_DINT,
+        'REAL'      : pyads.PLCTYPE_REAL,
+        'LREAL'     : pyads.PLCTYPE_LREAL,
+        'STRING'    : pyads.PLCTYPE_STRING,
+        'BYTE'      : pyads.PLCTYPE_BYTE,
+        'WORD'      : pyads.PLCTYPE_WORD,
+        'DWORD'     : pyads.PLCTYPE_DWORD,
+        # 'LWORD'     : pyads.PLCTYPE_LWORD,
+        'SINT'      : pyads.PLCTYPE_SINT,
+        'USINT'     : pyads.PLCTYPE_USINT,
+        'UINT'      : pyads.PLCTYPE_UINT,
+        'UDINT'     : pyads.PLCTYPE_UDINT,
+        'LINT'      : pyads.PLCTYPE_LINT,
+        'ULINT'     : pyads.PLCTYPE_ULINT,
+        'TIME'      : pyads.PLCTYPE_TIME,
+        # 'LTIME'     : pyads.PLCTYPE_LTIME,
+        'DATE'      : pyads.PLCTYPE_DATE,
+        'TOD'       : pyads.PLCTYPE_TOD,  # Time of Day
+        'DT'        : pyads.PLCTYPE_DT,    # Date and Time
+        'WSTRING'   : pyads.PLCTYPE_WSTRING,
     }
 
     def get_pyads_type(symbol_type_str):
-        """Map the symbol type string to a pyads type."""
-        # Check if the type is a known standard type
-        standard_type = SYMBOL_TYPE_MAP.get(symbol_type_str.strip())
+        """
+        Map the symbol type string to a pyads type, handling arrays and other variations.
+        """
+        # Normalize the type string: Remove array and dimensions, strip whitespace
+        array_match = re.search(r'ARRAY\s*\[.*?\]\s*OF\s*(\w+)', symbol_type_str.strip(), re.IGNORECASE)
+        
+        if array_match:
+            # Extract the base type from the array declaration
+            base_type = array_match.group(1).strip()
+            if base_type in SYMBOL_TYPE_MAP:
+                return SYMBOL_TYPE_MAP[base_type]
+            else:
+                print(f"Unknown array type detected: {symbol_type_str}. Defaulting to BYTE.")
+                return pyads.PLCTYPE_BYTE  # Default for unknown array types
+
+        # Remove any other dimensions or custom suffixes (e.g., STRING(80))
+        normalized_type = re.sub(r'\(.*?\)', '', symbol_type_str.strip())
+
+        # Map to a known type
+        standard_type = SYMBOL_TYPE_MAP.get(normalized_type)
         if standard_type:
             return standard_type
 
-        # If it's not a standard type, assume it could be an enum or custom type
-        # Default to BYTE for enums or custom types unless otherwise needed
+        # Handle unknown or custom types
         print(f"Unknown type detected: {symbol_type_str}. Defaulting to BYTE.")
-        return pyads.PLCTYPE_BYTE  # Adjust if other types like INT are more appropriate
+        return pyads.PLCTYPE_BYTE  # Default for unknown types
 
 
     def check_type(value):
@@ -1406,7 +1602,7 @@ def open_read_write_window():
         if handles[user_handle]["expected_value"] == value:
             handles[user_handle]["stop_event"].set()  # Signal to stop notification
 
-    def write_variable_for_lgv(lgv, ams_net_id, tc_type, variable_name, value):
+    def write_variable_for_lgv(lgv, ams_net_id, tc_type, variable_name, display_name, value, result_queue):
         """Write a variable and confirm it via ADS notification."""
         # stop_event = threading.Event()  # Event to track when the notification should stop
         handle_id = get_new_handle_id()
@@ -1440,7 +1636,7 @@ def open_read_write_window():
 
                 # Write the value to the PLC using the provided variable name
                 ads_connection.write_by_name(variable_name, value, expected_type)
-                print(f"Attempting to write {value} to {variable_name} for LGV {lgv}")
+                # print(f"Attempting to write {value} to {variable_name} for LGV {lgv}")
 
                 # # Wait for the notification to confirm the change or timeout after 5 seconds
                 # if not stop_event.wait(timeout=5):
@@ -1448,28 +1644,32 @@ def open_read_write_window():
                 #     log_message(f"Error: {variable_name} not confirmed for LGV{lgv:02d}")
                 # else:
                 #     print(f"Successfully wrote {value} to {variable_name} for LGV {lgv}")
-                log_message(f"Variable value in LGV{lgv:02d} is now {value}")
+                print(f"Variable value in LGV{lgv:02d} is now {value}")
+                # Add result to queue
+                result_queue.put((lgv, f"LGV{lgv:02d}: {display_name} is now {value}"))
 
                 # Remove the notification after use
                 # ads_connection.del_device_notification(notification_handle, handle_id)
-
-        except pyads.ADSError as ads_err:
-            # Handle ADS-specific errors with more detail
-            error_message = f"Error writing to LGV{lgv:02d}: {ads_err}"
-            print(error_message)
-            log_message(error_message)
-
-        except ValueError as val_err:
-            # Handle type-related errors
-            error_message = f"Value Error for LGV{lgv:02d}: {val_err}"
-            print(error_message)
-            log_message(error_message)
-
         except Exception as e:
-            # Handle any other general exceptions
-            error_message = f"Unexpected error for LGV{lgv:02d}: {str(e)}"
-            print(error_message)
-            log_message(error_message)
+            # Add error result to queue
+            result_queue.put((lgv, f"Error writing to LGV{lgv:02d}: {e}"))   
+        # except pyads.ADSError as ads_err:
+        #     # Handle ADS-specific errors with more detail
+        #     error_message = f"Error writing to LGV{lgv:02d}: {ads_err}"
+        #     print(error_message)
+        #     log_message(error_message)
+
+        # except ValueError as val_err:
+        #     # Handle type-related errors
+        #     error_message = f"Value Error for LGV{lgv:02d}: {val_err}"
+        #     print(error_message)
+        #     log_message(error_message)
+
+        # except Exception as e:
+        #     # Handle any other general exceptions
+        #     error_message = f"Unexpected error for LGV{lgv:02d}: {str(e)}"
+        #     print(error_message)
+        #     log_message(error_message)
 
     
     def convert_to_number(user_input):
@@ -1487,13 +1687,24 @@ def open_read_write_window():
         """Start the write operation for all selected LGVs."""
         clear_status()
 
-        variable_name = variable_menu.get().strip()  # Directly get the variable name
+        variable_names = variable_menu.get().strip()  # Directly get the variable name
 
-        if variable_name == '':
+        if variable_names == '':
             # messagebox.showerror("Error", "Variable name missing!")
             print("Variable name missing!")
             log_message("Variable name missing!")
             return
+
+        # Split the input by commas and strip each variable name
+        variables = [var.strip() for var in variable_names.split(',') if var.strip()]
+
+        if not variables:
+            print("No valid variable names found!")
+            log_message("No valid variable names found!")
+            return
+        
+        # Preprocess variable names for unique representation
+        processed_variables = process_variable_names(variables)
 
         # Get the validated LGV data
         lgv_data = validate_and_link_lgv()
@@ -1501,6 +1712,9 @@ def open_read_write_window():
             # messagebox.showerror("Error", "LGV range is empty")
             return  # Exit if validation failed
 
+        # Result queue and thread tracking
+        result_queue = Queue()
+        threads = []
         
         radio_value = var_type.get()
         entry_value = value_entry.get().strip()
@@ -1515,14 +1729,54 @@ def open_read_write_window():
         
         # Start a thread for each LGV to perform the write operation
         for lgv, ams_net_id, tc_type in lgv_data:
-            threading.Thread(
-                target=write_variable_for_lgv, 
-                args=(lgv, ams_net_id, tc_type, variable_name, value)
-            ).start()
+            for variable_name, display_name in processed_variables.items():
+                thread = threading.Thread(
+                    target=write_variable_for_lgv, 
+                    args=(lgv, ams_net_id, tc_type, variable_name, display_name, value, result_queue)
+                )
+                thread.daemon = True
+                thread.start()
+                threads.append(thread)
+
+        # Start a background thread to monitor results
+        threading.Thread(
+            target=process_results_in_background,
+            args=(threads, result_queue, lgv_data),
+            daemon=True
+        ).start()
+        
+
+    def process_variable_names(variables):
+        """
+        Process variable names to determine how many parts to include for uniqueness.
+        If the last parts are unique, keep only the last part.
+        If duplicates exist, include the second-to-last part for disambiguation.
+        """
+        last_parts = {}
+        processed_variables = {}
+
+        # Collect occurrences of last parts
+        for variable in variables:
+            parts = variable.split('.')
+            last_part = parts[-1]
+            last_parts.setdefault(last_part, []).append(variable)
+
+        # Determine the display names for variables
+        for last_part, full_vars in last_parts.items():
+            if len(full_vars) > 1:  # Duplicate last parts found
+                # Include the second-to-last part for these variables
+                for var in full_vars:
+                    parts = var.split('.')
+                    processed_variables[var] = '.'.join(parts[-2:])  # Take last two parts
+            else:  # No duplicate, keep only the last part
+                var = full_vars[0]
+                parts = var.split('.')
+                processed_variables[var] = parts[-1]  # Keep only the last part
+
+        return processed_variables
 
 
-
-    def read_variable_for_lgv(lgv, ams_net_id, tc_type, variable_name):
+    def read_variable_for_lgv(lgv, ams_net_id, tc_type, variable_name, display_name, result_queue):
         """Handle reading for each LGV in its own thread."""
         try:
             port = 851 if tc_type == "TC3" else 801
@@ -1539,50 +1793,99 @@ def open_read_write_window():
                 value = ads_connection.read_by_name(variable_name, expected_type)
                 print(f"Successfully read {value} from {variable_name} for LGV {lgv}")
                 
-                # Log the read value
-                log_message(f"Variable value in LGV{lgv:02d} is {value}")
+                # Add result to queue
+                result_queue.put((lgv, f"LGV{lgv:02d}: {display_name} is {value}"))
 
-        except pyads.ADSError as ads_err:
-            # Handle ADS-specific errors with more detail
-            error_message = f"Error reading from LGV{lgv:02d}: {ads_err}"
-            print(error_message)
-            log_message(error_message)
-
-        except ValueError as val_err:
-            # Handle type-related errors
-            error_message = f"Value Error for LGV{lgv:02d}: {val_err}"
-            print(error_message)
-            log_message(error_message)
+                # # Log the read value
+                # log_message(f"{variable_last_part} value in LGV{lgv:02d} is {value}")
 
         except Exception as e:
-            # Handle any other general exceptions
-            error_message = f"Unexpected error for LGV{lgv:02d}: {str(e)}"
-            print(error_message)
-            log_message(error_message)
+            # Add error result to queue
+            result_queue.put((lgv, f"Error reading LGV{lgv:02d}: {e}"))
 
     def read_variable():
         """Start the read operation for all selected LGVs."""
         clear_status()
 
-        variable_name = variable_menu.get().strip()  # Get the variable name directly
+        variable_names = variable_menu.get().strip()  # Get the variable name directly
 
-        if variable_name == '':
+        if variable_names == '':
             # messagebox.showerror("Error", "Variable name missing!")
             print("Variable name missing!")
             log_message("Variable name missing!")
             return
+
+        # Split the input by commas and strip each variable name
+        variables = [var.strip() for var in variable_names.split(',') if var.strip()]
+
+        if not variables:
+            print("No valid variable names found!")
+            log_message("No valid variable names found!")
+            return
+        
+        # Preprocess variable names for unique representation
+        processed_variables = process_variable_names(variables)
 
         # Get the validated LGV data
         lgv_data = validate_and_link_lgv()
         if lgv_data is None:
             return  # Exit if validation failed
 
+        # Result queue and thread tracking
+        result_queue = Queue()
+        threads = []
+
         # Start a thread for each LGV to perform the read operation
         for lgv, ams_net_id, tc_type in lgv_data:
-            threading.Thread(
-                target=read_variable_for_lgv, 
-                args=(lgv, ams_net_id, tc_type, variable_name)
-            ).start()
+            for variable_name, display_name in processed_variables.items():
+                thread = threading.Thread(
+                    target=read_variable_for_lgv, 
+                    args=(lgv, ams_net_id, tc_type, variable_name, display_name, result_queue)
+                )
+                thread.daemon = True
+                thread.start()
+                threads.append(thread)
+
+        # Start a background thread to monitor results
+        threading.Thread(
+            target=process_results_in_background,
+            args=(threads, result_queue, lgv_data),
+            daemon=True
+        ).start()
+
+    def process_results_in_background(threads, result_queue, lgv_data):
+        """Monitor threads and process results in the background."""
+        timeout = 0.5
+        start_time = time.time()
+
+        # Wait for threads to finish or timeout
+        while any(t.is_alive() for t in threads):
+            if time.time() - start_time > timeout:
+                break
+            time.sleep(0.1)
+
+        # Collect results
+        results = {}
+        while not result_queue.empty():
+            lgv, result = result_queue.get()
+            results.setdefault(lgv, []).append(result)
+
+        # Update the UI with results
+        all_lgvs = {lgv for lgv, _, _ in lgv_data}
+        missing_lgvs = all_lgvs - set(results.keys())
+
+        # Use tkinter's `after` method to update UI safely
+        root.after(0, update_results_in_ui, results, missing_lgvs)
+    
+    def update_results_in_ui(results, missing_lgvs):
+        """Update the UI with results."""
+        for lgv, logs in sorted(results.items()):
+            for log in logs:
+                log_message(log)
+
+        for lgv in sorted(missing_lgvs):
+            log_message(f"LGV{lgv:02d} did not respond or timed out.")
+
 
     def on_radio_selection():
         """Disable value entry if True/False radio is selected."""
@@ -1659,6 +1962,11 @@ def open_read_write_window():
     write_button = ttk.Button(button_frame, text="Write", command=write_variable)
     write_button.grid(row=0, column=1, padx=10, ipadx=2, ipady=2)
 
+    # Bind keyboard shortcuts to the toplevel window
+    read_write_window.bind("<Control-r>", lambda event: read_variable())
+    read_write_window.bind("<Control-R>", lambda event: read_variable())
+    read_write_window.bind("<Control-w>", lambda event: write_variable())
+    read_write_window.bind("<Control-W>", lambda event: write_variable())
 
     status_widget = scrolledtext.ScrolledText(
         read_write_window, undo=True, wrap=tk.WORD, height=10, width=50
@@ -1771,6 +2079,7 @@ menu_bar = tk.Menu(root)
 
 file_menu = tk.Menu(menu_bar, tearoff=0)
 file_menu.add_command(label=" Load Config.db3 ", command=populate_table_from_db3)  # Add Load Config option
+file_menu.add_command(label=" Load StaticRoutes.xml", command=populate_table_from_xml) # Add Load StaticRoutes option
 file_menu.add_command(label=" Exit ", command=root.quit)  # Add Exit option
 menu_bar.add_cascade(label="  File ", menu=file_menu)
 
@@ -1844,6 +2153,7 @@ setup_treeview()
 treeview.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
 treeview.bind("<<TreeviewSelect>>", on_treeview_select)
+treeview.bind('<Delete>', delete_selected_record)
 
 bind_treeview_focus_action(treeview, focus_shortcuts=['<Control-t>', '<Control-T>'])
 
@@ -1937,6 +2247,10 @@ root.after(100, process_status_updates)
 
 def on_closing():
     close_current_connection()  # Close connection before exiting
+
+    # Save data to custom xml to avoid reloading .db3 or .xml everytime app is open
+    save_table_data_to_xml(treeview)
+
     root.destroy()  # Close the application
 
 # Bind the window close event to custom close function
@@ -1964,3 +2278,7 @@ root.mainloop()
 
 # Ponerle keyboard shortcut a los botones
 # Ctrl + R, G, S, M, D
+
+
+
+# Usar coma para separar varias variables y leerlas al mismo tiempo, para escribir solo una

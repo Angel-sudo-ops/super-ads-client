@@ -23,5 +23,17 @@
     "Devices.Pressure.tilt.rawValue",
     "Operation.warehouse.warehousePar.enableStopWithPLSRear",
     "Operation.warehouse.warehousePar.anticipateLift",
-    "SpareVariables.boolSpare[0]"
+    "SpareVariables.boolSpare[0]",
+    "CoreGVL.FlexSeg.Status",
+    "Operation.current.name",
+    "SpareVariables.boolSpare",
+    "Devices.Pressure.tilt.weight,Devices.Pressure.lift.weight",
+    "Main.StartupOk",
+    "LibraryInterfaces.LGV.Guid.Rout.remDistToOP",
+    "LibraryInterfaces.LGV.Guid.Rout.remDistToPreOP",
+    "LibraryInterfaces.LGV.Guid.Rout.remDistToPreOP, LibraryInterfaces.LGV.Guid.Rout.remDistToOP",
+    "Devices.Pressure.tilt.weight,Main.StartupOk",
+    "Devices.Pressure.tilt.weight,Main.StartupOk, SpareVariables.boolSpare[0]",
+    "CoreGVL.ADS_Stop,CoreGVL.ADS_Reset",
+    "CoreGVL.ADS_Stop, CoreGVL.ADS_Reset"
 ]
