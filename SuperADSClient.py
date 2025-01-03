@@ -15,7 +15,7 @@ from queue import Queue, Empty
 import copy
 from ctypes import sizeof
 
-__version__ = '2.4.4'
+__version__ = '2.4.4.1'
 __icon__ = "./plc.ico"
 
 LGV_DATA = "lgv_data.xml"
@@ -312,9 +312,12 @@ def load_table_data_from_xml(tree, filename=LGV_DATA):
             tree.insert("", "end", values=(lgv_name, ams_net_id, tc_type))
     else:
         print("No saved XML data found, loading default table.")
-        # Populate table the first time with current StaticRoutes.xml file
-        messagebox.showinfo("Attention", "Default StaticRoutes.xml file loaded")
-        populate_table_from_xml("C:\\TwinCAT\\3.1\\Target\\StaticRoutes.xml")
+        if os.path.exists("C:\\TwinCAT\\3.1\\Target\\StaticRoutes.xml"):
+            # Populate table the first time with current StaticRoutes.xml file
+            populate_table_from_xml("C:\\TwinCAT\\3.1\\Target\\StaticRoutes.xml")
+            messagebox.showinfo("Attention", "Default StaticRoutes.xml file loaded")
+        else:
+            messagebox.showerror("Attention", "Default StaticRoutes.xml file not found")
 
 # With DEL key
 def delete_selected_record(event):
