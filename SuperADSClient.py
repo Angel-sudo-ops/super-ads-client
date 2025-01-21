@@ -1619,7 +1619,7 @@ def open_read_write_window():
         try:
             # Create a new connection for this LGV
             with pyads.Connection(ams_net_id, port) as ads_connection:
-                print(f"Connection established for LGV {lgv} with AMS Net ID: {ams_net_id}")
+                print(f"Establishing connection for LGV {lgv} with AMS Net ID: {ams_net_id}")
 
                 # type_var = check_type(value)
 
@@ -1785,7 +1785,7 @@ def open_read_write_window():
             port = 851 if tc_type == "TC3" else 801
             # Create a new connection for this LGV
             with pyads.Connection(ams_net_id, port) as ads_connection:
-                print(f"Connection established for LGV {lgv} with AMS Net ID: {ams_net_id}")
+                print(f"Establishing connection for LGV {lgv} with AMS Net ID: {ams_net_id}")
 
                 # Get symbol info to validate type and existence
                 symbol_info = ads_connection.get_symbol(variable_name)
