@@ -15,7 +15,7 @@ from queue import Queue, Empty
 import copy
 from ctypes import sizeof
 
-__version__ = '2.4.4.3'
+__version__ = '2.4.4.4'
 __icon__ = "./plc.ico"
 
 LGV_DATA = "lgv_data.xml"
@@ -1905,6 +1905,8 @@ def open_read_write_window():
         """Pre-populate the table with LGVs and empty variable columns."""
         status_table.delete(*status_table.get_children())  # Clear the table
 
+        lgv_overlay.delete(*lgv_overlay.get_children())
+
         # Set up dynamic columns: LGV + variable columns
         status_table["columns"] = ["LGV"] + variables
         status_table.heading("#0", text="", anchor="w")  # Hide default empty column
@@ -1919,6 +1921,8 @@ def open_read_write_window():
         for lgv, ams_net_id, _ in lgv_data:
             row_values = [f"LGV{lgv:02d}"] + ["" for _ in variables]
             status_table.insert("", "end", values=row_values)
+
+            lgv_overlay.insert("", "end", values=row_values) # Populate lgv_overlay as well
     
 
     def update_status_table(lgv, variable, value):
@@ -1932,7 +1936,7 @@ def open_read_write_window():
 
                 new_row_values[column_index] = value  # Update the specific cell
 
-                tag = "error" if value in ["Timeout", "Error"] else ""
+                tag = "" if value in ["Timeout", "Error"] else ""
                 status_table.item(child, values=new_row_values, tags=(tag,))  # Update the row
                 break
         # Adjust column widths
@@ -1942,6 +1946,14 @@ def open_read_write_window():
     def adjust_column_width():
         """Dynamically adjust the width of each column based on content."""
         for col in status_table["columns"]:
+            max_length = max(
+                len(str(status_table.set(child, col)))  # Get cell value
+                for child in status_table.get_children()
+            )
+            max_length = max(max_length, len(col))  # Ensure header is included
+            status_table.column(col, width=max_length * 10)  # Adjust width (10px per char)
+
+        for col in lgv_overlay["columns"]:
             max_length = max(
                 len(str(status_table.set(child, col)))  # Get cell value
                 for child in status_table.get_children()
@@ -2029,30 +2041,92 @@ def open_read_write_window():
     # Status table frame
     status_table_frame = ttk.Frame(read_write_window)
     status_table_frame.grid(row=4, column=0, columnspan=2, sticky="nsew")
-    
+
+
+    # LGV overlay Treeview
+    lgv_overlay = ttk.Treeview(
+        status_table_frame,
+        show="headings",
+        height=5
+        # selectmode="none"  # Prevent selection
+    )
+    lgv_overlay.grid(row=0, column=0, padx=(15,0), pady=(5,0), sticky="nsw")  # Align to the left
+    lgv_overlay["columns"] = ["LGV"]
+    lgv_overlay.heading("LGV", text="LGV", anchor="center")
+    lgv_overlay.column("LGV", width=70, stretch=False, anchor="center")
+
+    lgv_overlay.grid_remove()  # Hide overlay initially
+
+    # Disable vertical scrolling on the LGV overlay
+    lgv_overlay.unbind("<MouseWheel>")  # Disable mouse scroll (Windows)
+    lgv_overlay.unbind("<Button-4>")    # Disable mouse scroll up (Linux)
+    lgv_overlay.unbind("<Button-5>")    # Disable mouse scroll down (Linux)
+
+    # Prevent programmatic vertical scrolling
+    lgv_overlay.yview = lambda *args: None
+
+
     # Add the dynamic status table
     status_table = ttk.Treeview(
         status_table_frame,
         show="headings",
         height=5
     )
-    status_table.grid(row=0, column=0, padx=(15,0), pady=(15,0), sticky="ew")
+    status_table.grid(row=0, column=0, padx=(15,0), pady=(5,0), sticky="nsew")
 
     # Configure tags for the status table (e.g., red text for errors)
     status_table.tag_configure("error", foreground="red")
 
     # Configure scrollbars for the status table
-    scroll_y = ttk.Scrollbar(status_table_frame, orient="vertical", command=status_table.yview)
+    scroll_y = ttk.Scrollbar(status_table_frame, orient="vertical", command=status_table.yview)   
     scroll_y.grid(row=0, column=1, sticky="ns")
 
     scroll_x = ttk.Scrollbar(status_table_frame, orient="horizontal", command=status_table.xview)
     scroll_x.grid(row=1, column=0, columnspan=2, sticky="ew")
 
-    status_table.configure(yscrollcommand=scroll_y.set, xscrollcommand=scroll_x.set)
 
    # Make the table frame expandable
     status_table_frame.grid_columnconfigure(0, weight=1)
     status_table_frame.grid_rowconfigure(0, weight=1)
+
+     
+    # Function to check LGV column visibility
+    def toggle_lgv_overlay(*args):
+        """Show or hide the LGV overlay depending on the visibility of the LGV column."""
+        x = status_table.xview()[0]  # Get the normalized scroll position (0 to 1)
+        if x > 0:  # If the scroll position is not at the beginning
+            lgv_overlay.grid()  # Show overlay
+            lgv_overlay.lift()
+        else:
+            lgv_overlay.grid_remove()  # Hide overlay
+
+    def update_lgv_overlay(*args):
+        # Handle vertical scrolling for visible rows (yscroll)
+        lgv_overlay.delete(*lgv_overlay.get_children())  # Clear current rows in overlay
+
+        # Get visible range
+        visible_fraction = status_table.yview()  # Returns (start, end) as fractions
+        total_rows = len(status_table.get_children())  # Total rows in the Treeview
+
+        # Calculate visible row indices
+        first_visible_row = int(visible_fraction[0] * total_rows)
+        last_visible_row = min(int(visible_fraction[1] * total_rows)-1, total_rows-1)
+        
+        # Populate overlay with visible rows only
+        for i in range(first_visible_row, last_visible_row+1):
+            lgv_name = f"LGV{(i+1):02d}"  # Example LGV name (adjust to your data) 
+            lgv_overlay.insert("", "end", values=(lgv_name,))
+            print(f" First elem: {first_visible_row}, Last elem: {last_visible_row}, {len(status_table.get_children())}")
+
+
+    # Attach the function to the horizontal scrollbar
+    status_table.configure(
+        xscrollcommand=lambda *args: (scroll_x.set(*args), toggle_lgv_overlay(*args)),
+        yscrollcommand=lambda *args: (scroll_y.set(*args), update_lgv_overlay(*args))
+    )
+
+    update_lgv_overlay()
+   
 
     # Make the window layout expand properly
     read_write_window.grid_rowconfigure(4, weight=1)
