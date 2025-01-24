@@ -15,7 +15,7 @@ from queue import Queue, Empty
 import copy
 from ctypes import sizeof
 
-__version__ = '2.4.4.2'
+__version__ = '2.4.4.3'
 __icon__ = "./plc.ico"
 
 LGV_DATA = "lgv_data.xml"
@@ -1808,7 +1808,6 @@ def open_read_write_window():
 
     def read_variable():
         """Start the read operation for all selected LGVs."""
-        clear_status()
 
         variable_names = variable_menu.get().strip()  # Get the variable name directly
 
@@ -1835,7 +1834,7 @@ def open_read_write_window():
             return  # Exit if validation failed
 
         # Prepare result table
-        prepare_result_table(lgv_data, processed_variables.values())
+        prepare_status_table(lgv_data, list(processed_variables.values()))
 
         # Result queue and thread tracking
         result_queue = Queue()
@@ -1872,25 +1871,75 @@ def open_read_write_window():
 
         # Collect results
         results = {}
+        responded_lgvs = set()  # Track which LGVs responded
+
         while not result_queue.empty():
-            lgv, result = result_queue.get()
-            results.setdefault(lgv, []).append(result)
+            lgv, variable, value = result_queue.get()
 
-        # Update the UI with results
+            responded_lgvs.add(lgv)
+            if lgv not in results:
+                results[lgv] = {}
+
+            # Record results or errors
+            results[lgv][variable] = value
+
+            # Update the table dynamically
+            root.after(0, update_status_table, lgv, variable, value)
+
+        # Handle LGVs that didn't respond
         all_lgvs = {lgv for lgv, _, _ in lgv_data}
-        missing_lgvs = all_lgvs - set(results.keys())
+        missing_lgvs = all_lgvs - responded_lgvs
 
-        # Use tkinter's `after` method to update UI safely
-        root.after(0, update_results_in_ui, results, missing_lgvs)
+        for lgv in missing_lgvs:
+            for variable in status_table["columns"][1:]:  # Skip "LGV" column
+                root.after(0, update_status_table, lgv, variable, "Timeout")
+
+        # Handle variables that weren't updated for responding LGVs
+        for lgv in responded_lgvs:
+            for variable in status_table["columns"][1:]:
+                if variable not in results[lgv]:
+                    root.after(0, update_status_table, lgv, variable, "Timeout")
+
+
+    def prepare_status_table(lgv_data, variables):
+        """Pre-populate the table with LGVs and empty variable columns."""
+        status_table.delete(*status_table.get_children())  # Clear the table
+
+        # Set up dynamic columns: LGV + variable columns
+        status_table["columns"] = ["LGV"] + variables
+        status_table.heading("#0", text="", anchor="w")  # Hide default empty column
+        status_table.column("#0", width=0, stretch=tk.NO)
+
+        # Configure columns
+        for col in status_table["columns"]:
+            status_table.heading(col, text=col, anchor="center")
+            status_table.column(col, anchor="center", width=150)  # Set default width
+
+        # Pre-populate rows with LGVs
+        for lgv, ams_net_id, _ in lgv_data:
+            row_values = [f"LGV{lgv:02d}"] + ["" for _ in variables]
+            status_table.insert("", "end", values=row_values)
     
-    def update_results_in_ui(results, missing_lgvs):
-        """Update the UI with results."""
-        for lgv, logs in sorted(results.items()):
-            for log in logs:
-                log_message(log)
 
-        for lgv in sorted(missing_lgvs):
-            log_message(f"LGV{lgv:02d} did not respond or timed out.")
+    def update_status_table(lgv, variable, value):
+        """
+        Update the table for a specific LGV and variable.
+
+        Args:
+            lgv (int): LGV number.
+            variable (str): Variable name.
+            value (str): Value to update in the table (e.g., "Success", "Timeout").
+        """
+        for child in status_table.get_children():
+            row_values = status_table.item(child, "values")
+            if row_values[0] == f"LGV{lgv:02d}":  # Match the LGV row
+                # Find the column index for the variable
+                column_index = status_table["columns"].index(variable)
+                new_row_values = list(row_values)  # Convert to mutable list
+                new_row_values[column_index] = value  # Update the specific cell
+                status_table.item(child, values=new_row_values)  # Update the row
+                break
+
 
 
     def on_radio_selection():
@@ -1906,14 +1955,6 @@ def open_read_write_window():
     def clear_status():
         """Clear the content of the status widget."""
         # status_widget.delete(1.0, tk.END)  # Clear all content
-
-
-    # def on_variable_select(event):
-    #     variable_name = variable_menu.get().strip()  # Directly get the variable name
-    #     symbol_info = ads_connection.get_symbol(variable_name)
-    #     symbol_type_str = symbol_info.symbol_type
-    #     expected_type = get_pyads_type(symbol_type_str)
-
 
     # Variables Frame
     variable_frame = ttk.LabelFrame(read_write_window, text="Variables")
