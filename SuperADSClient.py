@@ -1898,13 +1898,14 @@ def open_read_write_window():
         value_entry.delete(0, tk.END)  # Clear the entry field
 
     def log_message(message):
-        """Insert log messages into the status widget in a thread-safe way."""
-        read_write_window.after(0, lambda: status_widget.insert(tk.END, message + "\n"))
-        read_write_window.after(0, status_widget.see, tk.END)  # Scroll to the bottom
+        """Insert log messages into a messagebox."""
+        # read_write_window.after(0, lambda: status_widget.insert(tk.END, message + "\n"))
+        # read_write_window.after(0, status_widget.see, tk.END)  # Scroll to the bottom
+        messagebox.showerror("Error", message)
 
     def clear_status():
         """Clear the content of the status widget."""
-        status_widget.delete(1.0, tk.END)  # Clear all content
+        # status_widget.delete(1.0, tk.END)  # Clear all content
 
 
     # def on_variable_select(event):
