@@ -1913,7 +1913,7 @@ def open_read_write_window():
         # Configure columns
         for col in status_table["columns"]:
             status_table.heading(col, text=col, anchor="center")
-            status_table.column(col, anchor="center", width=150)  # Set default width
+            status_table.column(col, anchor="center", width=150, stretch=False)  # Set default width
 
         # Pre-populate rows with LGVs
         for lgv, ams_net_id, _ in lgv_data:
@@ -1922,23 +1922,33 @@ def open_read_write_window():
     
 
     def update_status_table(lgv, variable, value):
-        """
-        Update the table for a specific LGV and variable.
-
-        Args:
-            lgv (int): LGV number.
-            variable (str): Variable name.
-            value (str): Value to update in the table (e.g., "Success", "Timeout").
-        """
+        """Update the table for a specific LGV and variable."""
         for child in status_table.get_children():
             row_values = status_table.item(child, "values")
             if row_values[0] == f"LGV{lgv:02d}":  # Match the LGV row
                 # Find the column index for the variable
                 column_index = status_table["columns"].index(variable)
                 new_row_values = list(row_values)  # Convert to mutable list
+
                 new_row_values[column_index] = value  # Update the specific cell
-                status_table.item(child, values=new_row_values)  # Update the row
+
+                tag = "error" if value in ["Timeout", "Error"] else ""
+                status_table.item(child, values=new_row_values, tags=(tag,))  # Update the row
                 break
+        # Adjust column widths
+        adjust_column_width()
+
+
+    def adjust_column_width():
+        """Dynamically adjust the width of each column based on content."""
+        for col in status_table["columns"]:
+            max_length = max(
+                len(str(status_table.set(child, col)))  # Get cell value
+                for child in status_table.get_children()
+            )
+            max_length = max(max_length, len(col))  # Ensure header is included
+            status_table.column(col, width=max_length * 10)  # Adjust width (10px per char)
+
 
 
 
@@ -2019,13 +2029,17 @@ def open_read_write_window():
     # Status table frame
     status_table_frame = ttk.Frame(read_write_window)
     status_table_frame.grid(row=4, column=0, columnspan=2, sticky="nsew")
+    
     # Add the dynamic status table
     status_table = ttk.Treeview(
         status_table_frame,
         show="headings",
-        height=10  # Adjust the height to fit your layout
+        height=5
     )
     status_table.grid(row=0, column=0, padx=(15,0), pady=(15,0), sticky="ew")
+
+    # Configure tags for the status table (e.g., red text for errors)
+    status_table.tag_configure("error", foreground="red")
 
     # Configure scrollbars for the status table
     scroll_y = ttk.Scrollbar(status_table_frame, orient="vertical", command=status_table.yview)
