@@ -15,7 +15,7 @@ from queue import Queue, Empty
 import copy
 from ctypes import sizeof
 
-__version__ = '2.4.4.1'
+__version__ = '2.4.4.2'
 __icon__ = "./plc.ico"
 
 LGV_DATA = "lgv_data.xml"
@@ -1834,6 +1834,9 @@ def open_read_write_window():
         if lgv_data is None:
             return  # Exit if validation failed
 
+        # Prepare result table
+        prepare_result_table(lgv_data, processed_variables.values())
+
         # Result queue and thread tracking
         result_queue = Queue()
         threads = []
@@ -1971,22 +1974,34 @@ def open_read_write_window():
     read_write_window.bind("<Control-w>", lambda event: write_variable())
     read_write_window.bind("<Control-W>", lambda event: write_variable())
 
-    status_widget = scrolledtext.ScrolledText(
-        read_write_window, undo=True, wrap=tk.WORD, height=10, width=50
+    # Status table frame
+    status_table_frame = ttk.Frame(read_write_window)
+    status_table_frame.grid(row=4, column=0, columnspan=2, sticky="nsew")
+    # Add the dynamic status table
+    status_table = ttk.Treeview(
+        status_table_frame,
+        show="headings",
+        height=10  # Adjust the height to fit your layout
     )
-    status_font = font.Font(family="Consolas", size=10)
-    status_widget.configure(font=status_font)
-    status_widget.grid(row=4, column=0, columnspan=2, padx=15, pady=15, sticky="ew")
+    status_table.grid(row=0, column=0, padx=(15,0), pady=(15,0), sticky="ew")
 
-    # Disable manual editing of the status widget
-    status_widget.bind("<Key>", lambda e: "break")
+    # Configure scrollbars for the status table
+    scroll_y = ttk.Scrollbar(status_table_frame, orient="vertical", command=status_table.yview)
+    scroll_y.grid(row=0, column=1, sticky="ns")
 
-    # Make the grid layout expand properly
+    scroll_x = ttk.Scrollbar(status_table_frame, orient="horizontal", command=status_table.xview)
+    scroll_x.grid(row=1, column=0, columnspan=2, sticky="ew")
+
+    status_table.configure(yscrollcommand=scroll_y.set, xscrollcommand=scroll_x.set)
+
+   # Make the table frame expandable
+    status_table_frame.grid_columnconfigure(0, weight=1)
+    status_table_frame.grid_rowconfigure(0, weight=1)
+
+    # Make the window layout expand properly
+    read_write_window.grid_rowconfigure(4, weight=1)
     read_write_window.grid_columnconfigure(0, weight=1)
     read_write_window.grid_columnconfigure(1, weight=1)
-    value_frame.grid_columnconfigure(0, weight=1)
-    value_frame.grid_columnconfigure(1, weight=1)
-    # result_frame.grid_columnconfigure(0, weight=1)
 
     exceptions = [value_frame, read_button, write_button]
 
