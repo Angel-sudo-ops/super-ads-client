@@ -1688,7 +1688,6 @@ def open_read_write_window():
     
     def write_variable():
         """Start the write operation for all selected LGVs."""
-        clear_status()
 
         variable_names = variable_menu.get().strip()  # Directly get the variable name
 
@@ -1714,6 +1713,9 @@ def open_read_write_window():
         if lgv_data is None:
             # messagebox.showerror("Error", "LGV range is empty")
             return  # Exit if validation failed
+        
+        # Prepare result table
+        prepare_status_table(lgv_data, list(processed_variables.values()))
 
         # Result queue and thread tracking
         result_queue = Queue()
@@ -1952,15 +1954,6 @@ def open_read_write_window():
             )
             max_length = max(max_length, len(col))  # Ensure header is included
             status_table.column(col, width=max_length * 10)  # Adjust width (10px per char)
-
-        for col in lgv_overlay["columns"]:
-            max_length = max(
-                len(str(status_table.set(child, col)))  # Get cell value
-                for child in status_table.get_children()
-            )
-            max_length = max(max_length, len(col))  # Ensure header is included
-            status_table.column(col, width=max_length * 10)  # Adjust width (10px per char)
-
 
 
 
