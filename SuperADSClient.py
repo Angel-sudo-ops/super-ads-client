@@ -15,7 +15,7 @@ from queue import Queue, Empty
 import copy
 from ctypes import sizeof
 
-__version__ = '2.4.4.5'
+__version__ = '2.4.6'
 __icon__ = "./plc.ico"
 
 LGV_DATA = "lgv_data.xml"
@@ -1698,7 +1698,7 @@ def open_read_write_window():
             return
 
         # Split the input by commas and strip each variable name
-        variables = [var.strip() for var in variable_names.split(',') if var.strip()]
+        variables = [var.strip() for var in variable_names.split(';') if var.strip()]
 
         if not variables:
             print("No valid variable names found!")
@@ -1820,7 +1820,7 @@ def open_read_write_window():
             return
 
         # Split the input by commas and strip each variable name
-        variables = [var.strip() for var in variable_names.split(',') if var.strip()]
+        variables = [var.strip() for var in variable_names.split(';') if var.strip()]
 
         if not variables:
             print("No valid variable names found!")
