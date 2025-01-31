@@ -1649,13 +1649,13 @@ def open_read_write_window():
                 #     print(f"Successfully wrote {value} to {variable_name} for LGV {lgv}")
                 print(f"Variable value in LGV{lgv:02d} is now {value}")
                 # Add result to queue
-                result_queue.put((lgv, f"LGV{lgv:02d}: {display_name} is now {value}"))
+                result_queue.put((lgv, display_name, value))
 
                 # Remove the notification after use
                 # ads_connection.del_device_notification(notification_handle, handle_id)
         except Exception as e:
             # Add error result to queue
-            result_queue.put((lgv, f"Error writing to LGV{lgv:02d}: {e}"))   
+            result_queue.put((lgv, display_name, e))   
         # except pyads.ADSError as ads_err:
         #     # Handle ADS-specific errors with more detail
         #     error_message = f"Error writing to LGV{lgv:02d}: {ads_err}"
@@ -1799,14 +1799,14 @@ def open_read_write_window():
                 print(f"Successfully read {value} from {variable_name} for LGV {lgv}")
                 
                 # Add result to queue
-                result_queue.put((lgv, f"LGV{lgv:02d}: {display_name} is {value}"))
+                result_queue.put((lgv, display_name, value))
 
                 # # Log the read value
                 # log_message(f"{variable_last_part} value in LGV{lgv:02d} is {value}")
 
         except Exception as e:
             # Add error result to queue
-            result_queue.put((lgv, f"Error reading LGV{lgv:02d}: {e}"))
+            result_queue.put((lgv, display_name, e))
 
     def read_variable():
         """Start the read operation for all selected LGVs."""
