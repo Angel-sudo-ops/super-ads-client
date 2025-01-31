@@ -1925,6 +1925,8 @@ def open_read_write_window():
             status_table.insert("", "end", values=row_values)
 
             lgv_overlay.insert("", "end", values=row_values) # Populate lgv_overlay as well
+
+        setup_rw_data(status_table)
     
 
     def update_status_table(lgv, variable, value):
@@ -1955,6 +1957,48 @@ def open_read_write_window():
             max_length = max(max_length, len(col))  # Ensure header is included
             status_table.column(col, width=max_length * 10)  # Adjust width (10px per char)
 
+
+    # Dictionary to store original column headings for sorting indicators
+    dynamic_headings = {}
+
+    def setup_rw_data(treeview):
+        """
+        Setup sorting for dynamically generated columns.
+        """
+        for col in treeview['columns']:
+            dynamic_headings[col] = col  # Store original column heading
+            treeview.heading(
+                col, 
+                text=col, 
+                command=lambda _col=col: treeview_sort_column(treeview, _col, False), 
+                anchor="center"
+            )
+
+    def treeview_sort_column(tv, col, reverse):
+        """
+        Sort the selected column naturally.
+        """
+        # Retrieve all data from the treeview
+        rows = [(tv.set(k, col), k) for k in tv.get_children('')]
+
+        # Sort the data using natural keys for mixed alphanumeric sorting
+        rows.sort(reverse=reverse, key=lambda t: natural_keys(t[0]))
+
+        # Rearrange items in sorted positions
+        for index, (_, k) in enumerate(rows):
+            tv.move(k, '', index)
+
+        # Update column headers to reflect sorting direction
+        for column in tv["columns"]:
+            heading_text = dynamic_headings[column] + (' ↓' if reverse and column == col else ' ↑' if not reverse and column == col else '')
+            tv.heading(column, text=heading_text, command=lambda _col=column: treeview_sort_column(tv, _col, not reverse))
+
+    def natural_keys(text):
+        """
+        Alphanumeric (natural) sorting for numbers within strings.
+        """
+        import re
+        return [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', text)]
 
 
     def on_radio_selection():
