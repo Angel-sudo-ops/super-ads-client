@@ -15,7 +15,7 @@ from queue import Queue, Empty
 import copy
 from ctypes import sizeof
 
-__version__ = '2.4.4.4'
+__version__ = '2.4.4.5'
 __icon__ = "./plc.ico"
 
 LGV_DATA = "lgv_data.xml"
@@ -1988,6 +1988,8 @@ def open_read_write_window():
         for index, (_, k) in enumerate(rows):
             tv.move(k, '', index)
 
+        update_lgv_overlay_order(tv)
+
         # Update column headers to reflect sorting direction
         for column in tv["columns"]:
             heading_text = dynamic_headings[column] + (' ↓' if reverse and column == col else ' ↑' if not reverse and column == col else '')
@@ -1999,6 +2001,17 @@ def open_read_write_window():
         """
         import re
         return [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', text)]
+
+    def update_lgv_overlay_order(tv):
+        """
+        Updates the LGV overlay to match the sorted order of the status_table.
+        """
+        lgv_overlay.delete(*lgv_overlay.get_children())  # Clear current overlay
+
+        # Insert LGV numbers in the sorted order
+        for item in tv.get_children(''):
+            lgv_number = tv.item(item, "values")[0]  # Extract LGV number from sorted table
+            lgv_overlay.insert("", "end", values=(lgv_number,))
 
 
     def on_radio_selection():
