@@ -31,12 +31,13 @@
     "Main.StartupOk",
     "LibraryInterfaces.LGV.Guid.Rout.remDistToOP",
     "LibraryInterfaces.LGV.Guid.Rout.remDistToPreOP",
-    "LibraryInterfaces.LGV.Guid.Rout.remDistToPreOP, LibraryInterfaces.LGV.Guid.Rout.remDistToOP",
+    "LibraryInterfaces.LGV.Guid.Rout.remDistToPreOP; LibraryInterfaces.LGV.Guid.Rout.remDistToOP",
     "Devices.Pressure.tilt.weight,Main.StartupOk",
-    "Devices.Pressure.tilt.weight,Main.StartupOk, SpareVariables.boolSpare[0]",
-    "InfoMovements.Mov.opCl4.curGroupsInterax[1],InfoMovements.Mov.opCl4.curGroupsInterax[2],InfoMovements.Mov.shift.curPosition,InfoMovements.Mov.tilt.curPosition,InfoMovements.Mov.lift.curPosition, LibraryInterfaces.LGV.Guid.Rout.remDistToPreOP, LibraryInterfaces.LGV.Guid.Rout.remDistToOP, Devices.Pressure.tilt.weight, Devices.Pressure.lift.weight,FlexSegPhaseHandler.preOpDistFromTheEnd,FlexSegPhaseHandler.segDistAvailable",
+    "Devices.Pressure.tilt.weight,Main.StartupOk; SpareVariables.boolSpare[0]",
+    "InfoMovements.Mov.opCl4.curGroupsInterax[1];InfoMovements.Mov.opCl4.curGroupsInterax[2];InfoMovements.Mov.shift.curPosition;InfoMovements.Mov.tilt.curPosition;InfoMovements.Mov.lift.curPosition; LibraryInterfaces.LGV.Guid.Rout.remDistToPreOP; LibraryInterfaces.LGV.Guid.Rout.remDistToOP; Devices.Pressure.tilt.weight; Devices.Pressure.lift.weight; FlexSegPhaseHandler.preOpDistFromTheEnd; FlexSegPhaseHandler.segDistAvailable",
     "CoreGVL.ADS_Stop,CoreGVL.ADS_Reset",
     "CoreGVL.ADS_Stop, CoreGVL.ADS_Reset",
-    "Operation.current.name,LibraryInterfaces.LGV.Guid.Rout.remDistToPreOP,LibraryInterfaces.LGV.Guid.Rout.remDistToOP",
-    "Operation.current.name,InfoMovements.Mov.lift.curPosition,LibraryInterfaces.LGV.Guid.Rout.remDistToPreOP,LibraryInterfaces.LGV.Guid.Rout.remDistToOP"
+    "Operation.current.name;LibraryInterfaces.LGV.Guid.Rout.remDistToPreOP;LibraryInterfaces.LGV.Guid.Rout.remDistToOP",
+    "Operation.current.name;InfoMovements.Mov.lift.curPosition;LibraryInterfaces.LGV.Guid.Rout.remDistToPreOP;LibraryInterfaces.LGV.Guid.Rout.remDistToOP",
+    "LiftMov.level_LookUp_Table[4,1]; LiftMov.H_Infork_Pallet_by_Host"
 ]
