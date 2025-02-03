@@ -1731,6 +1731,8 @@ def open_read_write_window():
             # Try to convert to a number, otherwise keep it as a string
             value = convert_to_number(entry_value) or entry_value
         
+        # Delete entry_value after reading it to avoid using it the next time 
+        clear_entry_field()
         
         # Start a thread for each LGV to perform the write operation
         for lgv, ams_net_id, tc_type in lgv_data:
@@ -2014,7 +2016,7 @@ def open_read_write_window():
             lgv_overlay.insert("", "end", values=(lgv_number,))
 
 
-    def on_radio_selection():
+    def clear_entry_field():
         """Disable value entry if True/False radio is selected."""
         value_entry.delete(0, tk.END)  # Clear the entry field
 
@@ -2051,10 +2053,10 @@ def open_read_write_window():
     bool_value_frame.grid(row=0, column=0, padx=5, pady=5)
 
     var_type = tk.BooleanVar()
-    true_radio = ttk.Radiobutton(bool_value_frame, text="True", variable=var_type, value=True, command=on_radio_selection)
+    true_radio = ttk.Radiobutton(bool_value_frame, text="True", variable=var_type, value=True, command=clear_entry_field)
     true_radio.grid(row=0, column=0, padx=5, pady=5)
 
-    false_radio = ttk.Radiobutton(bool_value_frame, text="False", variable=var_type, value=False, command=on_radio_selection)
+    false_radio = ttk.Radiobutton(bool_value_frame, text="False", variable=var_type, value=False, command=clear_entry_field)
     false_radio.grid(row=0, column=1, padx=5, pady=5)
 
     entry_value_frame = ttk.Frame(value_frame)
