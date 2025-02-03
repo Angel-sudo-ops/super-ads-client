@@ -15,7 +15,7 @@ from queue import Queue, Empty
 import copy
 from ctypes import sizeof
 
-__version__ = '2.4.6'
+__version__ = '2.4.6.1'
 __icon__ = "./plc.ico"
 
 LGV_DATA = "lgv_data.xml"
