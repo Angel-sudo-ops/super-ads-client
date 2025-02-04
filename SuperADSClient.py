@@ -15,7 +15,7 @@ from queue import Queue, Empty
 import copy
 from ctypes import sizeof
 
-__version__ = '2.4.4.1'
+__version__ = '2.4.6.1'
 __icon__ = "./plc.ico"
 
 LGV_DATA = "lgv_data.xml"
@@ -1649,13 +1649,13 @@ def open_read_write_window():
                 #     print(f"Successfully wrote {value} to {variable_name} for LGV {lgv}")
                 print(f"Variable value in LGV{lgv:02d} is now {value}")
                 # Add result to queue
-                result_queue.put((lgv, f"LGV{lgv:02d}: {display_name} is now {value}"))
+                result_queue.put((lgv, display_name, value))
 
                 # Remove the notification after use
                 # ads_connection.del_device_notification(notification_handle, handle_id)
         except Exception as e:
             # Add error result to queue
-            result_queue.put((lgv, f"Error writing to LGV{lgv:02d}: {e}"))   
+            result_queue.put((lgv, display_name, e))   
         # except pyads.ADSError as ads_err:
         #     # Handle ADS-specific errors with more detail
         #     error_message = f"Error writing to LGV{lgv:02d}: {ads_err}"
@@ -1688,7 +1688,6 @@ def open_read_write_window():
     
     def write_variable():
         """Start the write operation for all selected LGVs."""
-        clear_status()
 
         variable_names = variable_menu.get().strip()  # Directly get the variable name
 
@@ -1699,7 +1698,7 @@ def open_read_write_window():
             return
 
         # Split the input by commas and strip each variable name
-        variables = [var.strip() for var in variable_names.split(',') if var.strip()]
+        variables = [var.strip() for var in variable_names.split(';') if var.strip()]
 
         if not variables:
             print("No valid variable names found!")
@@ -1714,6 +1713,9 @@ def open_read_write_window():
         if lgv_data is None:
             # messagebox.showerror("Error", "LGV range is empty")
             return  # Exit if validation failed
+        
+        # Prepare result table
+        prepare_status_table(lgv_data, list(processed_variables.values()))
 
         # Result queue and thread tracking
         result_queue = Queue()
@@ -1729,6 +1731,8 @@ def open_read_write_window():
             # Try to convert to a number, otherwise keep it as a string
             value = convert_to_number(entry_value) or entry_value
         
+        # Delete entry_value after reading it to avoid using it the next time 
+        clear_entry_field()
         
         # Start a thread for each LGV to perform the write operation
         for lgv, ams_net_id, tc_type in lgv_data:
@@ -1797,18 +1801,17 @@ def open_read_write_window():
                 print(f"Successfully read {value} from {variable_name} for LGV {lgv}")
                 
                 # Add result to queue
-                result_queue.put((lgv, f"LGV{lgv:02d}: {display_name} is {value}"))
+                result_queue.put((lgv, display_name, value))
 
                 # # Log the read value
                 # log_message(f"{variable_last_part} value in LGV{lgv:02d} is {value}")
 
         except Exception as e:
             # Add error result to queue
-            result_queue.put((lgv, f"Error reading LGV{lgv:02d}: {e}"))
+            result_queue.put((lgv, display_name, e))
 
     def read_variable():
         """Start the read operation for all selected LGVs."""
-        clear_status()
 
         variable_names = variable_menu.get().strip()  # Get the variable name directly
 
@@ -1819,7 +1822,7 @@ def open_read_write_window():
             return
 
         # Split the input by commas and strip each variable name
-        variables = [var.strip() for var in variable_names.split(',') if var.strip()]
+        variables = [var.strip() for var in variable_names.split(';') if var.strip()]
 
         if not variables:
             print("No valid variable names found!")
@@ -1833,6 +1836,9 @@ def open_read_write_window():
         lgv_data = validate_and_link_lgv()
         if lgv_data is None:
             return  # Exit if validation failed
+
+        # Prepare result table
+        prepare_status_table(lgv_data, list(processed_variables.values()))
 
         # Result queue and thread tracking
         result_queue = Queue()
@@ -1869,47 +1875,160 @@ def open_read_write_window():
 
         # Collect results
         results = {}
+        responded_lgvs = set()  # Track which LGVs responded
+
         while not result_queue.empty():
-            lgv, result = result_queue.get()
-            results.setdefault(lgv, []).append(result)
+            lgv, variable, value = result_queue.get()
 
-        # Update the UI with results
+            responded_lgvs.add(lgv)
+            if lgv not in results:
+                results[lgv] = {}
+
+            # Record results or errors
+            results[lgv][variable] = value
+
+            # Update the table dynamically
+            root.after(0, update_status_table, lgv, variable, value)
+
+        # Handle LGVs that didn't respond
         all_lgvs = {lgv for lgv, _, _ in lgv_data}
-        missing_lgvs = all_lgvs - set(results.keys())
+        missing_lgvs = all_lgvs - responded_lgvs
 
-        # Use tkinter's `after` method to update UI safely
-        root.after(0, update_results_in_ui, results, missing_lgvs)
+        for lgv in missing_lgvs:
+            for variable in status_table["columns"][1:]:  # Skip "LGV" column
+                root.after(0, update_status_table, lgv, variable, "Timeout")
+
+        # Handle variables that weren't updated for responding LGVs
+        for lgv in responded_lgvs:
+            for variable in status_table["columns"][1:]:
+                if variable not in results[lgv]:
+                    root.after(0, update_status_table, lgv, variable, "Timeout")
+
+
+    def prepare_status_table(lgv_data, variables):
+        """Pre-populate the table with LGVs and empty variable columns."""
+        status_table.delete(*status_table.get_children())  # Clear the table
+
+        lgv_overlay.delete(*lgv_overlay.get_children())
+
+        # Set up dynamic columns: LGV + variable columns
+        status_table["columns"] = ["LGV"] + variables
+        status_table.heading("#0", text="", anchor="w")  # Hide default empty column
+        status_table.column("#0", width=0, stretch=tk.NO)
+
+        # Configure columns
+        for col in status_table["columns"]:
+            status_table.heading(col, text=col, anchor="center")
+            status_table.column(col, anchor="center", width=150, stretch=False)  # Set default width
+
+        # Pre-populate rows with LGVs
+        for lgv, ams_net_id, _ in lgv_data:
+            row_values = [f"LGV{lgv:02d}"] + ["" for _ in variables]
+            status_table.insert("", "end", values=row_values)
+
+            lgv_overlay.insert("", "end", values=row_values) # Populate lgv_overlay as well
+
+        setup_rw_data(status_table)
     
-    def update_results_in_ui(results, missing_lgvs):
-        """Update the UI with results."""
-        for lgv, logs in sorted(results.items()):
-            for log in logs:
-                log_message(log)
 
-        for lgv in sorted(missing_lgvs):
-            log_message(f"LGV{lgv:02d} did not respond or timed out.")
+    def update_status_table(lgv, variable, value):
+        """Update the table for a specific LGV and variable."""
+        for child in status_table.get_children():
+            row_values = status_table.item(child, "values")
+            if row_values[0] == f"LGV{lgv:02d}":  # Match the LGV row
+                # Find the column index for the variable
+                column_index = status_table["columns"].index(variable)
+                new_row_values = list(row_values)  # Convert to mutable list
+
+                new_row_values[column_index] = value  # Update the specific cell
+
+                tag = "" if value in ["Timeout", "Error"] else ""
+                status_table.item(child, values=new_row_values, tags=(tag,))  # Update the row
+                break
+        # Adjust column widths
+        adjust_column_width()
 
 
-    def on_radio_selection():
+    def adjust_column_width():
+        """Dynamically adjust the width of each column based on content."""
+        for col in status_table["columns"]:
+            max_length = max(
+                len(str(status_table.set(child, col)))  # Get cell value
+                for child in status_table.get_children()
+            )
+            max_length = max(max_length, len(col))  # Ensure header is included
+            status_table.column(col, width=max_length * 10)  # Adjust width (10px per char)
+
+
+    # Dictionary to store original column headings for sorting indicators
+    dynamic_headings = {}
+
+    def setup_rw_data(treeview):
+        """
+        Setup sorting for dynamically generated columns.
+        """
+        for col in treeview['columns']:
+            dynamic_headings[col] = col  # Store original column heading
+            treeview.heading(
+                col, 
+                text=col, 
+                command=lambda _col=col: treeview_sort_column(treeview, _col, False), 
+                anchor="center"
+            )
+
+    def treeview_sort_column(tv, col, reverse):
+        """
+        Sort the selected column naturally.
+        """
+        # Retrieve all data from the treeview
+        rows = [(tv.set(k, col), k) for k in tv.get_children('')]
+
+        # Sort the data using natural keys for mixed alphanumeric sorting
+        rows.sort(reverse=reverse, key=lambda t: natural_keys(t[0]))
+
+        # Rearrange items in sorted positions
+        for index, (_, k) in enumerate(rows):
+            tv.move(k, '', index)
+
+        update_lgv_overlay_order(tv)
+
+        # Update column headers to reflect sorting direction
+        for column in tv["columns"]:
+            heading_text = dynamic_headings[column] + (' ↓' if reverse and column == col else ' ↑' if not reverse and column == col else '')
+            tv.heading(column, text=heading_text, command=lambda _col=column: treeview_sort_column(tv, _col, not reverse))
+
+    def natural_keys(text):
+        """
+        Alphanumeric (natural) sorting for numbers within strings.
+        """
+        import re
+        return [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', text)]
+
+    def update_lgv_overlay_order(tv):
+        """
+        Updates the LGV overlay to match the sorted order of the status_table.
+        """
+        lgv_overlay.delete(*lgv_overlay.get_children())  # Clear current overlay
+
+        # Insert LGV numbers in the sorted order
+        for item in tv.get_children(''):
+            lgv_number = tv.item(item, "values")[0]  # Extract LGV number from sorted table
+            lgv_overlay.insert("", "end", values=(lgv_number,))
+
+
+    def clear_entry_field():
         """Disable value entry if True/False radio is selected."""
         value_entry.delete(0, tk.END)  # Clear the entry field
 
     def log_message(message):
-        """Insert log messages into the status widget in a thread-safe way."""
-        read_write_window.after(0, lambda: status_widget.insert(tk.END, message + "\n"))
-        read_write_window.after(0, status_widget.see, tk.END)  # Scroll to the bottom
+        """Insert log messages into a messagebox."""
+        # read_write_window.after(0, lambda: status_widget.insert(tk.END, message + "\n"))
+        # read_write_window.after(0, status_widget.see, tk.END)  # Scroll to the bottom
+        messagebox.showerror("Error", message)
 
     def clear_status():
         """Clear the content of the status widget."""
-        status_widget.delete(1.0, tk.END)  # Clear all content
-
-
-    # def on_variable_select(event):
-    #     variable_name = variable_menu.get().strip()  # Directly get the variable name
-    #     symbol_info = ads_connection.get_symbol(variable_name)
-    #     symbol_type_str = symbol_info.symbol_type
-    #     expected_type = get_pyads_type(symbol_type_str)
-
+        # status_widget.delete(1.0, tk.END)  # Clear all content
 
     # Variables Frame
     variable_frame = ttk.LabelFrame(read_write_window, text="Variables")
@@ -1934,10 +2053,10 @@ def open_read_write_window():
     bool_value_frame.grid(row=0, column=0, padx=5, pady=5)
 
     var_type = tk.BooleanVar()
-    true_radio = ttk.Radiobutton(bool_value_frame, text="True", variable=var_type, value=True, command=on_radio_selection)
+    true_radio = ttk.Radiobutton(bool_value_frame, text="True", variable=var_type, value=True, command=clear_entry_field)
     true_radio.grid(row=0, column=0, padx=5, pady=5)
 
-    false_radio = ttk.Radiobutton(bool_value_frame, text="False", variable=var_type, value=False, command=on_radio_selection)
+    false_radio = ttk.Radiobutton(bool_value_frame, text="False", variable=var_type, value=False, command=clear_entry_field)
     false_radio.grid(row=0, column=1, padx=5, pady=5)
 
     entry_value_frame = ttk.Frame(value_frame)
@@ -1971,22 +2090,100 @@ def open_read_write_window():
     read_write_window.bind("<Control-w>", lambda event: write_variable())
     read_write_window.bind("<Control-W>", lambda event: write_variable())
 
-    status_widget = scrolledtext.ScrolledText(
-        read_write_window, undo=True, wrap=tk.WORD, height=10, width=50
+    # Status table frame
+    status_table_frame = ttk.Frame(read_write_window)
+    status_table_frame.grid(row=4, column=0, columnspan=2, sticky="nsew")
+
+
+    # LGV overlay Treeview
+    lgv_overlay = ttk.Treeview(
+        status_table_frame,
+        show="headings",
+        height=5
+        # selectmode="none"  # Prevent selection
     )
-    status_font = font.Font(family="Consolas", size=10)
-    status_widget.configure(font=status_font)
-    status_widget.grid(row=4, column=0, columnspan=2, padx=15, pady=15, sticky="ew")
+    lgv_overlay.grid(row=0, column=0, padx=(15,0), pady=(5,0), sticky="nsw")  # Align to the left
+    lgv_overlay["columns"] = ["LGV"]
+    lgv_overlay.heading("LGV", text="LGV", anchor="center")
+    lgv_overlay.column("LGV", width=70, stretch=False, anchor="center")
 
-    # Disable manual editing of the status widget
-    status_widget.bind("<Key>", lambda e: "break")
+    lgv_overlay.grid_remove()  # Hide overlay initially
 
-    # Make the grid layout expand properly
+    # Disable vertical scrolling on the LGV overlay
+    lgv_overlay.unbind("<MouseWheel>")  # Disable mouse scroll (Windows)
+    lgv_overlay.unbind("<Button-4>")    # Disable mouse scroll up (Linux)
+    lgv_overlay.unbind("<Button-5>")    # Disable mouse scroll down (Linux)
+
+    # Prevent programmatic vertical scrolling
+    lgv_overlay.yview = lambda *args: None
+
+
+    # Add the dynamic status table
+    status_table = ttk.Treeview(
+        status_table_frame,
+        show="headings",
+        height=5
+    )
+    status_table.grid(row=0, column=0, padx=(15,0), pady=(5,0), sticky="nsew")
+
+    # Configure tags for the status table (e.g., red text for errors)
+    status_table.tag_configure("error", foreground="red")
+
+    # Configure scrollbars for the status table
+    scroll_y = ttk.Scrollbar(status_table_frame, orient="vertical", command=status_table.yview)   
+    scroll_y.grid(row=0, column=1, sticky="ns")
+
+    scroll_x = ttk.Scrollbar(status_table_frame, orient="horizontal", command=status_table.xview)
+    scroll_x.grid(row=1, column=0, columnspan=2, sticky="ew")
+
+
+   # Make the table frame expandable
+    status_table_frame.grid_columnconfigure(0, weight=1)
+    status_table_frame.grid_rowconfigure(0, weight=1)
+
+     
+    # Function to check LGV column visibility
+    def toggle_lgv_overlay(*args):
+        """Show or hide the LGV overlay depending on the visibility of the LGV column."""
+        x = status_table.xview()[0]  # Get the normalized scroll position (0 to 1)
+        if x > 0:  # If the scroll position is not at the beginning
+            lgv_overlay.grid()  # Show overlay
+            lgv_overlay.lift()
+        else:
+            lgv_overlay.grid_remove()  # Hide overlay
+
+    def update_lgv_overlay(*args):
+        # Handle vertical scrolling for visible rows (yscroll)
+        lgv_overlay.delete(*lgv_overlay.get_children())  # Clear current rows in overlay
+
+        # Get visible range
+        visible_fraction = status_table.yview()  # Returns (start, end) as fractions
+        total_rows = len(status_table.get_children())  # Total rows in the Treeview
+
+        # Calculate visible row indices
+        first_visible_row = int(visible_fraction[0] * total_rows)
+        last_visible_row = min(int(visible_fraction[1] * total_rows)-1, total_rows-1)
+        
+        # Populate overlay with visible rows only
+        for i in range(first_visible_row, last_visible_row+1):
+            lgv_name = f"LGV{(i+1):02d}"  # Example LGV name (adjust to your data) 
+            lgv_overlay.insert("", "end", values=(lgv_name,))
+            print(f" First elem: {first_visible_row}, Last elem: {last_visible_row}, {len(status_table.get_children())}")
+
+
+    # Attach the function to the horizontal scrollbar
+    status_table.configure(
+        xscrollcommand=lambda *args: (scroll_x.set(*args), toggle_lgv_overlay(*args)),
+        yscrollcommand=lambda *args: (scroll_y.set(*args), update_lgv_overlay(*args))
+    )
+
+    update_lgv_overlay()
+   
+
+    # Make the window layout expand properly
+    read_write_window.grid_rowconfigure(4, weight=1)
     read_write_window.grid_columnconfigure(0, weight=1)
     read_write_window.grid_columnconfigure(1, weight=1)
-    value_frame.grid_columnconfigure(0, weight=1)
-    value_frame.grid_columnconfigure(1, weight=1)
-    # result_frame.grid_columnconfigure(0, weight=1)
 
     exceptions = [value_frame, read_button, write_button]
 
