@@ -39,5 +39,11 @@
     "CoreGVL.ADS_Stop, CoreGVL.ADS_Reset",
     "Operation.current.name;LibraryInterfaces.LGV.Guid.Rout.remDistToPreOP;LibraryInterfaces.LGV.Guid.Rout.remDistToOP",
     "Operation.current.name;InfoMovements.Mov.lift.curPosition;LibraryInterfaces.LGV.Guid.Rout.remDistToPreOP;LibraryInterfaces.LGV.Guid.Rout.remDistToOP",
-    "LiftMov.level_LookUp_Table[4,1]; LiftMov.H_Infork_Pallet_by_Host"
+    "LiftMov.level_LookUp_Table[4,1]; LiftMov.H_Infork_Pallet_by_Host",
+    "LibraryInterfaces.LGV.Guid.PathFol.PosErrOnPath.y",
+    "InfoMovements.Mov.shift.curPosition",
+    "LibraryInterfaces.LGV.Guid.PathFol.PosErrOnPath.y; InfoMovements.Mov.shift.curPosition",
+    "CoreGVL.curSectorInfo.isRotation",
+    "CoreGVL.curSegmentInfo.isRotation",
+    "CoreGVL.curSegmentInfo.isRotation; CoreGVL.curSectorInfo.isRotation"
 ]
