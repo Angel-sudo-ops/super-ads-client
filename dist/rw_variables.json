@@ -45,5 +45,17 @@
     "LibraryInterfaces.LGV.Guid.PathFol.PosErrOnPath.y; InfoMovements.Mov.shift.curPosition",
     "CoreGVL.curSectorInfo.isRotation",
     "CoreGVL.curSegmentInfo.isRotation",
-    "CoreGVL.curSegmentInfo.isRotation; CoreGVL.curSectorInfo.isRotation"
+    "CoreGVL.curSegmentInfo.isRotation; CoreGVL.curSectorInfo.isRotation",
+    "BMS.battery.out.soc",
+    "Devices.Muting.rear.bypassAlarms.feedbackNotOk",
+    "SafetyGlobals.plsFrontHandler.active",
+    "SafetyGlobals.plsRearHandler.active",
+    "SafetyGlobals.plsLateralHandler.activeLeft",
+    "SafetyGlobals.plsLateralHandler.activeRight",
+    "SafetyGlobals.plsVerticalFrontHandler.activeRight",
+    "SafetyGlobals.plsVerticalFrontHandler.activeLeft",
+    "SafetyControls.autoreset.autoresetFlag",
+    "LibraryInterfaces.LGV.Guid.PathFol.PosErrOnPath.x",
+    "Devices.Temperature.Environment.value",
+    "LibraryInterfaces.LGV.Guid.PathFol.Reference_Point_Trim_Distance_x_mm"
 ]
