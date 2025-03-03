@@ -15,7 +15,7 @@ from queue import Queue, Empty
 import copy
 from ctypes import sizeof
 
-__version__ = '2.4.7'
+__version__ = '2.4.8'
 __icon__ = "./plc.ico"
 
 LGV_DATA = "lgv_data.xml"
@@ -229,6 +229,10 @@ def populate_table_from_db3():
     # Enable menu for Read/Write if table is updated
     update_menu()
 
+def extract_numeric_part(name):
+    match = re.search(r'\d+', name) #Extract numeric part
+    return int(match.group()) if match else float('inf') # Convert to int for correct sorting
+
 
 # Save data to XML
 def save_table_data_to_xml(tree, filename=LGV_DATA):
@@ -249,7 +253,7 @@ def save_table_data_to_xml(tree, filename=LGV_DATA):
         })
 
     # Sort the current data to ensure consistent ordering
-    current_data.sort(key=lambda x: x["Name"])
+    current_data.sort(key=lambda x: extract_numeric_part(x["Name"]))
 
 
     # If the file exists, compare it with the current data
@@ -267,7 +271,7 @@ def save_table_data_to_xml(tree, filename=LGV_DATA):
             })
 
         # Sort the existing data to ensure consistent ordering
-        existing_data.sort(key=lambda x: x["Name"])
+        existing_data.sort(key=lambda x: extract_numeric_part(x["Name"]))
 
         # Compare existing data with current data
         if existing_data == current_data:
