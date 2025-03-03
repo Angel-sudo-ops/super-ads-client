@@ -60,4 +60,14 @@
         <AMSNetId>172.16.12.112.1.1</AMSNetId>
         <Type>TC3</Type>
     </LGV>
+    <LGV>
+        <Name>LGV101</Name>
+        <AMSNetId>172.16.12.115.1.1</AMSNetId>
+        <Type>TC2</Type>
+    </LGV>
+    <LGV>
+        <Name>LGV102</Name>
+        <AMSNetId>172.16.12.114.1.1</AMSNetId>
+        <Type>TC2</Type>
+    </LGV>
 </LGVData>

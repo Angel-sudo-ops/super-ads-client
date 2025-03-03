@@ -57,5 +57,9 @@
     "SafetyControls.autoreset.autoresetFlag",
     "LibraryInterfaces.LGV.Guid.PathFol.PosErrOnPath.x",
     "Devices.Temperature.Environment.value",
-    "LibraryInterfaces.LGV.Guid.PathFol.Reference_Point_Trim_Distance_x_mm"
+    "LibraryInterfaces.LGV.Guid.PathFol.Reference_Point_Trim_Distance_x_mm",
+    ".Sys_On_FlexSeg",
+    ".Sys_Dst_ToEndPnt",
+    ".Sys_Flex_Driving_To_PreOpPoint",
+    ".Sys_OnTarget"
 ]
