@@ -61,5 +61,20 @@
     ".Sys_On_FlexSeg",
     ".Sys_Dst_ToEndPnt",
     ".Sys_Flex_Driving_To_PreOpPoint",
-    ".Sys_OnTarget"
+    ".Sys_OnTarget",
+    "LibraryInterfaces.FileManagement.loadRequest[6]",
+    "PLS.lateralLeft.caseCommand",
+    "PLS.lateralRight.caseCommand",
+    ".GateActiveID",
+    ".Cur_Seg_Info.GateActiveID",
+    ".Cur_Seg_Info.GateActiveID; .Cur_Seg_Info.ID",
+    ".bCheckGateDisable",
+    ".bCheckGateDisable; bGateCrossingEnabled",
+    ".bCheckGateDisable; .bGateCrossingEnabled",
+    ".Sys_AGV_Loaded",
+    ".Sys_Flex_Op_Point_Dist",
+    "LibraryInterfaces.LFInfo.RefLineNavRQST",
+    "FillOpInfo.wrongParameters",
+    "CoreGVL.OutOfPathControls.bypassAlarm.Al_ErrorMotorWheelLenght",
+    "LibraryInterfaces.LGV.Guid.PathFol.Current_Distance"
 ]
