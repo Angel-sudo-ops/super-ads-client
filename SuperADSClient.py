@@ -6,14 +6,24 @@ import re
 import os
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
-import pyads
 import sys
 import threading
 import time
 import json
 from queue import Queue, Empty
 import copy
-from ctypes import sizeof
+# from ctypes import sizeof
+
+try:
+    import pyads
+    pyads_available = True
+except Exception as e:
+    print(f"Error: {e}")
+    pyads_available = False
+
+if not pyads_available:
+    messagebox.showerror("Attention", "No pyads available")
+    print("No pyads available")
 
 __version__ = '2.4.6.1'
 __icon__ = "./plc.ico"
@@ -23,7 +33,6 @@ LGV_DATA = "lgv_data.xml"
 current_ads_connection = None
 
 connection_active = False
-
 
 ####################################################################################################################################################################
 ########################################################## Initial data reading from xml file ######################################################################
