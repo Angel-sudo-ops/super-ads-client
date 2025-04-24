@@ -25,7 +25,7 @@ if not pyads_available:
     messagebox.showerror("Attention", "No pyads available")
     print("No pyads available")
 
-__version__ = '2.4.6.2'
+__version__ = '2.4.8.1'
 __icon__ = "./plc.ico"
 
 LGV_DATA = "lgv_data.xml"
@@ -238,6 +238,10 @@ def populate_table_from_db3():
     # Enable menu for Read/Write if table is updated
     update_menu()
 
+def extract_numeric_part(name):
+    match = re.search(r'\d+', name) #Extract numeric part
+    return int(match.group()) if match else float('inf') # Convert to int for correct sorting
+
 
 # Save data to XML
 def save_table_data_to_xml(tree, filename=LGV_DATA):
@@ -258,7 +262,7 @@ def save_table_data_to_xml(tree, filename=LGV_DATA):
         })
 
     # Sort the current data to ensure consistent ordering
-    current_data.sort(key=lambda x: x["Name"])
+    current_data.sort(key=lambda x: extract_numeric_part(x["Name"]))
 
 
     # If the file exists, compare it with the current data
@@ -276,7 +280,7 @@ def save_table_data_to_xml(tree, filename=LGV_DATA):
             })
 
         # Sort the existing data to ensure consistent ordering
-        existing_data.sort(key=lambda x: x["Name"])
+        existing_data.sort(key=lambda x: extract_numeric_part(x["Name"]))
 
         # Compare existing data with current data
         if existing_data == current_data:
@@ -992,7 +996,7 @@ variable_read = {
         ('TC3', True): "LibraryInterfaces.LGV.Status.manReset"
     },
     'run': {
-        'TC2': ".OUT_Lamp_Top_Auto",
+        'TC2': [".OUT_Lamp_Top_Auto", ".OUT_Lamp_LgvRun"],
         ('TC3', False): "SafetyControls.alert.out.lampRunButton",
         ('TC3', True): "SafetyControls.alert.out.lampRunButton"
     },
@@ -1039,19 +1043,33 @@ def read_variable(action):
     lgv_data = get_lgv_data()
     if not lgv_data:
         return
+    
+    if current_ads_connection is None:
+        print("ADS connection is closed. Skipping variable read")
+        return None
+
     tc_type = lgv_data[2]
     is_core_value = is_core
 
-    # Fetch the variable name based on the TC type and is_core flag
-    var_name = variable_read[action].get(tc_type) if tc_type == "TC2" else variable_read[action].get((tc_type, is_core_value))
+    # Get the variable(s) from the dictionary
+    var_candidates = variable_read[action].get(tc_type) if tc_type == "TC2" else variable_read[action].get((tc_type, is_core_value))
 
-    if var_name and current_ads_connection is not None:
-        # Read the value from the PLC
+    # Ensure var_candidates is always a list (if it's a string, wrap it in a list)
+    if not isinstance(var_candidates, list):
+        var_candidates = [var_candidates] if var_candidates else []
+
+    last_error = None # Store the last error message
+
+    for var_name in var_candidates:
         try:
-            return current_ads_connection.read_by_name(var_name, pyads.PLCTYPE_BOOL)
+            return current_ads_connection.read_by_name(var_name, pyads.PLCTYPE_BOOL)  # Stop if successful
         except Exception as e:
-            print(f"Error reading variable {var_name}: {e}")
-            return None
+            last_error = f"Error reading variable {var_name}: {e}"  # Store but don't print yet
+
+    # Only print the last error if all variables fail
+    if last_error:
+        print(last_error)
+
     return None
 
 
