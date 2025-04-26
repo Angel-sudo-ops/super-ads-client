@@ -2509,3 +2509,5 @@ root.mainloop()
 
 
 # Usar coma para separar varias variables y leerlas al mismo tiempo, para escribir solo una
+
+# TO DO
