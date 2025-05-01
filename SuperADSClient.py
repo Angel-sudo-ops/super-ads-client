@@ -26,7 +26,7 @@ if not pyads_available:
     # messagebox.showerror("Attention", "No pyads available")
     print("No pyads available")
 
-__version__ = '2.4.8.4'
+__version__ = '2.4.8.5'
 __icon__ = "./plc.ico"
 
 LGV_DATA = "lgv_data.xml"
@@ -2091,8 +2091,8 @@ def open_read_write_window():
     variable_frame.grid(row=0, column=0, padx=10, pady=5, sticky="nsew")
 
     # ttk.Label(variable_frame, text="Select or Add Variable:").grid(row=0, column=0, padx=5, pady=5)
-    variable_menu = ttk.Combobox(variable_frame, width=55)
-    variable_menu.grid(row=0, column=0, padx=5, pady=5)
+    variable_menu = ttk.Combobox(variable_frame)
+    variable_menu.grid(row=0, column=0, padx=5, pady=5, sticky='ew')
     variable_menu.bind('<ButtonPress>', update_variable_menu)
     # Bind the filter function to update on key release
     variable_menu.bind('<Tab>', filter_combobox)
@@ -2104,6 +2104,10 @@ def open_read_write_window():
     # Value Input Frame
     value_frame = ttk.LabelFrame(read_write_window, text="Set Value")
     value_frame.grid(row=1, column=0, padx=10, pady=5, sticky="nsew")
+
+    # Allow variable_frame to expand horizontally
+    read_write_window.columnconfigure(0, weight=1)
+    variable_frame.columnconfigure(0, weight=1)
 
     bool_value_frame = ttk.Frame(value_frame)
     bool_value_frame.grid(row=0, column=0, padx=5, pady=5)
