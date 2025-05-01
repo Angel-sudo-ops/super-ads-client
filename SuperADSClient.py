@@ -25,7 +25,7 @@ if not pyads_available:
     messagebox.showerror("Attention", "No pyads available")
     print("No pyads available")
 
-__version__ = '2.4.8.1'
+__version__ = '2.4.8.2'
 __icon__ = "./plc.ico"
 
 LGV_DATA = "lgv_data.xml"
@@ -2253,6 +2253,10 @@ root = tk.Tk()
 root.title(f"Super ADS Client {__version__}")
 # root.geometry("600x400")  # Adjust the window size
 
+# Let the table_frame grow inside root
+root.grid_rowconfigure(1, weight=1)
+root.grid_columnconfigure(0, weight=1)
+
 # Check if running as a script or frozen executable
 if getattr(sys, 'frozen', False):
     icon_path = os.path.join(sys._MEIPASS, __icon__)
@@ -2359,6 +2363,10 @@ status_label.grid(row=0, column=1, padx=5, pady=5)
 # Create a frame for the table (Treeview)
 table_frame = ttk.Frame(root)
 table_frame.grid(row=1, column=0, padx=10, pady=20, sticky='nsew')
+
+# Let the table_frame expand its contents
+table_frame.grid_rowconfigure(0, weight=1)
+table_frame.grid_columnconfigure(0, weight=1)
 
 treeview_style = ttk.Style()
 treeview_style.configure("Treeview", rowheight=23)  # Increase row height for more space between items
