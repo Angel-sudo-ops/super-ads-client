@@ -22,10 +22,10 @@ except Exception as e:
     pyads_available = False
 
 if not pyads_available:
-    messagebox.showerror("Attention", "No pyads available")
+    # messagebox.showerror("Attention", "No pyads available")
     print("No pyads available")
 
-__version__ = '2.4.8.2'
+__version__ = '2.4.8.3'
 __icon__ = "./plc.ico"
 
 LGV_DATA = "lgv_data.xml"
@@ -2255,7 +2255,7 @@ root.title(f"Super ADS Client {__version__}")
 
 # Let the table_frame grow inside root
 root.grid_rowconfigure(1, weight=1)
-root.grid_columnconfigure(0, weight=1)
+# root.grid_columnconfigure(1, weight=1)
 
 # Check if running as a script or frozen executable
 if getattr(sys, 'frozen', False):
@@ -2265,7 +2265,7 @@ else:
 # root.iconbitmap(icon_path)
 
 window_width = 490
-window_lenght = 420
+window_lenght = 425
 root.geometry(f"{window_width}x{window_lenght}")
 root.minsize(window_width, window_lenght)
 
@@ -2369,7 +2369,7 @@ table_frame.grid_rowconfigure(0, weight=1)
 table_frame.grid_columnconfigure(0, weight=1)
 
 treeview_style = ttk.Style()
-treeview_style.configure("Treeview", rowheight=23)  # Increase row height for more space between items
+treeview_style.configure("Treeview", rowheight=24)  # Increase row height for more space between items
 treeview_style.configure("Treeview", font=("Segoe UI", 10))  # Adjust font size if necessary
 treeview_style.configure("Treeview", padding=(5, 5))  # Add padding to rows (optional)
 
@@ -2403,7 +2403,7 @@ scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 # Create a frame for the buttons
 button_frame = ttk.Frame(root, width=170, height=350)
 button_frame.pack_propagate(False)
-button_frame.grid(row=1, column=1, padx=10, pady=10, sticky='ew')
+button_frame.grid(row=1, column=1, padx=10, pady=10, sticky='new')
 
 
 # Add some buttons to the right frame
@@ -2412,7 +2412,7 @@ reset_button = ttk.Button(button_frame,
                           style='LGV.TButton')
                         #   command=lambda: bind_button_actions(reset_button, 'reset'))
                         #   command=lambda: on_button_action_wrapper('reset', True, False, reset_button))
-reset_button.pack(pady=5, fill='both', expand=True, ipady=3)
+reset_button.pack(pady=5, fill='x', expand=True, ipady=6)
 bind_button_actions(reset_button, 'reset', 
                     shortcuts=[('<Control-r>', '<KeyRelease-r>'),
                                ('<Control-R>', '<KeyRelease-R>')])
@@ -2421,7 +2421,7 @@ run_button = ttk.Button(button_frame,
                         text="Run",
                         style='LGV.TButton')
                         # command=lambda: on_button_action_wrapper('run', True, False, run_button))
-run_button.pack(pady=5, fill='both', expand=True, ipady=3)
+run_button.pack(pady=5, fill='x', expand=True, ipady=6)
 bind_button_actions(run_button, 'run', 
                     shortcuts=[('<Control-g>', '<KeyRelease-g>'),
                                ('<Control-G>', '<KeyRelease-G>')])
@@ -2430,7 +2430,7 @@ stop_button = ttk.Button(button_frame,
                          text="Stop", 
                          style='LGV.Pressed.TButton')
                         #  command=lambda: on_button_action_wrapper('stop', False, True, stop_button))
-stop_button.pack(pady=5, fill='both', expand=True, ipady=3)
+stop_button.pack(pady=5, fill='x', expand=True, ipady=6)
 bind_button_actions(stop_button, 'stop', 
                     shortcuts=[('<Control-s>', '<KeyRelease-s>'),
                                ('<Control-S>', '<KeyRelease-S>')], 
@@ -2440,16 +2440,16 @@ man_auto_button = ttk.Button(button_frame,
                              text="Man/Auto",
                              style='LGV.TButton')
                             #  command=lambda: on_button_action_wrapper('man_auto', True, False, man_auto_button))
-man_auto_button.pack(pady=5, fill='both', expand=True, ipady=3)
+man_auto_button.pack(pady=5, fill='x', expand=True, ipady=6)
 bind_button_actions(man_auto_button, 'man_auto', 
                     shortcuts=[('<Control-m>', '<KeyRelease-m>'),
                                ('<Control-M>', '<KeyRelease-M>')])
 
 dis_horn_button = ttk.Button(button_frame, 
-                             text="Disable Horn", 
+                             text="Disable Horn",   
                              style='LGV.TButton', 
                              command=lambda: on_dis_horn_button_click(dis_horn_button))
-dis_horn_button.pack(pady=5, fill='both', expand=True, ipady=3)
+dis_horn_button.pack(pady=5, fill='x', expand=True, ipady=6)
 
 
 # bind_toggle_button_action(dis_horn_button, 
