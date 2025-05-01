@@ -20,12 +20,13 @@ try:
 except Exception as e:
     print(f"Error: {e}")
     pyads_available = False
+    pyads = None
 
 if not pyads_available:
     # messagebox.showerror("Attention", "No pyads available")
     print("No pyads available")
 
-__version__ = '2.4.8.3'
+__version__ = '2.4.8.4'
 __icon__ = "./plc.ico"
 
 LGV_DATA = "lgv_data.xml"
@@ -1391,6 +1392,9 @@ def open_read_write_window():
     read_write_window.geometry(f"{window_width}x{window_lenght}")
     read_write_window.minsize(window_width, window_lenght)
 
+    # Apply the icon after the window is initialized
+    read_write_window.after(100, set_icon, read_write_window)
+
     RW_VARIABLES_FILE = "rw_variables.json"
 
     # Predefined and custom variables
@@ -1542,30 +1546,55 @@ def open_read_write_window():
 
 
     # Mapping of symbol type strings to pyads data types
-    SYMBOL_TYPE_MAP = {
-        'BOOL'      : pyads.PLCTYPE_BOOL,
-        'INT'       : pyads.PLCTYPE_INT,
-        'DINT'      : pyads.PLCTYPE_DINT,
-        'REAL'      : pyads.PLCTYPE_REAL,
-        'LREAL'     : pyads.PLCTYPE_LREAL,
-        'STRING'    : pyads.PLCTYPE_STRING,
-        'BYTE'      : pyads.PLCTYPE_BYTE,
-        'WORD'      : pyads.PLCTYPE_WORD,
-        'DWORD'     : pyads.PLCTYPE_DWORD,
-        # 'LWORD'     : pyads.PLCTYPE_LWORD,
-        'SINT'      : pyads.PLCTYPE_SINT,
-        'USINT'     : pyads.PLCTYPE_USINT,
-        'UINT'      : pyads.PLCTYPE_UINT,
-        'UDINT'     : pyads.PLCTYPE_UDINT,
-        'LINT'      : pyads.PLCTYPE_LINT,
-        'ULINT'     : pyads.PLCTYPE_ULINT,
-        'TIME'      : pyads.PLCTYPE_TIME,
-        # 'LTIME'     : pyads.PLCTYPE_LTIME,
-        'DATE'      : pyads.PLCTYPE_DATE,
-        'TOD'       : pyads.PLCTYPE_TOD,  # Time of Day
-        'DT'        : pyads.PLCTYPE_DT,    # Date and Time
-        'WSTRING'   : pyads.PLCTYPE_WSTRING,
-    }
+    if pyads_available: 
+        SYMBOL_TYPE_MAP = {
+            'BOOL'      : pyads.PLCTYPE_BOOL,
+            'INT'       : pyads.PLCTYPE_INT,
+            'DINT'      : pyads.PLCTYPE_DINT,
+            'REAL'      : pyads.PLCTYPE_REAL,
+            'LREAL'     : pyads.PLCTYPE_LREAL,
+            'STRING'    : pyads.PLCTYPE_STRING,
+            'BYTE'      : pyads.PLCTYPE_BYTE,
+            'WORD'      : pyads.PLCTYPE_WORD,
+            'DWORD'     : pyads.PLCTYPE_DWORD,
+            # 'LWORD'     : pyads.PLCTYPE_LWORD,
+            'SINT'      : pyads.PLCTYPE_SINT,
+            'USINT'     : pyads.PLCTYPE_USINT,
+            'UINT'      : pyads.PLCTYPE_UINT,
+            'UDINT'     : pyads.PLCTYPE_UDINT,
+            'LINT'      : pyads.PLCTYPE_LINT,
+            'ULINT'     : pyads.PLCTYPE_ULINT,
+            'TIME'      : pyads.PLCTYPE_TIME,
+            # 'LTIME'     : pyads.PLCTYPE_LTIME,
+            'DATE'      : pyads.PLCTYPE_DATE,
+            'TOD'       : pyads.PLCTYPE_TOD,  # Time of Day
+            'DT'        : pyads.PLCTYPE_DT,    # Date and Time
+            'WSTRING'   : pyads.PLCTYPE_WSTRING,
+        }
+    else:
+        # Use strings or None so the app loads without crashing
+        SYMBOL_TYPE_MAP = {
+            'BOOL'      : 'BOOL',
+            'INT'       : 'INT',
+            'DINT'      : 'DINT',
+            'REAL'      : 'REAL',
+            'LREAL'     : 'LREAL',
+            'STRING'    : 'STRING',
+            'BYTE'      : 'BYTE',
+            'WORD'      : 'WORD',
+            'DWORD'     : 'DWORD',
+            'SINT'      : 'SINT',
+            'USINT'     : 'USINT',
+            'UINT'      : 'UINT',
+            'UDINT'     : 'UDINT',
+            'LINT'      : 'LINT',
+            'ULINT'     : 'ULINT',
+            'TIME'      : 'TIME',
+            'DATE'      : 'DATE',
+            'TOD'       : 'TOD',
+            'DT'        : 'DT',
+            'WSTRING'   : 'WSTRING',
+        }
 
     def get_pyads_type(symbol_type_str):
         """
@@ -2241,9 +2270,9 @@ def on_read_write_window_close():
 ####################################################################################################################################################################
 
 ############################# Set GUI icon ##########################
-def set_icon():
+def set_icon(window):
     if os.path.exists(icon_path):
-        root.iconbitmap(icon_path)
+        window.iconbitmap(icon_path)
     else:
         print("Icon file not found.")
 
@@ -2270,7 +2299,7 @@ root.geometry(f"{window_width}x{window_lenght}")
 root.minsize(window_width, window_lenght)
 
 # Apply the icon after the window is initialized
-root.after(100, set_icon)
+root.after(100, set_icon, root)
 
 
 style = ttk.Style()
