@@ -76,5 +76,6 @@
     "LibraryInterfaces.LFInfo.RefLineNavRQST",
     "FillOpInfo.wrongParameters",
     "CoreGVL.OutOfPathControls.bypassAlarm.Al_ErrorMotorWheelLenght",
-    "LibraryInterfaces.LGV.Guid.PathFol.Current_Distance"
+    "LibraryInterfaces.LGV.Guid.PathFol.Current_Distance",
+    "LibraryInterfaces.CarrierControl.Dist_From_OP_Segment"
 ]

@@ -26,7 +26,7 @@ if not pyads_available:
     # messagebox.showerror("Attention", "No pyads available")
     print("No pyads available")
 
-__version__ = '2.4.8.5'
+__version__ = '2.4.8.6'
 __icon__ = "./plc.ico"
 
 LGV_DATA = "lgv_data.xml"

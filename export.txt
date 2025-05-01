@@ -1,1 +1,3 @@
 pyinstaller --onefile --icon=plc.ico --windowed --add-data "plc.ico;." SuperADSClient.py
+
+pyinstaller SuperADSClient.spec
