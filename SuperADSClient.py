@@ -2125,6 +2125,28 @@ def open_read_write_window():
     value_entry = ttk.Entry(entry_value_frame)
     value_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
 
+    # Keyboard shortcut functions
+    def select_true(event=None):
+        var_type.set(True)
+        clear_entry_field()
+
+    def select_false(event=None):
+        var_type.set(False)
+        clear_entry_field()
+
+    def focus_other_entry(event=None):
+        value_entry.focus_set()
+
+    # Bind shortcuts to root window
+    read_write_window.bind('<Control-t>', select_true)
+    read_write_window.bind('<Control-T>', select_true)
+
+    read_write_window.bind('<Control-f>', select_false)
+    read_write_window.bind('<Control-F>', select_false)
+
+    read_write_window.bind('<Control-e>', focus_other_entry)
+    read_write_window.bind('<Control-E>', focus_other_entry)
+
     # LGV Range Frame
     lgv_frame = ttk.Frame(read_write_window)
     lgv_frame.grid(row=2, column=0, padx=10, pady=5, sticky="ew")
