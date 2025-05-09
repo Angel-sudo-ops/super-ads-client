@@ -435,7 +435,7 @@ def background_connect(plc_data):
             enable_control_buttons()
 
             # Automatically detect core variable
-            check_for_core_variable()
+            check_for_core_variable("CoreGVL.ADS_Run")
             # Call update_buttons once to start the loop
             # update_buttons()
             update_buttons_from_plc_thread()
@@ -1021,11 +1021,11 @@ variable_read = {
 # Variable to store core status
 is_core = False
 
-def check_for_core_variable():
+def check_for_core_variable(core_variable):
     global is_core 
     try:
         # Attempt to read the core variable
-        core_value = current_ads_connection.read_by_name("CoreGVL.ADS_Run", pyads.PLCTYPE_BOOL)
+        core_value = current_ads_connection.read_by_name(core_variable, pyads.PLCTYPE_BOOL)
         
         # If the core variable is read successfully, set the variable and update the label
         if core_value is not None:
