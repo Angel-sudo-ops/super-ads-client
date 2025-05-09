@@ -26,7 +26,7 @@ if not pyads_available:
     # messagebox.showerror("Attention", "No pyads available")
     print("No pyads available")
 
-__version__ = '2.4.8.6'
+__version__ = '2.4.8.7'
 __icon__ = "./plc.ico"
 
 LGV_DATA = "lgv_data.xml"
@@ -1785,7 +1785,8 @@ def open_read_write_window():
             value = radio_value  # Use the radio button value if the entry is empty or boolean-like
         else:
             # Try to convert to a number, otherwise keep it as a string
-            value = convert_to_number(entry_value) or entry_value
+            converted_value = convert_to_number(entry_value)
+            value = converted_value if converted_value is not None else entry_value
         
         # Delete entry_value after reading it to avoid using it the next time 
         clear_entry_field()
