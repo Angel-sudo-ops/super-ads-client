@@ -26,7 +26,7 @@ if not pyads_available:
     # messagebox.showerror("Attention", "No pyads available")
     print("No pyads available")
 
-__version__ = '2.4.8.7'
+__version__ = '2.4.8.8'
 __icon__ = "./plc.ico"
 
 LGV_DATA = "lgv_data.xml"
@@ -2013,8 +2013,9 @@ def open_read_write_window():
                 len(str(status_table.set(child, col)))  # Get cell value
                 for child in status_table.get_children()
             )
-            max_length = max(max_length, len(col))  # Ensure header is included
-            status_table.column(col, width=max_length * 10)  # Adjust width (10px per char)
+            max_length = max(max_length, len(col))      # Ensure header is included
+            col_width = max(max_length*10, 20)          # Set a minimum width of 20 px in case of single char
+            status_table.column(col, width=col_width)   # Adjust width (10px per char)
 
 
     # Dictionary to store original column headings for sorting indicators
