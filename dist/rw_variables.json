@@ -77,5 +77,16 @@
     "FillOpInfo.wrongParameters",
     "CoreGVL.OutOfPathControls.bypassAlarm.Al_ErrorMotorWheelLenght",
     "LibraryInterfaces.LGV.Guid.PathFol.Current_Distance",
-    "LibraryInterfaces.CarrierControl.Dist_From_OP_Segment"
+    "LibraryInterfaces.CarrierControl.Dist_From_OP_Segment",
+    "TruckGVL.LMSScanDetectPallet.result.closestPointDistance",
+    "LibraryInterfaces.LGV.Status.Reset",
+    "GuidanceCalibration.SensorOffset[4].x",
+    "GuidanceCalibration.SensorOffset[4].y",
+    "GuidanceCalibration.SensorOffset[4].theta_cdeg",
+    "GuidanceCalibration.SensorOffset[4].theta_rad",
+    "LibraryInterfaces.FileManagement.saveRequest[2]",
+    "LibraryInterfaces.LGV.Guid.Odom.Cur_Spd",
+    "LibraryInterfaces.LGV.Guid.Odom.Cur_Spd; LibraryInterfaces.LGV.Guid.Odom.Ref_Spd",
+    "SafetyGlobals.plsFrontHandler.enableExtraLong",
+    "LibraryInterfaces.UpdateGuidanceInput.force_Reset_Autocalibration_Data"
 ]

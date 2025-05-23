@@ -2,72 +2,77 @@
 <LGVData>
     <LGV>
         <Name>LGV01</Name>
-        <AMSNetId>172.16.12.101.1.1</AMSNetId>
-        <Type>TC2</Type>
+        <AMSNetId>10.81.35.11.1.1</AMSNetId>
+        <Type>TC3</Type>
     </LGV>
     <LGV>
         <Name>LGV02</Name>
-        <AMSNetId>172.16.12.102.1.1</AMSNetId>
-        <Type>TC2</Type>
+        <AMSNetId>10.81.35.12.1.1</AMSNetId>
+        <Type>TC3</Type>
     </LGV>
     <LGV>
         <Name>LGV03</Name>
-        <AMSNetId>172.16.12.103.1.1</AMSNetId>
-        <Type>TC2</Type>
+        <AMSNetId>10.81.35.13.1.1</AMSNetId>
+        <Type>TC3</Type>
     </LGV>
     <LGV>
         <Name>LGV04</Name>
-        <AMSNetId>172.16.12.104.1.1</AMSNetId>
-        <Type>TC2</Type>
+        <AMSNetId>10.81.35.14.1.1</AMSNetId>
+        <Type>TC3</Type>
     </LGV>
     <LGV>
         <Name>LGV05</Name>
-        <AMSNetId>172.16.12.105.1.1</AMSNetId>
-        <Type>TC2</Type>
+        <AMSNetId>10.81.35.15.1.1</AMSNetId>
+        <Type>TC3</Type>
     </LGV>
     <LGV>
         <Name>LGV06</Name>
-        <AMSNetId>172.16.12.106.1.1</AMSNetId>
-        <Type>TC2</Type>
+        <AMSNetId>10.81.35.16.1.1</AMSNetId>
+        <Type>TC3</Type>
     </LGV>
     <LGV>
         <Name>LGV07</Name>
-        <AMSNetId>172.16.12.107.1.1</AMSNetId>
-        <Type>TC2</Type>
+        <AMSNetId>10.81.35.17.1.1</AMSNetId>
+        <Type>TC3</Type>
     </LGV>
     <LGV>
         <Name>LGV08</Name>
-        <AMSNetId>172.16.12.108.1.1</AMSNetId>
-        <Type>TC2</Type>
+        <AMSNetId>10.81.35.18.1.1</AMSNetId>
+        <Type>TC3</Type>
     </LGV>
     <LGV>
         <Name>LGV09</Name>
-        <AMSNetId>172.16.12.109.1.1</AMSNetId>
-        <Type>TC2</Type>
+        <AMSNetId>10.81.35.19.1.1</AMSNetId>
+        <Type>TC3</Type>
     </LGV>
     <LGV>
         <Name>LGV10</Name>
-        <AMSNetId>172.16.12.234.1.1</AMSNetId>
-        <Type>TC2</Type>
+        <AMSNetId>10.81.35.20.1.1</AMSNetId>
+        <Type>TC3</Type>
     </LGV>
     <LGV>
         <Name>LGV11</Name>
-        <AMSNetId>172.16.12.113.1.1</AMSNetId>
+        <AMSNetId>10.81.35.21.1.1</AMSNetId>
         <Type>TC3</Type>
     </LGV>
     <LGV>
         <Name>LGV12</Name>
-        <AMSNetId>172.16.12.112.1.1</AMSNetId>
+        <AMSNetId>10.81.35.22.1.1</AMSNetId>
         <Type>TC3</Type>
     </LGV>
     <LGV>
-        <Name>LGV101</Name>
-        <AMSNetId>172.16.12.115.1.1</AMSNetId>
-        <Type>TC2</Type>
+        <Name>LGV13</Name>
+        <AMSNetId>10.81.35.23.1.1</AMSNetId>
+        <Type>TC3</Type>
     </LGV>
     <LGV>
-        <Name>LGV102</Name>
-        <AMSNetId>172.16.12.114.1.1</AMSNetId>
-        <Type>TC2</Type>
+        <Name>LGV14</Name>
+        <AMSNetId>10.81.35.24.1.1</AMSNetId>
+        <Type>TC3</Type>
+    </LGV>
+    <LGV>
+        <Name>LGV15</Name>
+        <AMSNetId>10.81.35.25.1.1</AMSNetId>
+        <Type>TC3</Type>
     </LGV>
 </LGVData>
