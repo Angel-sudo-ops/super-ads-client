@@ -136,7 +136,7 @@ def populate_table_from_xml(path=None):
     save_table_data_to_xml(treeview)
     
     # Enable menu for Read/Write if table is updated
-    update_menu()
+    update_tabs()
 
 ####################################################################################################################################################################
 ########################################################## Initial data reading from db3 file ######################################################################
@@ -237,7 +237,7 @@ def populate_table_from_db3():
     save_table_data_to_xml(treeview)
 
     # Enable menu for Read/Write if table is updated
-    update_menu()
+    update_tabs()
 
 def extract_numeric_part(name):
     match = re.search(r'\d+', name) #Extract numeric part
@@ -662,10 +662,11 @@ def update_menu():
     else:
         options_menu.entryconfig("Reset to Defaults ", state="disabled")  # Disable if file doesn't exist
 
+def update_tabs():
     if os.path.exists(LGV_DATA):
-        more_menu.entryconfig("Read/Write    ", state="normal")  # Enable if file exists
+        notebook.tab(read_write_tab, state="normal")  # Enable if file exists
     else:
-        more_menu.entryconfig("Read/Write    ", state="disabled")  # Disable if file doesn't exist
+        notebook.tab(read_write_tab, state="disabled")  # Disable if file doesn't exist
 
 
 # Load variables from JSON or fall back to defaults
@@ -2315,6 +2316,8 @@ def set_icon(window):
         print("Icon file not found.")
 
 
+
+
 # Create the root window
 root = tk.Tk()
 root.title(f"Super ADS Client {__version__}")
@@ -2332,21 +2335,13 @@ else:
 # root.iconbitmap(icon_path)
 
 window_width = 490
-window_lenght = 440
+window_lenght = 450
 root.geometry(f"{window_width}x{window_lenght}")
 root.minsize(window_width, window_lenght)
 
 # Apply the icon after the window is initialized
 root.after(100, set_icon, root)
 
-notebook = ttk.Notebook(root)
-notebook.grid(row=1, column=0, columnspan=2, sticky="nsew")
-
-main_tab = ttk.Frame(notebook)
-read_write_tab = ttk.Frame(notebook)
-
-notebook.add(main_tab, text="Main")
-notebook.add(read_write_tab, text="Read/Write")
 
 style = ttk.Style()
 
@@ -2379,6 +2374,21 @@ style.configure("Connect.TButton",
                 padding=2,
                 font=("Segoe UI", 13))
 
+style.configure("TNotebook.Tab", 
+                padding=[3, 5], 
+                font=("Segoe UI", 9))
+
+
+notebook = ttk.Notebook(root)
+notebook.grid(row=1, column=0, columnspan=2, sticky="nsew")
+
+main_tab = ttk.Frame(notebook, style="TNotebook.Tab")
+read_write_tab = ttk.Frame(notebook, style="TNotebook.Tab")
+
+notebook.add(main_tab, text="Control", )
+notebook.add(read_write_tab, text="RW Panel")
+
+
 
 # Create the menu bar
 menu_bar = tk.Menu(root)
@@ -2395,9 +2405,9 @@ options_menu.add_command(label="Set Variables    ", command=open_variable_window
 options_menu.add_command(label="Reset to Defaults ", command=reset_to_defaults)
 menu_bar.add_cascade(label=" Options ", menu=options_menu) 
 
-more_menu = tk.Menu(menu_bar, tearoff=0)
-more_menu.add_command(label="Read/Write    ", command=open_read_write_window_cond)
-menu_bar.add_cascade(label=" More ", menu=more_menu)
+# more_menu = tk.Menu(menu_bar, tearoff=0)
+# more_menu.add_command(label="Read/Write    ", command=open_read_write_window_cond)
+# menu_bar.add_cascade(label=" More ", menu=more_menu)
 
 about_menu = tk.Menu(menu_bar, tearoff=0)
 about_menu.add_command(label="Shortcuts    ", command=open_shortcuts_window_cond)
@@ -2408,6 +2418,8 @@ root.config(menu=menu_bar)
 
 # Update the menu based on whether the file exists
 update_menu()
+
+update_tabs()
 
 
 frame_connect = ttk.Frame(main_tab, width=100)
