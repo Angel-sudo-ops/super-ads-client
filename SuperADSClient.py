@@ -26,7 +26,7 @@ if not pyads_available:
     # messagebox.showerror("Attention", "No pyads available")
     print("No pyads available")
 
-__version__ = '2.4.8.9'
+__version__ = '2.4.9'
 __icon__ = "./plc.ico"
 
 LGV_DATA = "lgv_data.xml"
@@ -2332,13 +2332,21 @@ else:
 # root.iconbitmap(icon_path)
 
 window_width = 490
-window_lenght = 425
+window_lenght = 440
 root.geometry(f"{window_width}x{window_lenght}")
 root.minsize(window_width, window_lenght)
 
 # Apply the icon after the window is initialized
 root.after(100, set_icon, root)
 
+notebook = ttk.Notebook(root)
+notebook.grid(row=1, column=0, columnspan=2, sticky="nsew")
+
+main_tab = ttk.Frame(notebook)
+read_write_tab = ttk.Frame(notebook)
+
+notebook.add(main_tab, text="Main")
+notebook.add(read_write_tab, text="Read/Write")
 
 style = ttk.Style()
 
@@ -2396,14 +2404,13 @@ about_menu.add_command(label="Shortcuts    ", command=open_shortcuts_window_cond
 menu_bar.add_cascade(label=" About", menu=about_menu)
 
    
-
 root.config(menu=menu_bar)
 
 # Update the menu based on whether the file exists
 update_menu()
 
 
-frame_connect = ttk.Frame(root, width=100)
+frame_connect = ttk.Frame(main_tab, width=100)
 # frame_connect.grid_propagate(False)
 frame_connect.grid(row=0, column=0, padx=20, pady=5)
 
@@ -2421,14 +2428,14 @@ core_status_label.grid(row=0, column=0, padx=20, pady=0, sticky='e')
 
 
 # Connection status label
-status_label = ttk.Label(root, text="Disconnected", foreground="red", font=("Segoe UI", 13))
+status_label = ttk.Label(main_tab, text="Disconnected", foreground="red", font=("Segoe UI", 13))
 status_label.grid(row=0, column=1, padx=5, pady=5)
 
 
 
 
 # Create a frame for the table (Treeview)
-table_frame = ttk.Frame(root)
+table_frame = ttk.Frame(main_tab)
 table_frame.grid(row=1, column=0, padx=10, pady=20, sticky='nsew')
 
 # Let the table_frame expand its contents
@@ -2468,7 +2475,7 @@ scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
 
 # Create a frame for the buttons
-button_frame = ttk.Frame(root, width=170, height=350)
+button_frame = ttk.Frame(main_tab, width=170, height=350)
 button_frame.pack_propagate(False)
 button_frame.grid(row=1, column=1, padx=10, pady=10, sticky='new')
 
@@ -2524,8 +2531,8 @@ dis_horn_button.pack(pady=5, fill='x', expand=True, ipady=6)
 #                           function=on_dis_horn_button_click(dis_horn_button),
 #                           shortcuts=[('<Control-h>', '<Control-H>')])
 
-root.bind_all('<Control-h>', lambda event: on_dis_horn_button_click(dis_horn_button))
-root.bind_all('<Control-H>', lambda event: on_dis_horn_button_click(dis_horn_button))
+main_tab.bind_all('<Control-h>', lambda event: on_dis_horn_button_click(dis_horn_button))
+main_tab.bind_all('<Control-H>', lambda event: on_dis_horn_button_click(dis_horn_button))
 
 # Test to ensure that <Control-h> triggers
 # root.bind('<Control-h>', lambda event: print("Ctrl+H shortcut detected in root"))  # Test at the root level
