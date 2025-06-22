@@ -26,7 +26,7 @@ if not pyads_available:
     # messagebox.showerror("Attention", "No pyads available")
     print("No pyads available")
 
-__version__ = '2.4.8.8'
+__version__ = '2.4.8.9'
 __icon__ = "./plc.ico"
 
 LGV_DATA = "lgv_data.xml"
@@ -1661,6 +1661,16 @@ def open_read_write_window():
         if handles[user_handle]["expected_value"] == value:
             handles[user_handle]["stop_event"].set()  # Signal to stop notification
 
+    semaphore = threading.Semaphore(5)
+
+    def safe_write_variable_for_lgv(*args):
+        with semaphore:
+            write_variable_for_lgv(*args)
+
+    def safe_read_variable_for_lgv(*args):
+        with semaphore:
+            read_variable_for_lgv(*args)
+
     def write_variable_for_lgv(lgv, ams_net_id, tc_type, variable_name, display_name, value, result_queue):
         """Write a variable and confirm it via ADS notification."""
         # stop_event = threading.Event()  # Event to track when the notification should stop
@@ -1795,7 +1805,7 @@ def open_read_write_window():
         for lgv, ams_net_id, tc_type in lgv_data:
             for variable_name, display_name in processed_variables.items():
                 thread = threading.Thread(
-                    target=write_variable_for_lgv, 
+                    target=safe_write_variable_for_lgv, 
                     args=(lgv, ams_net_id, tc_type, variable_name, display_name, value, result_queue)
                 )
                 thread.daemon = True
@@ -1905,7 +1915,7 @@ def open_read_write_window():
         for lgv, ams_net_id, tc_type in lgv_data:
             for variable_name, display_name in processed_variables.items():
                 thread = threading.Thread(
-                    target=read_variable_for_lgv, 
+                    target=safe_read_variable_for_lgv, 
                     args=(lgv, ams_net_id, tc_type, variable_name, display_name, result_queue)
                 )
                 thread.daemon = True
