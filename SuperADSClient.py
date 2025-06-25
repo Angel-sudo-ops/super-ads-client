@@ -1753,7 +1753,7 @@ def convert_to_number(user_input):
             return None  # Not a number, possibly a string
 
 
-def write_variable():
+def rw_write_variable():
     """Start the write operation for all selected LGVs."""
 
     variable_names = variable_menu.get().strip()  # Directly get the variable name
@@ -1878,7 +1878,7 @@ def read_variable_for_lgv(lgv, ams_net_id, tc_type, variable_name, display_name,
         # Add error result to queue
         result_queue.put((lgv, display_name, e))
 
-def read_variable():
+def rw_read_variable():
     """Start the read operation for all selected LGVs."""
 
     variable_names = variable_menu.get().strip()  # Get the variable name directly
@@ -2468,16 +2468,16 @@ lgv_range_entry.grid(row=0, column=1, padx=5, pady=5)
 button_frame = ttk.Frame(lgv_frame)
 button_frame.grid(row=0, column=2, columnspan=2, pady=10, padx=30, sticky='e')
 
-read_button = ttk.Button(button_frame, text="Read", command=read_variable)
+read_button = ttk.Button(button_frame, text="Read", command=rw_read_variable)
 read_button.grid(row=0, column=0, padx=10, ipadx=2, ipady=2)
-write_button = ttk.Button(button_frame, text="Write", command=write_variable)
+write_button = ttk.Button(button_frame, text="Write", command=rw_write_variable)
 write_button.grid(row=0, column=1, padx=10, ipadx=2, ipady=2)
 
 # Bind keyboard shortcuts to the toplevel window
-read_write_tab.bind("<Control-r>", lambda event: read_variable())
-read_write_tab.bind("<Control-R>", lambda event: read_variable())
-read_write_tab.bind("<Control-w>", lambda event: write_variable())
-read_write_tab.bind("<Control-W>", lambda event: write_variable())
+read_write_tab.bind("<Control-r>", lambda event: rw_read_variable())
+read_write_tab.bind("<Control-R>", lambda event: rw_read_variable())
+read_write_tab.bind("<Control-w>", lambda event: rw_write_variable())
+read_write_tab.bind("<Control-W>", lambda event: rw_write_variable())
 
 # Status table frame
 status_table_frame = ttk.Frame(read_write_tab)
