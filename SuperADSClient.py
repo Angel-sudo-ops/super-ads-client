@@ -1990,29 +1990,32 @@ def prepare_status_table(lgv_data, variables):
         status_table.column(col, anchor="center", width=150, stretch=False)  # Set default width
 
     # Pre-populate rows with LGVs
-    for lgv, ams_net_id, _ in lgv_data:
-        row_values = [f"LGV{lgv:02d}"] + ["" for _ in variables]
-        status_table.insert("", "end", values=row_values)
+    for lgv, ams_net_id, _ in sorted(lgv_data, key=lambda x: x[0]):
+        row_id = f"LGV{lgv:02d}"
+        row_values = [row_id] + ["" for _ in variables]
+        status_table.insert("", "end", iid=row_id, values=row_values)
 
-        lgv_overlay.insert("", "end", values=row_values) # Populate lgv_overlay as well
+        lgv_overlay.insert("", "end", iid=row_id, values=row_values) # Populate lgv_overlay as well
 
     setup_rw_data(status_table)
 
 
 def update_status_table(lgv, variable, value):
     """Update the table for a specific LGV and variable."""
-    for child in status_table.get_children():
-        row_values = status_table.item(child, "values")
-        if row_values[0] == f"LGV{lgv:02d}":  # Match the LGV row
-            # Find the column index for the variable
-            column_index = status_table["columns"].index(variable)
-            new_row_values = list(row_values)  # Convert to mutable list
+    row_id = f"LGV{lgv:02d}"
+    try:
+        item = status_table.item(row_id)
+        values = list(item["values"])
 
-            new_row_values[column_index] = value  # Update the specific cell
+        if variable in status_table["columns"]:
+            col_index = status_table["columns"].index(variable)
+            values[col_index] = value
 
             tag = "" if value in ["Timeout", "Error"] else ""
-            status_table.item(child, values=new_row_values, tags=(tag,))  # Update the row
-            break
+            status_table.item(row_id, values=values, tags=(tag,))
+    except Exception as e:
+        print(f"Failed to update status for {row_id}, variable {variable}: {e}")
+
     # Adjust column widths
     adjust_column_width()
 
