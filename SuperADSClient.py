@@ -28,7 +28,7 @@ if not pyads_available:
     # messagebox.showerror("Attention", "No pyads available")
     print("No pyads available")
 
-__version__ = '2.5.0.7'
+__version__ = '2.5.0.8'
 __icon__ = "./plc.ico"
 
 MAX_WORKERS = 5
@@ -2683,13 +2683,13 @@ def update_lgv_overlay(*args):
         print(f" First elem: {first_visible_row}, Last elem: {last_visible_row}, {len(status_table.get_children())}")
 
 
-    # Attach the function to the horizontal scrollbar
-    status_table.configure(
-        xscrollcommand=lambda *args: (scroll_x.set(*args), toggle_lgv_overlay(*args)),
-        yscrollcommand=lambda *args: (scroll_y.set(*args), update_lgv_overlay(*args))
-    )
+# Attach the function to the horizontal scrollbar
+status_table.configure(
+    xscrollcommand=lambda *args: (scroll_x.set(*args), toggle_lgv_overlay(*args)),
+    yscrollcommand=lambda *args: (scroll_y.set(*args), update_lgv_overlay(*args))
+)
 
-    update_lgv_overlay()
+update_lgv_overlay()
 
 
 def on_tab_changed(event):
