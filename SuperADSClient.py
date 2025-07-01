@@ -31,6 +31,7 @@ if not pyads_available:
 __version__ = '2.5.0.5'
 __icon__ = "./plc.ico"
 
+MAX_WORKERS = 5
 LGV_DATA = "lgv_data.xml"
 # Variable to hold the current ads connection
 current_ads_connection = None
@@ -1521,6 +1522,12 @@ def validate_and_link_lgv():
             return
 
         lgv_numbers = parse_lgv_range(lgv_range_entry.get())
+
+        semaphore_size = min(10, max(3, len(lgv_numbers) // 10 or 1))  # Ensure at least 1
+        global semaphore
+        semaphore = threading.Semaphore(semaphore_size)
+        print(f"Detected {len(lgv_numbers)} LGVs — using semaphore size: {semaphore_size}")
+
         found_entries = []
 
         remaining_children = list(treeview.get_children())
@@ -1675,7 +1682,9 @@ def on_notification(adr, notification, user_handle):
     if handles[user_handle]["expected_value"] == value:
         handles[user_handle]["stop_event"].set()  # Signal to stop notification
 
-semaphore = threading.Semaphore(5)
+
+semaphore = threading.Semaphore(MAX_WORKERS)
+
 
 def safe_write_variable_for_lgv(*args):
     with semaphore:
@@ -1984,41 +1993,50 @@ def rw_read_variable():
     ).start()
 
 def process_results_in_background(threads, result_queue, lgv_data):
-    """Monitor threads and process results in the background."""
-    
-    for t in threads:
-        t.join()
+    """Monitor threads and update UI as results arrive."""
 
     # Collect results
     results = {}
     responded_lgvs = set()  # Track which LGVs responded
 
-    while not result_queue.empty():
-        lgv, variable, value = result_queue.get()
-
-        responded_lgvs.add(lgv)
-        if lgv not in results:
-            results[lgv] = {}
-
-        # Record results or errors
-        results[lgv][variable] = value
-
-        # Update the table dynamically
-        root.after(0, update_status_table, lgv, variable, value)
-
     # Handle LGVs that didn't respond
     all_lgvs = {lgv for lgv, _, _ in lgv_data}
-    missing_lgvs = all_lgvs - responded_lgvs
+    variables = status_table["columns"][1:]
 
-    for lgv in missing_lgvs:
-        for variable in status_table["columns"][1:]:  # Skip "LGV" column
-            root.after(0, update_status_table, lgv, variable, "Timeout")
+    def check_and_update():
+        # Process new items in the result queue
+        while not result_queue.empty():
+            lgv, variable, value = result_queue.get()
 
-    # Handle variables that weren't updated for responding LGVs
-    for lgv in responded_lgvs:
-        for variable in status_table["columns"][1:]:
-            if variable not in results[lgv]:
-                root.after(0, update_status_table, lgv, variable, "Timeout")
+            responded_lgvs.add(lgv)
+            if lgv not in results:
+                results[lgv] = {}
+
+            # Record results or errors
+            results[lgv][variable] = value
+
+            # Update the table dynamically
+            update_status_table(lgv, variable, value)
+        
+        # If all threads are done, handle timeouts and stop scheduling
+        if all(not t.is_alive() for t in threads):
+            missing_lgvs = all_lgvs - responded_lgvs
+
+            for lgv in missing_lgvs:
+                for variable in variables:
+                    update_status_table(lgv, variable, "Timeout")
+
+            # Handle variables that weren't updated for responding LGVs
+            for lgv in responded_lgvs:
+                for variable in variables:
+                    if variable not in results[lgv]:
+                        update_status_table(lgv, variable, "Timeout")
+        else:
+            # Schedule next check
+            root.after(100, check_and_update)
+
+    # Start checking 
+    root.after(100, check_and_update)
 
 
 def prepare_status_table(lgv_data, variables):
@@ -2155,7 +2173,7 @@ def clear_status():
 
 ###################################################################### Helper methods #########################################################################
 
-def is_host_reachable(host, timeout=1):
+def is_host_reachable(host, timeout=0.7):
     """Ping the host to check if it is reachable."""
     # Define the ping command based on the OS
     if platform.system().lower() == "windows":
@@ -2213,7 +2231,7 @@ else:
 # root.iconbitmap(icon_path)
 
 window_width = 480
-window_lenght = 450
+window_lenght = 460
 root.geometry(f"{window_width}x{window_lenght}")
 root.minsize(window_width, window_lenght)
 
@@ -2466,7 +2484,7 @@ start_read_thread()
 
 root.after(100, process_status_updates)
 
-
+######################################################### RW Panel #################################################################
 
 # Variables Frame
 variable_frame = ttk.LabelFrame(read_write_tab, text="Variables")
@@ -2606,6 +2624,13 @@ scroll_x.grid(row=1, column=0, columnspan=2, sticky="ew")
 # Make the table frame expandable
 status_table_frame.grid_columnconfigure(0, weight=1)
 status_table_frame.grid_rowconfigure(0, weight=1)
+
+# Make the tables in both tabs expandable downwards
+main_tab.grid_columnconfigure(0, weight=1)
+main_tab.grid_rowconfigure(1, weight=1)
+
+read_write_tab.grid_columnconfigure(0, weight=1)
+read_write_tab.grid_rowconfigure(4, weight=1)
 
 
 # Function to check LGV column visibility
