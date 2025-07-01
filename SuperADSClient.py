@@ -12,6 +12,8 @@ import time
 import json
 from queue import Queue, Empty
 import copy
+import subprocess
+import platform
 # from ctypes import sizeof
 
 try:
@@ -1687,8 +1689,16 @@ def safe_read_all_variables_for_lgv(*args):
     with semaphore:
         read_all_variables_for_lgv(*args)
 
+
 def write_variable_for_lgv(lgv, ams_net_id, tc_type, variable_name, display_name, value, result_queue):
     """Write a variable and confirm it via ADS notification."""
+
+    ip = '.'.join(ams_net_id.split('.')[:4])
+    if not is_host_reachable(ip):
+        print(f"[WRITE] LGV {lgv} unreachable at {ip}, skipping write")
+        result_queue.put((lgv, display_name, "Timeout"))  # or "Unreachable"
+        return
+    
     # stop_event = threading.Event()  # Event to track when the notification should stop
     handle_id = get_new_handle_id()
     print(f"Generated handle: {handle_id}, Type: {type(handle_id)}")
@@ -1894,6 +1904,16 @@ def read_variable_for_lgv(lgv, ams_net_id, tc_type, variable_name, display_name,
         result_queue.put((lgv, display_name, e))
 
 def read_all_variables_for_lgv(lgv, ams_net_id, tc_type, processed_variables, result_queue):
+    # Extract IP from ams net id
+    ip = '.'.join(ams_net_id.split('.')[:4])
+
+    # Check if reachable before attempting connection
+    if not is_host_reachable(ip):
+        print(f"[READ] LGV {lgv} unreachable at {ip}, skipping")
+        for display_name in processed_variables.values():
+            result_queue.put((lgv, display_name, "Timeout"))
+        return
+    
     try:
         port = 851 if tc_type == "TC3" else 801
         with pyads.Connection(ams_net_id, port) as ads_connection:
@@ -1965,14 +1985,9 @@ def rw_read_variable():
 
 def process_results_in_background(threads, result_queue, lgv_data):
     """Monitor threads and process results in the background."""
-    timeout = 0.5
-    start_time = time.time()
-
-    # Wait for threads to finish or timeout
-    while any(t.is_alive() for t in threads):
-        if time.time() - start_time > timeout:
-            break
-        time.sleep(0.1)
+    
+    for t in threads:
+        t.join()
 
     # Collect results
     results = {}
@@ -2138,6 +2153,34 @@ def clear_status():
 
     # Read and write will be multi thread
 
+###################################################################### Helper methods #########################################################################
+
+def is_host_reachable(host, timeout=1):
+    """Ping the host to check if it is reachable."""
+    # Define the ping command based on the OS
+    if platform.system().lower() == "windows":
+        ping_cmd = ["ping", "-n", "1", "-w", str(timeout * 1000), host]
+        creation_flags = subprocess.CREATE_NO_WINDOW
+    else:
+        ping_cmd = ["ping", "-c", "1", "-W", str(timeout), host]
+        creation_flags = 0
+
+    try:
+        subprocess.run(
+            ping_cmd, 
+            stdout=subprocess.DEVNULL, 
+            stderr=subprocess.DEVNULL, 
+            check=True, timeout=timeout + 1,
+            creationflags=creation_flags
+        )
+        return True
+    except subprocess.TimeoutExpired:
+        print(f"Ping to {host} timed out.")
+        return False
+    except subprocess.CalledProcessError:
+        print(f"Ping to {host} failed.")
+        return False
+    
 
 ####################################################################################################################################################################
 ####################################################################### Create UI ##################################################################################
