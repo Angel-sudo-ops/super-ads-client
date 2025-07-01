@@ -26,7 +26,7 @@ if not pyads_available:
     # messagebox.showerror("Attention", "No pyads available")
     print("No pyads available")
 
-__version__ = '2.5.0.4'
+__version__ = '2.5.0.5'
 __icon__ = "./plc.ico"
 
 LGV_DATA = "lgv_data.xml"
@@ -1683,6 +1683,10 @@ def safe_read_variable_for_lgv(*args):
     with semaphore:
         read_variable_for_lgv(*args)
 
+def safe_read_all_variables_for_lgv(*args):
+    with semaphore:
+        read_all_variables_for_lgv(*args)
+
 def write_variable_for_lgv(lgv, ams_net_id, tc_type, variable_name, display_name, value, result_queue):
     """Write a variable and confirm it via ADS notification."""
     # stop_event = threading.Event()  # Event to track when the notification should stop
@@ -1889,6 +1893,25 @@ def read_variable_for_lgv(lgv, ams_net_id, tc_type, variable_name, display_name,
         # Add error result to queue
         result_queue.put((lgv, display_name, e))
 
+def read_all_variables_for_lgv(lgv, ams_net_id, tc_type, processed_variables, result_queue):
+    try:
+        port = 851 if tc_type == "TC3" else 801
+        with pyads.Connection(ams_net_id, port) as ads_connection:
+            print(f"Connected to LGV {lgv} ({ams_net_id})")
+
+            for variable_name, display_name in processed_variables.items():
+                try:
+                    symbol_info = ads_connection.get_symbol(variable_name)
+                    expected_type = get_pyads_type(symbol_info.symbol_type)
+                    value = ads_connection.read_by_name(variable_name, expected_type)
+                    print(f"Read {value} from {variable_name} for LGV {lgv}")
+                    result_queue.put((lgv, display_name, value))
+                except Exception as e:
+                    result_queue.put((lgv, display_name, e))
+    except Exception as e:
+        for display_name in processed_variables.values():
+            result_queue.put((lgv, display_name, e))
+
 def rw_read_variable():
     """Start the read operation for all selected LGVs."""
 
@@ -1925,14 +1948,13 @@ def rw_read_variable():
 
     # Start a thread for each LGV to perform the read operation
     for lgv, ams_net_id, tc_type in lgv_data:
-        for variable_name, display_name in processed_variables.items():
-            thread = threading.Thread(
-                target=safe_read_variable_for_lgv,
-                args=(lgv, ams_net_id, tc_type, variable_name, display_name, result_queue)
-            )
-            thread.daemon = True
-            thread.start()
-            threads.append(thread)
+        thread = threading.Thread(
+            target=safe_read_all_variables_for_lgv,
+            args=(lgv, ams_net_id, tc_type, processed_variables, result_queue)
+        )
+        thread.daemon = True
+        thread.start()
+        threads.append(thread)
 
     # Start a background thread to monitor results
     threading.Thread(
