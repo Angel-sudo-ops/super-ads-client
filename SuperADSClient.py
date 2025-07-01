@@ -2664,7 +2664,7 @@ status_table.configure(
 
 # Configure layout weights (important!)
 status_table_frame.grid_columnconfigure(0, weight=0)  # Overlay column stays fixed
-# status_table_frame.grid_columnconfigure(1, weight=1)  # Table expands
+status_table_frame.grid_columnconfigure(1, weight=1)  # Table expands
 status_table_frame.grid_columnconfigure(2, weight=0)  # Scrollbar column fixed
 status_table_frame.grid_rowconfigure(0, weight=1)
 
