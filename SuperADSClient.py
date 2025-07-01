@@ -1794,11 +1794,6 @@ def convert_to_number(user_input):
 def rw_write_variable():
     """Start the write operation for all selected LGVs."""
     global read_write_in_progress
-    if read_write_in_progress :
-        print("Read/Write operation already in progress!")
-        return
-    
-    read_write_in_progress = True
 
     variable_names = variable_menu.get().strip()  # Directly get the variable name
 
@@ -1824,6 +1819,12 @@ def rw_write_variable():
     if lgv_data is None:
         # messagebox.showerror("Error", "LGV range is empty")
         return  # Exit if validation failed
+    
+    if read_write_in_progress :
+        print("Read/Write operation already in progress!")
+        return
+    
+    read_write_in_progress = True
 
     # Prepare result table
     prepare_status_table(lgv_data, list(processed_variables.values()))
@@ -1954,11 +1955,6 @@ def read_all_variables_for_lgv(lgv, ams_net_id, tc_type, processed_variables, re
 def rw_read_variable():
     """Start the read operation for all selected LGVs."""
     global read_write_in_progress
-    if read_write_in_progress :
-        print("Read/Write operation already in progress!")
-        return
-    
-    read_write_in_progress = True
 
     variable_names = variable_menu.get().strip()  # Get the variable name directly
 
@@ -1983,6 +1979,12 @@ def rw_read_variable():
     lgv_data = validate_and_link_lgv()
     if lgv_data is None:
         return  # Exit if validation failed
+    
+    if read_write_in_progress :
+        print("Read/Write operation already in progress!")
+        return
+    
+    read_write_in_progress = True
 
     # Prepare result table
     prepare_status_table(lgv_data, list(processed_variables.values()))
@@ -2522,7 +2524,7 @@ variable_frame = ttk.LabelFrame(read_write_tab, text="Variables")
 variable_frame.grid(row=0, column=0, padx=10, pady=5, sticky="nsew")
 
 # ttk.Label(variable_frame, text="Select or Add Variable:").grid(row=0, column=0, padx=5, pady=5)
-variable_menu = ttk.Combobox(variable_frame)
+variable_menu = ttk.Combobox(variable_frame, width=55)
 variable_menu.grid(row=0, column=0, padx=5, pady=5, sticky='ew')
 variable_menu.bind('<ButtonPress>', update_variable_menu)
 # Bind the filter function to update on key release
@@ -2537,9 +2539,7 @@ add_var_btn.grid(row=0, column=1, padx=5, pady=5)
 value_frame = ttk.LabelFrame(read_write_tab, text="Set Value")
 value_frame.grid(row=1, column=0, padx=10, pady=5, sticky="nsew")
 
-# Allow variable_frame to expand horizontally
-read_write_tab.columnconfigure(0, weight=1)
-variable_frame.columnconfigure(0, weight=1)
+
 
 bool_value_frame = ttk.Frame(value_frame)
 bool_value_frame.grid(row=0, column=0, padx=5, pady=5)
@@ -2606,10 +2606,8 @@ read_write_tab.bind("<Control-w>", lambda event: rw_write_variable())
 read_write_tab.bind("<Control-W>", lambda event: rw_write_variable())
 
 # Status table frame
-status_table_frame = ttk.Frame(read_write_tab)
+status_table_frame = ttk.Frame(read_write_tab, width=500)
 status_table_frame.grid(row=4, column=0, columnspan=2, sticky="nsew")
-
-status_table_frame.configure(width=800)
 
 
 # LGV overlay Treeview
@@ -2641,6 +2639,7 @@ status_table = ttk.Treeview(
     show="headings",
     height=5
 )
+
 status_table.grid(row=0, column=1, padx=(15,0), pady=(5,0), sticky="nsew")
 
 # Configure tags for the status table (e.g., red text for errors)
@@ -2659,17 +2658,24 @@ status_table.configure(
     yscrollcommand=lambda *args: (scroll_y.set(*args), update_lgv_overlay(*args))
 )
 
+# Allow variable_frame to expand horizontally
+# read_write_tab.grid_columnconfigure(0, weight=1)
+# variable_frame.grid_columnconfigure(0, weight=0)
+
 # Configure layout weights (important!)
 status_table_frame.grid_columnconfigure(0, weight=0)  # Overlay column stays fixed
-status_table_frame.grid_columnconfigure(1, weight=1)  # Table expands
+# status_table_frame.grid_columnconfigure(1, weight=1)  # Table expands
 status_table_frame.grid_columnconfigure(2, weight=0)  # Scrollbar column fixed
 status_table_frame.grid_rowconfigure(0, weight=1)
 
-# Make the tables in both tabs expandable downwards
-main_tab.grid_columnconfigure(0, weight=1)
+# Make the table in the main tab expandable downwards
+main_tab.grid_columnconfigure(0, weight=0)
 main_tab.grid_rowconfigure(1, weight=1)
 
 read_write_tab.grid_columnconfigure(0, weight=1)
+
+
+read_write_tab.grid_rowconfigure(0, weight=0)
 read_write_tab.grid_rowconfigure(4, weight=1)
 
 
