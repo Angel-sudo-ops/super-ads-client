@@ -2074,7 +2074,9 @@ def prepare_status_table(lgv_data, variables):
     # Configure columns
     for col in status_table["columns"]:
         status_table.heading(col, text=col, anchor="center")
-        status_table.column(col, anchor="center", width=150, stretch=False)  # Set default width
+        header_lenght = len(str(col))
+        col_width = max(header_lenght * 10, 50)
+        status_table.column(col, anchor="center", width=col_width, stretch=False)  # Set default width
 
     # Pre-populate rows with LGVs
     for lgv, ams_net_id, _ in sorted(lgv_data, key=lambda x: x[0]):
@@ -2111,6 +2113,14 @@ def update_status_table(lgv, variable, value):
 
 def adjust_column_width():
     """Dynamically adjust the width of each column based on content."""
+    if not status_table.get_children():
+        return
+
+    if not status_table["columns"]:
+        return
+    
+    status_table["displaycolumns"] = status_table["columns"]
+
     for col in status_table["columns"]:
         max_length = max(
             len(str(status_table.set(child, col)))  # Get cell value
@@ -2118,7 +2128,7 @@ def adjust_column_width():
         )
         max_length = max(max_length, len(col))      # Ensure header is included
         col_width = max(max_length*10, 20)          # Set a minimum width of 20 px in case of single char
-        status_table.column(col, width=col_width)   # Adjust width (10px per char)
+        status_table.column(col, width=col_width, stretch=False)   # Adjust width (10px per char)
 
 
 # # Dictionary to store original column headings for sorting indicators
@@ -2599,6 +2609,8 @@ read_write_tab.bind("<Control-W>", lambda event: rw_write_variable())
 status_table_frame = ttk.Frame(read_write_tab)
 status_table_frame.grid(row=4, column=0, columnspan=2, sticky="nsew")
 
+status_table_frame.configure(width=800)
+
 
 # LGV overlay Treeview
 lgv_overlay = ttk.Treeview(
@@ -2629,21 +2641,28 @@ status_table = ttk.Treeview(
     show="headings",
     height=5
 )
-status_table.grid(row=0, column=0, padx=(15,0), pady=(5,0), sticky="nsew")
+status_table.grid(row=0, column=1, padx=(15,0), pady=(5,0), sticky="nsew")
 
 # Configure tags for the status table (e.g., red text for errors)
 status_table.tag_configure("error", foreground="red")
 
 # Configure scrollbars for the status table
 scroll_y = ttk.Scrollbar(status_table_frame, orient="vertical", command=status_table.yview)
-scroll_y.grid(row=0, column=1, sticky="ns")
+scroll_y.grid(row=0, column=2, sticky="ns")
 
 scroll_x = ttk.Scrollbar(status_table_frame, orient="horizontal", command=status_table.xview)
-scroll_x.grid(row=1, column=0, columnspan=2, sticky="ew")
+scroll_x.grid(row=1, column=1, sticky="ew")
 
+# Attach the function to the horizontal scrollbar
+status_table.configure(
+    xscrollcommand=lambda *args: (scroll_x.set(*args), toggle_lgv_overlay(*args)),
+    yscrollcommand=lambda *args: (scroll_y.set(*args), update_lgv_overlay(*args))
+)
 
-# Make the table frame expandable
-status_table_frame.grid_columnconfigure(0, weight=1)
+# Configure layout weights (important!)
+status_table_frame.grid_columnconfigure(0, weight=0)  # Overlay column stays fixed
+status_table_frame.grid_columnconfigure(1, weight=1)  # Table expands
+status_table_frame.grid_columnconfigure(2, weight=0)  # Scrollbar column fixed
 status_table_frame.grid_rowconfigure(0, weight=1)
 
 # Make the tables in both tabs expandable downwards
@@ -2660,7 +2679,7 @@ def toggle_lgv_overlay(*args):
     x = status_table.xview()[0]  # Get the normalized scroll position (0 to 1)
     if x > 0:  # If the scroll position is not at the beginning
         lgv_overlay.grid()  # Show overlay
-        lgv_overlay.lift()
+        lgv_overlay.lift(status_table)
     else:
         lgv_overlay.grid_remove()  # Hide overlay
 
@@ -2677,17 +2696,10 @@ def update_lgv_overlay(*args):
     last_visible_row = min(int(visible_fraction[1] * total_rows)-1, total_rows-1)
 
     # Populate overlay with visible rows only
-    for i in range(first_visible_row, last_visible_row+1):
+    for i in range(first_visible_row, last_visible_row + 1):
         lgv_name = f"LGV{(i+1):02d}"  # Example LGV name (adjust to your data)
         lgv_overlay.insert("", "end", values=(lgv_name,))
         print(f" First elem: {first_visible_row}, Last elem: {last_visible_row}, {len(status_table.get_children())}")
-
-
-# Attach the function to the horizontal scrollbar
-status_table.configure(
-    xscrollcommand=lambda *args: (scroll_x.set(*args), toggle_lgv_overlay(*args)),
-    yscrollcommand=lambda *args: (scroll_y.set(*args), update_lgv_overlay(*args))
-)
 
 update_lgv_overlay()
 
