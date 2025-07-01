@@ -28,7 +28,7 @@ if not pyads_available:
     # messagebox.showerror("Attention", "No pyads available")
     print("No pyads available")
 
-__version__ = '2.5.0.5'
+__version__ = '2.5.0.6'
 __icon__ = "./plc.ico"
 
 MAX_WORKERS = 5
@@ -2033,10 +2033,10 @@ def process_results_in_background(threads, result_queue, lgv_data):
                         update_status_table(lgv, variable, "Timeout")
         else:
             # Schedule next check
-            root.after(100, check_and_update)
+            root.after(200, check_and_update)
 
     # Start checking 
-    root.after(100, check_and_update)
+    root.after(200, check_and_update)
 
 
 def prepare_status_table(lgv_data, variables):
@@ -2193,10 +2193,10 @@ def is_host_reachable(host, timeout=0.7):
         )
         return True
     except subprocess.TimeoutExpired:
-        print(f"Ping to {host} timed out.")
+        # print(f"Ping to {host} timed out.")
         return False
     except subprocess.CalledProcessError:
-        print(f"Ping to {host} failed.")
+        # print(f"Ping to {host} failed.")
         return False
     
 
