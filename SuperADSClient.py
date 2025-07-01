@@ -26,7 +26,7 @@ if not pyads_available:
     # messagebox.showerror("Attention", "No pyads available")
     print("No pyads available")
 
-__version__ = '2.5.0.2'
+__version__ = '2.5.0.3'
 __icon__ = "./plc.ico"
 
 LGV_DATA = "lgv_data.xml"
@@ -1178,37 +1178,45 @@ def get_lgv_data():
 
 
 # Dictionary to maintain custom headings
-headings = {
+main_headings = {
     'Name': 'Name',
     'NetId': 'AMS Net Id',
     'Type': 'Type'
 }
 
-def setup_treeview():
+def setup_sortable_treeview(treeview, headings, anchor='w', on_sorted=None):
+    def natural_keys(text):
+        return [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', text)]
+
+    def sort_column(col, reverse):
+        # Retrieve all data from the treeview
+        rows = [(treeview.set(k, col), k) for k in treeview.get_children('')]
+        # Sort the data
+        rows.sort(reverse=reverse, key=lambda t: natural_keys(t[0]))
+
+        # Rearrange items in sorted positions
+        for index, (_, k) in enumerate(rows):
+            treeview.move(k, '', index)
+        
+        if on_sorted:
+            on_sorted(treeview)
+
+        # Change the heading to show the sort direction
+        for column in treeview['columns']:
+            arrow = ' ↓' if reverse and column == col else ' ↑' if not reverse and column == col else ''
+            treeview.heading(
+                column, 
+                text=headings.get(column, column) + arrow, 
+                command=lambda _col=column: sort_column(_col, not reverse)
+            )
+
     for col in treeview['columns']:
-        treeview.heading(col, text=headings[col], command=lambda _col=col: treeview_sort_column(treeview, _col, False), anchor='w')
-
-def treeview_sort_column(tv, col, reverse):
-    # Retrieve all data from the treeview
-    l = [(tv.set(k, col), k) for k in tv.get_children('')]
-    
-    # Sort the data
-    l.sort(reverse=reverse, key=lambda t: natural_keys(t[0]))
-
-    # Rearrange items in sorted positions
-    for index, (val, k) in enumerate(l):
-        tv.move(k, '', index)
-
-    # Change the heading to show the sort direction
-    for column in tv['columns']:
-        heading_text = headings[column] + (' ↓' if reverse and column == col else ' ↑' if not reverse and column == col else '')
-        tv.heading(column, text=heading_text, command=lambda _col=column: treeview_sort_column(tv, _col, not reverse))
-
-def natural_keys(text):
-    """
-    Alphanumeric (natural) sort to handle numbers within strings correctly
-    """
-    return [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', text)]
+        treeview.heading(
+            col, 
+            text=headings.get(col, col), 
+            command=lambda _col=col: sort_column(_col, False),
+            anchor=anchor
+        )
 
 
 ####################################################################################################################################################################
@@ -1997,7 +2005,9 @@ def prepare_status_table(lgv_data, variables):
 
         lgv_overlay.insert("", "end", iid=row_id, values=row_values) # Populate lgv_overlay as well
 
-    setup_rw_data(status_table)
+    status_headings = {col: col for col in status_table["columns"]}
+    
+    setup_sortable_treeview(status_table, status_headings, 'center', on_sorted=update_lgv_overlay_order)
 
 
 def update_status_table(lgv, variable, value):
@@ -2032,59 +2042,31 @@ def adjust_column_width():
         status_table.column(col, width=col_width)   # Adjust width (10px per char)
 
 
-# Dictionary to store original column headings for sorting indicators
-dynamic_headings = {}
+# # Dictionary to store original column headings for sorting indicators
+# dynamic_headings = {}
 
-def setup_rw_data(treeview):
-    """
-    Setup sorting for dynamically generated columns.
-    """
-    for col in treeview['columns']:
-        dynamic_headings[col] = col  # Store original column heading
-        treeview.heading(
-            col, 
-            text=col, 
-            command=lambda _col=col: treeview_sort_column(treeview, _col, False), 
-            anchor="center"
-        )
+# def setup_rw_data(treeview):
+#     """
+#     Setup sorting for dynamically generated columns.
+#     """
+#     for col in treeview['columns']:
+#         dynamic_headings[col] = col  # Store original column heading
+#         treeview.heading(
+#             col, 
+#             text=col, 
+#             command=lambda _col=col: treeview_sort_column(treeview, _col, False), 
+#             anchor="center"
+#         )
 
-def treeview_sort_column(tv, col, reverse):
-    """
-    Sort the selected column naturally.
-    """
-    # Retrieve all data from the treeview
-    rows = [(tv.set(k, col), k) for k in tv.get_children('')]
-
-    # Sort the data using natural keys for mixed alphanumeric sorting
-    rows.sort(reverse=reverse, key=lambda t: natural_keys(t[0]))
-
-    # Rearrange items in sorted positions
-    for index, (_, k) in enumerate(rows):
-        tv.move(k, '', index)
-
-    update_lgv_overlay_order(tv)
-
-    # Update column headers to reflect sorting direction
-    for column in tv["columns"]:
-        heading_text = dynamic_headings[column] + (' ↓' if reverse and column == col else ' ↑' if not reverse and column == col else '')
-        tv.heading(column, text=heading_text, command=lambda _col=column: treeview_sort_column(tv, _col, not reverse))
-
-def natural_keys(text):
-    """
-    Alphanumeric (natural) sorting for numbers within strings.
-    """
-    import re
-    return [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', text)]
-
-def update_lgv_overlay_order(tv):
+def update_lgv_overlay_order(treeview):
     """
     Updates the LGV overlay to match the sorted order of the status_table.
     """
     lgv_overlay.delete(*lgv_overlay.get_children())  # Clear current overlay
 
     # Insert LGV numbers in the sorted order
-    for item in tv.get_children(''):
-        lgv_number = tv.item(item, "values")[0]  # Extract LGV number from sorted table
+    for item in treeview.get_children(''):
+        lgv_number = treeview.item(item, "values")[0]  # Extract LGV number from sorted table
         lgv_overlay.insert("", "end", values=(lgv_number,))
 
 
@@ -2162,7 +2144,7 @@ else:
     icon_path = os.path.abspath(__icon__)
 # root.iconbitmap(icon_path)
 
-window_width = 490
+window_width = 480
 window_lenght = 450
 root.geometry(f"{window_width}x{window_lenght}")
 root.minsize(window_width, window_lenght)
@@ -2292,11 +2274,11 @@ columns = ("Name", "NetId", "Type")
 treeview = ttk.Treeview(table_frame, columns=columns, show="headings")
 
 # Define the column widths
-treeview.column("Name", width=80, anchor='w')
+treeview.column("Name", width=70, anchor='w')
 treeview.column("NetId", width=120, anchor='w')
 treeview.column("Type", width=50, anchor='w')
 
-setup_treeview()
+setup_sortable_treeview(treeview, main_headings)
 
 # Add the treeview to the table frame
 treeview.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
