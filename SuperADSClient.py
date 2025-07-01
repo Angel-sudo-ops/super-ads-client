@@ -28,7 +28,7 @@ if not pyads_available:
     # messagebox.showerror("Attention", "No pyads available")
     print("No pyads available")
 
-__version__ = '2.5.0.6'
+__version__ = '2.5.0.7'
 __icon__ = "./plc.ico"
 
 MAX_WORKERS = 5
@@ -1699,6 +1699,10 @@ def safe_read_all_variables_for_lgv(*args):
         read_all_variables_for_lgv(*args)
 
 
+read_write_in_progress = False
+
+
+
 def write_variable_for_lgv(lgv, ams_net_id, tc_type, variable_name, display_name, value, result_queue):
     """Write a variable and confirm it via ADS notification."""
 
@@ -1789,6 +1793,12 @@ def convert_to_number(user_input):
 
 def rw_write_variable():
     """Start the write operation for all selected LGVs."""
+    global read_write_in_progress
+    if read_write_in_progress :
+        print("Read/Write operation already in progress!")
+        return
+    
+    read_write_in_progress = True
 
     variable_names = variable_menu.get().strip()  # Directly get the variable name
 
@@ -1943,6 +1953,12 @@ def read_all_variables_for_lgv(lgv, ams_net_id, tc_type, processed_variables, re
 
 def rw_read_variable():
     """Start the read operation for all selected LGVs."""
+    global read_write_in_progress
+    if read_write_in_progress :
+        print("Read/Write operation already in progress!")
+        return
+    
+    read_write_in_progress = True
 
     variable_names = variable_menu.get().strip()  # Get the variable name directly
 
@@ -2031,6 +2047,11 @@ def process_results_in_background(threads, result_queue, lgv_data):
                 for variable in variables:
                     if variable not in results[lgv]:
                         update_status_table(lgv, variable, "Timeout")
+            
+            # Reset the flag after all threads are done
+            global read_write_in_progress
+            read_write_in_progress = False
+
         else:
             # Schedule next check
             root.after(200, check_and_update)
