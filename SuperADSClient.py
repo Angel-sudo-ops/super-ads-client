@@ -2238,9 +2238,74 @@ def is_host_reachable(host, timeout=0.7):
         return False
     
 
-####################################################################################################################################################################
-####################################################################### Create UI ##################################################################################
-####################################################################################################################################################################
+####################################################################  UI methods ###############################################################
+
+# Keyboard shortcut functions
+def select_true(event=None):
+    var_type.set(True)
+    clear_entry_field()
+
+def select_false(event=None):
+    var_type.set(False)
+    clear_entry_field()
+
+def focus_other_entry(event=None):
+    value_entry.focus_set()
+
+# Function to check LGV column visibility
+def toggle_lgv_overlay(*args):
+    """Show or hide the LGV overlay depending on the visibility of the LGV column."""
+    x = status_table.xview()[0]  # Get the normalized scroll position (0 to 1)
+    if x > 0:  # If the scroll position is not at the beginning
+        lgv_overlay.grid()  # Show overlay
+        lgv_overlay.lift()
+    else:
+        lgv_overlay.grid_remove()  # Hide overlay
+
+def update_lgv_overlay(*args):
+    # Handle vertical scrolling for visible rows (yscroll)
+    lgv_overlay.delete(*lgv_overlay.get_children())  # Clear current rows in overlay
+
+    # Get visible range
+    visible_fraction = status_table.yview()  # Returns (start, end) as fractions
+    total_rows = len(status_table.get_children())  # Total rows in the Treeview
+
+    # Calculate visible row indices
+    first_visible_row = int(visible_fraction[0] * total_rows)
+    last_visible_row = min(int(visible_fraction[1] * total_rows)-1, total_rows-1)
+
+    # print("Overlay visible items:", lgv_overlay.get_children())
+
+    # Populate overlay with visible rows only
+    for i in range(first_visible_row, last_visible_row + 1):
+        lgv_name = f"LGV{(i+1):02d}"  # Example LGV name (adjust to your data)
+        lgv_overlay.insert("", "end", values=(lgv_name,))
+        # print(f" First elem: {first_visible_row}, Last elem: {last_visible_row}, {len(status_table.get_children())}")
+
+def on_tab_changed(event):
+    selected_tab = event.widget.select()
+    tab_text = event.widget.tab(selected_tab, "text")
+    if tab_text == "RW Panel":
+        root.after(10, lambda: variable_menu.focus_set())
+        print("variable combobox is focused")
+    else:
+        root.focus_set()
+
+def select_next_tab(event=None):
+    current = notebook.index(notebook.select())
+    total = len(notebook.tabs())
+    notebook.select((current + 1) % total)
+    print("next tab")
+    return "break"  # prevents default behavior
+
+def select_previous_tab(event=None):
+    current = notebook.index(notebook.select())
+    total = len(notebook.tabs())
+    prev_index = (current - 1) % total
+    notebook.select(prev_index)
+    print("previous tab")
+    return "break"
+
 
 ############################# Set GUI icon ##########################
 def set_icon(window):
@@ -2249,7 +2314,9 @@ def set_icon(window):
     else:
         print("Icon file not found.")
 
-
+####################################################################################################################################################################
+####################################################################### Create UI ##################################################################################
+####################################################################################################################################################################
 
 
 # Create the root window
@@ -2321,23 +2388,6 @@ read_write_tab = ttk.Frame(notebook, style="TNotebook.Tab")
 
 notebook.add(main_tab, text="Control")
 notebook.add(read_write_tab, text="RW Panel")
-
-
-
-def select_next_tab(event=None):
-    current = notebook.index(notebook.select())
-    total = len(notebook.tabs())
-    notebook.select((current + 1) % total)
-    print("next tab")
-    return "break"  # prevents default behavior
-
-def select_previous_tab(event=None):
-    current = notebook.index(notebook.select())
-    total = len(notebook.tabs())
-    prev_index = (current - 1) % total
-    notebook.select(prev_index)
-    print("previous tab")
-    return "break"
 
 
 # Bind Ctrl+Tab and Ctrl+Shift+Tab
@@ -2565,27 +2615,15 @@ value_entry = ttk.Entry(entry_value_frame)
 value_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
 
 
-# Keyboard shortcut functions
-def select_true(event=None):
-    var_type.set(True)
-    clear_entry_field()
-
-def select_false(event=None):
-    var_type.set(False)
-    clear_entry_field()
-
-def focus_other_entry(event=None):
-    value_entry.focus_set()
-
 # Bind shortcuts to root window
-read_write_tab.bind('<Control-t>', select_true)
-read_write_tab.bind('<Control-T>', select_true)
+root.bind('<Control-t>', select_true)
+root.bind('<Control-T>', select_true)
 
-read_write_tab.bind('<Control-f>', select_false)
-read_write_tab.bind('<Control-F>', select_false)
+root.bind('<Control-f>', select_false)
+root.bind('<Control-F>', select_false)
 
-read_write_tab.bind('<Control-e>', focus_other_entry)
-read_write_tab.bind('<Control-E>', focus_other_entry)
+root.bind('<Control-e>', focus_other_entry)
+root.bind('<Control-E>', focus_other_entry)
 
 # LGV Range Frame
 lgv_frame = ttk.Frame(read_write_tab)
@@ -2685,51 +2723,9 @@ read_write_tab.grid_rowconfigure(4, weight=1)
 read_write_tab.grid_columnconfigure(0, weight=1)
 
 
-
-# Function to check LGV column visibility
-def toggle_lgv_overlay(*args):
-    """Show or hide the LGV overlay depending on the visibility of the LGV column."""
-    x = status_table.xview()[0]  # Get the normalized scroll position (0 to 1)
-    if x > 0:  # If the scroll position is not at the beginning
-        lgv_overlay.grid()  # Show overlay
-        lgv_overlay.lift()
-    else:
-        lgv_overlay.grid_remove()  # Hide overlay
-
-def update_lgv_overlay(*args):
-    # Handle vertical scrolling for visible rows (yscroll)
-    lgv_overlay.delete(*lgv_overlay.get_children())  # Clear current rows in overlay
-
-    # Get visible range
-    visible_fraction = status_table.yview()  # Returns (start, end) as fractions
-    total_rows = len(status_table.get_children())  # Total rows in the Treeview
-
-    # Calculate visible row indices
-    first_visible_row = int(visible_fraction[0] * total_rows)
-    last_visible_row = min(int(visible_fraction[1] * total_rows)-1, total_rows-1)
-
-    print("Overlay visible items:", lgv_overlay.get_children())
-
-    # Populate overlay with visible rows only
-    for i in range(first_visible_row, last_visible_row + 1):
-        lgv_name = f"LGV{(i+1):02d}"  # Example LGV name (adjust to your data)
-        lgv_overlay.insert("", "end", values=(lgv_name,))
-        # print(f" First elem: {first_visible_row}, Last elem: {last_visible_row}, {len(status_table.get_children())}")
-
 update_lgv_overlay()
 
-
-def on_tab_changed(event):
-    selected_tab = event.widget.select()
-    tab_text = event.widget.tab(selected_tab, "text")
-    if tab_text == "RW Panel":
-        root.after(10, lambda: variable_menu.focus_set())
-        print("variable combobox is focused")
-    else:
-        root.focus_set()
-
 notebook.bind("<<NotebookTabChanged>>", on_tab_changed)
-
 
 
 def on_closing():
