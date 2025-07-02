@@ -2125,7 +2125,7 @@ def adjust_column_width():
     if not status_table["columns"]:
         return
     
-    status_table["displaycolumns"] = status_table["columns"]
+    # status_table["displaycolumns"] = status_table["columns"]
 
     for col in status_table["columns"]:
         max_length = max(
@@ -2719,7 +2719,7 @@ def on_tab_changed(event):
     tab_text = event.widget.tab(selected_tab, "text")
     if tab_text == "RW Panel":
         root.after(10, lambda: variable_menu.focus_set())
-        print("table is focused")
+        print("variable combobox is focused")
     else:
         root.focus_set()
 
