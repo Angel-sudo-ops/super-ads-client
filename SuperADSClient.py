@@ -1342,7 +1342,7 @@ def open_shortcuts_window():
     shortcuts_window.title("Shortcuts")
 
     window_width = 360
-    window_lenght = 300
+    window_lenght = 400
     shortcuts_window.geometry(f"{window_width}x{window_lenght}")
     shortcuts_window.minsize(window_width, window_lenght)
 
@@ -1362,6 +1362,7 @@ def open_shortcuts_window():
         ("Ctrl+H", "Disable Horn"),
         ("Ctrl+C", "Connect to selected LGV"),
         ("Ctrl+T", "Select first element from the table"),
+        ("Ctrl+Shift+Tab", "Change between tabs")
     ]
 
     # Display each shortcut in the frame
@@ -2344,7 +2345,6 @@ root.bind_all("<Control-Tab>", select_next_tab)
 root.bind_all("<Control-Shift-Tab>", select_previous_tab)
 
 
-
 # Create the menu bar
 menu_bar = tk.Menu(root)
 
@@ -2381,6 +2381,11 @@ frame_connect = ttk.Frame(main_tab, width=100)
 # frame_connect.grid_propagate(False)
 frame_connect.grid(row=0, column=0, padx=20, pady=5)
 
+# Create a label as an indicator
+core_status_label = ttk.Label(frame_connect, text="No Core Lib", foreground="#4682B4") # #3CB371, #6495ED, 4682B4
+core_status_label.grid(row=0, column=0, padx=20, pady=0, sticky='e')
+
+
 # Add a button to connect to the PLC
 connect_button = ttk.Button(frame_connect, text="Connect", style='Connect.TButton')
 connect_button.grid(row=0, column=1, padx=10, ipady=4, sticky='w')
@@ -2388,16 +2393,10 @@ bind_connect_button_action(connect_button, connect_function=connect_to_plc,
                             shortcuts=['<Control-c>', '<Control-C>'])
 
 
-# Create a label as an indicator
-core_status_label = ttk.Label(frame_connect, text="No Core Lib", foreground="#4682B4") # #3CB371, #6495ED, 4682B4
-core_status_label.grid(row=0, column=0, padx=20, pady=0, sticky='e')
-
-
 
 # Connection status label
 status_label = ttk.Label(main_tab, text="Disconnected", foreground="red", font=("Segoe UI", 13))
 status_label.grid(row=0, column=1, padx=5, pady=5)
-
 
 
 
@@ -2528,7 +2527,7 @@ variable_frame = ttk.LabelFrame(read_write_tab, text="Variables")
 variable_frame.grid(row=0, column=0, padx=10, pady=5, sticky="nsew")
 
 # ttk.Label(variable_frame, text="Select or Add Variable:").grid(row=0, column=0, padx=5, pady=5)
-variable_menu = ttk.Combobox(variable_frame, width=55)
+variable_menu = ttk.Combobox(variable_frame)
 variable_menu.grid(row=0, column=0, padx=5, pady=5, sticky='ew')
 variable_menu.bind('<ButtonPress>', update_variable_menu)
 # Bind the filter function to update on key release
@@ -2538,6 +2537,10 @@ variable_menu.bind('<Tab>', filter_combobox)
 
 add_var_btn = ttk.Button(variable_frame, text="Add Variable", command=add_variable)
 add_var_btn.grid(row=0, column=1, padx=5, pady=5)
+
+# Extend variable_frame sideways
+variable_frame.grid_columnconfigure(0, weight=1)
+# variable_frame.grid_rowconfigure(0, weight=1)
 
 # Value Input Frame
 value_frame = ttk.LabelFrame(read_write_tab, text="Set Value")
@@ -2613,6 +2616,9 @@ read_write_tab.bind("<Control-W>", lambda event: rw_write_variable())
 status_table_frame = ttk.Frame(read_write_tab)
 status_table_frame.grid(row=4, column=0, columnspan=2, sticky="nsew")
 
+status_table_frame.grid_columnconfigure(0, weight=1)
+status_table_frame.grid_rowconfigure(0, weight=1)
+
 
 # LGV overlay Treeview
 lgv_overlay = ttk.Treeview(
@@ -2649,6 +2655,10 @@ status_table.grid(row=0, column=0, padx=(15,0), pady=(5,0), sticky="nsew")
 # Configure tags for the status table (e.g., red text for errors)
 status_table.tag_configure("error", foreground="red")
 
+# Extend status_table sideways
+status_table.grid_columnconfigure(0, weight=1)
+# status_table.grid_rowconfigure(0, weight=1)
+
 # Configure scrollbars for the status table
 scroll_y = ttk.Scrollbar(status_table_frame, orient="vertical", command=status_table.yview)
 scroll_y.grid(row=0, column=1, sticky="ns")
@@ -2662,34 +2672,17 @@ status_table.configure(
     yscrollcommand=lambda *args: (scroll_y.set(*args), update_lgv_overlay(*args))
 )
 
-# Allow variable_frame to expand horizontally
-# read_write_tab.grid_columnconfigure(0, weight=1)
-# variable_frame.grid_columnconfigure(0, weight=0)
 
-# Configure layout weights (important!)
-# status_table_frame.grid_columnconfigure(0, weight=0, minsize=80)  # Overlay column stays fixed
-# status_table_frame.grid_columnconfigure(1, weight=1)  # Table expands
-# status_table_frame.grid_columnconfigure(1, weight=0)  # Scrollbar column fixed
-status_table_frame.grid_columnconfigure(0, weight=1, minsize=100)
-status_table_frame.grid_rowconfigure(0, weight=1)
+root.grid_columnconfigure(0, weight=1)
+root.grid_rowconfigure(1, weight=1)
 
 # Make the table in the main tab expandable downwards
 main_tab.grid_columnconfigure(0, weight=0)
 main_tab.grid_rowconfigure(1, weight=1)
 
-
-
-# read_write_tab.grid_columnconfigure(0, weight=1)
-
-# # read_write_tab.grid_rowconfigure(0, weight=0)
-# read_write_tab.grid_rowconfigure(4, weight=1)
-
-
-
 # Make the window layout expand properly
 read_write_tab.grid_rowconfigure(4, weight=1)
 read_write_tab.grid_columnconfigure(0, weight=1)
-read_write_tab.grid_columnconfigure(1, weight=1)
 
 
 
