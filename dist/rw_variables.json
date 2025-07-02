@@ -88,5 +88,7 @@
     "LibraryInterfaces.LGV.Guid.Odom.Cur_Spd",
     "LibraryInterfaces.LGV.Guid.Odom.Cur_Spd; LibraryInterfaces.LGV.Guid.Odom.Ref_Spd",
     "SafetyGlobals.plsFrontHandler.enableExtraLong",
-    "LibraryInterfaces.UpdateGuidanceInput.force_Reset_Autocalibration_Data"
+    "LibraryInterfaces.UpdateGuidanceInput.force_Reset_Autocalibration_Data",
+    "Agv_Ctrl.AutoReboot.startRequest",
+    "Agv_Ctrl.AutoReboot.autorebootDone"
 ]
