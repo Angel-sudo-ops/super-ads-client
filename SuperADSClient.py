@@ -1823,8 +1823,6 @@ def rw_write_variable():
     if read_write_in_progress :
         print("Read/Write operation already in progress!")
         return
-    
-    read_write_in_progress = True
 
     # Prepare result table
     prepare_status_table(lgv_data, list(processed_variables.values()))
@@ -1864,6 +1862,8 @@ def rw_write_variable():
         args=(threads, result_queue, lgv_data),
         daemon=True
     ).start()
+
+    read_write_in_progress = True
 
 
 def process_variable_names(variables):
@@ -1983,8 +1983,6 @@ def rw_read_variable():
     if read_write_in_progress :
         print("Read/Write operation already in progress!")
         return
-    
-    read_write_in_progress = True
 
     # Prepare result table
     prepare_status_table(lgv_data, list(processed_variables.values()))
@@ -2009,6 +2007,8 @@ def rw_read_variable():
         args=(threads, result_queue, lgv_data),
         daemon=True
     ).start()
+
+    read_write_in_progress = True
 
 def process_results_in_background(threads, result_queue, lgv_data):
     """Monitor threads and update UI as results arrive."""
@@ -2067,6 +2067,10 @@ def prepare_status_table(lgv_data, variables):
     status_table.delete(*status_table.get_children())  # Clear the table
 
     lgv_overlay.delete(*lgv_overlay.get_children())
+
+    print("Preparing table with variables:", variables)
+    print("Current children:", status_table.get_children())
+    print("Current columns:", status_table["columns"])
 
     # Set up dynamic columns: LGV + variable columns
     status_table["columns"] = ["LGV"] + variables
