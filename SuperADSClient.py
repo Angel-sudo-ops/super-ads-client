@@ -2654,7 +2654,7 @@ scroll_y = ttk.Scrollbar(status_table_frame, orient="vertical", command=status_t
 scroll_y.grid(row=0, column=1, sticky="ns")
 
 scroll_x = ttk.Scrollbar(status_table_frame, orient="horizontal", command=status_table.xview)
-scroll_x.grid(row=1, column=0, sticky="ew")
+scroll_x.grid(row=1, column=0, columnspan=2, sticky="ew")
 
 # Attach the function to the horizontal scrollbar
 status_table.configure(
@@ -2677,11 +2677,20 @@ status_table_frame.grid_rowconfigure(0, weight=1)
 main_tab.grid_columnconfigure(0, weight=0)
 main_tab.grid_rowconfigure(1, weight=1)
 
+
+
 # read_write_tab.grid_columnconfigure(0, weight=1)
 
+# # read_write_tab.grid_rowconfigure(0, weight=0)
+# read_write_tab.grid_rowconfigure(4, weight=1)
 
-# read_write_tab.grid_rowconfigure(0, weight=0)
+
+
+# Make the window layout expand properly
 read_write_tab.grid_rowconfigure(4, weight=1)
+read_write_tab.grid_columnconfigure(0, weight=1)
+read_write_tab.grid_columnconfigure(1, weight=1)
+
 
 
 # Function to check LGV column visibility
