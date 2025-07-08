@@ -28,7 +28,7 @@ if not pyads_available:
     # messagebox.showerror("Attention", "No pyads available")
     print("No pyads available")
 
-__version__ = '2.5.0.8'
+__version__ = '2.5.0.9'
 __icon__ = "./plc.ico"
 
 MAX_WORKERS = 5
@@ -488,7 +488,7 @@ def update_status_in_queue(status, color):
 
 connection_lock = threading.Lock()
 # Attempt to connect to the selected PLC (starts in a new thread)
-def connect_to_plc():
+def connect_to_plc(event=None):
     global connection_in_progress
 
     with connection_lock:
@@ -811,6 +811,7 @@ def on_dis_horn_button_click(button):
         dis_horn_state= False
         print(f"Disable Horn pressed unsuccessful, value: {dis_horn_state}")
 
+
 press_successful = False
 cooldown_active = False  # Variable to track cooldown state
 interaction_in_progress = False # Track pres-release cycle
@@ -890,6 +891,7 @@ def bind_button_actions(button, action, shortcuts=None, press_value=True, releas
             button.winfo_toplevel().bind(press_shortcut, on_button_press)
             button.winfo_toplevel().bind(release_shortcut, on_button_release)
 
+
 def bind_connect_button_action(button, connect_function, shortcuts=None):
     """Bind connect behavior to both button click and keyboard shortcuts."""
 
@@ -964,7 +966,12 @@ def on_button_release(action, release_value, button):
 def bind_treeview_focus_action(treeview, focus_shortcuts=None):
     """Bind focus behavior to Treeview for keyboard navigation."""
 
-    def focus_and_select_first(event=None):
+    # Bind keyboard shortcuts if provided
+    if focus_shortcuts:
+        for shortcut in focus_shortcuts:
+            treeview.winfo_toplevel().bind(shortcut, focus_and_select_first)
+
+def focus_and_select_first(event=None):
         """Set focus on the Treeview and select the first item."""
         treeview.focus_set()  # Set focus to the Treeview
 
@@ -985,11 +992,6 @@ def bind_treeview_focus_action(treeview, focus_shortcuts=None):
             print("Treeview focused, first visible item selected")
         else:
             print("Treeview is empty, nothing to select")
-
-    # Bind keyboard shortcuts if provided
-    if focus_shortcuts:
-        for shortcut in focus_shortcuts:
-            treeview.winfo_toplevel().bind(shortcut, focus_and_select_first)
 
 ####################################################################################################################################################################
 ##################################################################### Read variables ###############################################################################
@@ -1792,7 +1794,7 @@ def convert_to_number(user_input):
             return None  # Not a number, possibly a string
 
 
-def rw_write_variable():
+def rw_write_variable(event=None):
     """Start the write operation for all selected LGVs."""
     global read_write_in_progress
 
@@ -1953,7 +1955,7 @@ def read_all_variables_for_lgv(lgv, ams_net_id, tc_type, processed_variables, re
         for display_name in processed_variables.values():
             result_queue.put((lgv, display_name, e))
 
-def rw_read_variable():
+def rw_read_variable(event=None):
     """Start the read operation for all selected LGVs."""
     global read_write_in_progress
 
@@ -2237,6 +2239,95 @@ def is_host_reachable(host, timeout=0.7):
         # print(f"Ping to {host} failed.")
         return False
     
+############################################################## Shortcut management #######################################################
+current_tab_shortcuts = []
+
+def create_tab_shortcut_actions():
+    return {
+        "Control": {
+            "press_release": {
+                'r': {
+                    'action': 'reset',
+                    'button': reset_button,
+                    'press_value': True,
+                    'release_value': False
+                },
+                'g': {
+                    'action': 'run',
+                    'button': run_button,
+                    'press_value': True,
+                    'release_value': False
+                },
+                's': {
+                    'action': 'stop',
+                    'button': stop_button,
+                    'press_value': False,
+                    'release_value': True
+                },
+                'm': {
+                    'action': 'man_auto',
+                    'button': man_auto_button,
+                    'press_value': True,
+                    'release_value': False
+                }
+            },
+            "single_action": {
+                'h': lambda e: print("Disable horn"),
+                'c': connect_to_plc,
+                't': focus_and_select_first
+            }
+        },
+
+        "RW Panel": {
+            "press_release": {},
+            "single_action": {
+                't': select_true,
+                'f': select_false,
+                'e': focus_other_entry,
+                'l': focus_lgv_entry,
+                'r': rw_read_variable,
+                'w': rw_write_variable
+            }
+        }
+    }
+
+
+
+def bind_tab_shortcuts(tab_text):
+    global current_tab_shortcuts
+    for shortcut in current_tab_shortcuts:
+        root.unbind(shortcut)
+    current_tab_shortcuts.clear()
+
+    if tab_text not in tab_shortcut_actions:
+        return
+
+    tab_actions = tab_shortcut_actions[tab_text]
+
+    # --- Press + Release shortcuts ---
+    for key, config in tab_actions.get("press_release", {}).items():
+        for case in (key.lower(), key.upper()):
+            press_shortcut = f"<Control-{case}>"
+            release_shortcut = f"<KeyRelease-{case}>"
+
+            def make_press_handler(c=config):
+                return lambda e: on_button_action(c['action'], c['press_value'], c['button'])
+
+            def make_release_handler(c=config):
+                return lambda e: on_button_action(c['action'], c['release_value'], c['button'], is_release=True)
+
+            root.bind(press_shortcut, make_press_handler())
+            root.bind(release_shortcut, make_release_handler())
+
+            current_tab_shortcuts.extend([press_shortcut, release_shortcut])
+
+    # --- Single-action shortcuts (press only) ---
+    for key, func in tab_actions.get("single_action", {}).items():
+        for case in (key.lower(), key.upper()):
+            shortcut = f"<Control-{case}>"
+            root.bind(shortcut, func)
+            current_tab_shortcuts.append(shortcut)
+
 
 ####################################################################  UI methods ###############################################################
 
@@ -2251,6 +2342,9 @@ def select_false(event=None):
 
 def focus_other_entry(event=None):
     value_entry.focus_set()
+
+def focus_lgv_entry(event=None):
+    lgv_range_entry.focus_set()
 
 # Function to check LGV column visibility
 def toggle_lgv_overlay(*args):
@@ -2285,6 +2379,9 @@ def update_lgv_overlay(*args):
 def on_tab_changed(event):
     selected_tab = event.widget.select()
     tab_text = event.widget.tab(selected_tab, "text")
+
+    bind_tab_shortcuts(tab_text)
+
     if tab_text == "RW Panel":
         root.after(10, lambda: variable_menu.focus_set())
         print("variable combobox is focused")
@@ -2439,8 +2536,10 @@ core_status_label.grid(row=0, column=0, padx=20, pady=0, sticky='e')
 # Add a button to connect to the PLC
 connect_button = ttk.Button(frame_connect, text="Connect", style='Connect.TButton')
 connect_button.grid(row=0, column=1, padx=10, ipady=4, sticky='w')
-bind_connect_button_action(connect_button, connect_function=connect_to_plc,
-                            shortcuts=['<Control-c>', '<Control-C>'])
+connect_button.bind("<ButtonPress>", connect_to_plc)
+
+# bind_connect_button_action(connect_button, connect_function=connect_to_plc,
+#                             shortcuts=['<Control-c>', '<Control-C>'])
 
 
 
@@ -2480,7 +2579,7 @@ treeview.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 treeview.bind("<<TreeviewSelect>>", on_treeview_select)
 treeview.bind('<Delete>', delete_selected_record)
 
-bind_treeview_focus_action(treeview, focus_shortcuts=['<Control-t>', '<Control-T>'])
+# bind_treeview_focus_action(treeview, focus_shortcuts=['<Control-t>', '<Control-T>'])
 
 # Create a vertical scrollbar for the table
 scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=treeview.yview)
@@ -2615,16 +2714,6 @@ value_entry = ttk.Entry(entry_value_frame)
 value_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
 
 
-# Bind shortcuts to root window
-root.bind('<Control-t>', select_true)
-root.bind('<Control-T>', select_true)
-
-root.bind('<Control-f>', select_false)
-root.bind('<Control-F>', select_false)
-
-root.bind('<Control-e>', focus_other_entry)
-root.bind('<Control-E>', focus_other_entry)
-
 # LGV Range Frame
 lgv_frame = ttk.Frame(read_write_tab)
 lgv_frame.grid(row=2, column=0, padx=10, pady=5, sticky="ew")
@@ -2644,11 +2733,6 @@ read_button.grid(row=0, column=0, padx=10, ipadx=2, ipady=2)
 write_button = ttk.Button(button_frame, text="Write", command=rw_write_variable)
 write_button.grid(row=0, column=1, padx=10, ipadx=2, ipady=2)
 
-# Bind keyboard shortcuts to the toplevel window
-read_write_tab.bind("<Control-r>", lambda event: rw_read_variable())
-read_write_tab.bind("<Control-R>", lambda event: rw_read_variable())
-read_write_tab.bind("<Control-w>", lambda event: rw_write_variable())
-read_write_tab.bind("<Control-W>", lambda event: rw_write_variable())
 
 # Status table frame
 status_table_frame = ttk.Frame(read_write_tab)
@@ -2727,6 +2811,8 @@ update_lgv_overlay()
 
 notebook.bind("<<NotebookTabChanged>>", on_tab_changed)
 
+
+tab_shortcut_actions = create_tab_shortcut_actions()
 
 def on_closing():
     close_current_connection()  # Close connection before exiting
