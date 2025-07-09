@@ -2368,11 +2368,12 @@ def update_lgv_overlay(*args):
     first_visible_row = int(visible_fraction[0] * total_rows)
     last_visible_row = min(int(visible_fraction[1] * total_rows)-1, total_rows-1)
 
-    # print("Overlay visible items:", lgv_overlay.get_children())
+    all_items = treeview.get_children()
+    visible_items = all_items[first_visible_row:last_visible_row + 1]
 
     # Populate overlay with visible rows only
-    for i in range(first_visible_row, last_visible_row + 1):
-        lgv_name = f"LGV{(i+1):02d}"  # Example LGV name (adjust to your data)
+    for item in visible_items:
+        lgv_name = treeview.item(item, "values")[0]
         lgv_overlay.insert("", "end", values=(lgv_name,))
         # print(f" First elem: {first_visible_row}, Last elem: {last_visible_row}, {len(status_table.get_children())}")
 
