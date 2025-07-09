@@ -1942,6 +1942,8 @@ def read_all_variables_for_lgv(lgv, ams_net_id, tc_type, processed_variables, re
         with pyads.Connection(ams_net_id, port) as ads_connection:
             print(f"Connected to LGV {lgv} ({ams_net_id})")
 
+            ads_connection.set_timeout(1000)
+            
             for variable_name, display_name in processed_variables.items():
                 try:
                     symbol_info = ads_connection.get_symbol(variable_name)
