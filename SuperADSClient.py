@@ -28,8 +28,10 @@ if not pyads_available:
     # messagebox.showerror("Attention", "No pyads available")
     print("No pyads available")
 
-__version__ = '2.5.1.0'
+__version__ = '2.5.1.1'
 __icon__ = "./plc.ico"
+
+TAB_NAME = ['Control', 'RW Panel']
 
 MAX_WORKERS = 5
 LGV_DATA = "lgv_data.xml"
@@ -2249,7 +2251,7 @@ current_tab_shortcuts = []
 
 def create_tab_shortcut_actions():
     return {
-        "Control": {
+        TAB_NAME[0]: {
             "press_release": {
                 'r': {
                     'action': 'reset',
@@ -2283,7 +2285,7 @@ def create_tab_shortcut_actions():
             }
         },
 
-        "RW Panel": {
+        TAB_NAME[1]: {
             "press_release": {},
             "single_action": {
                 't': select_true,
@@ -2411,11 +2413,11 @@ def on_tab_changed(event):
 
     bind_tab_shortcuts(tab_text)
 
-    if tab_text == "RW Panel":
-        root.after(10, lambda: variable_menu.focus_set())
-        print("variable combobox is focused")
-    else:
-        root.focus_set()
+    # if tab_text == TAB_NAME[1]:
+    #     root.after(10, lambda: variable_menu.focus_set())
+    #     print(f"Widget in {TAB_NAME[1]} is focused")
+    # else:
+    #     root.focus_set()
 
 def select_next_tab(event=None):
     current = notebook.index(notebook.select())
@@ -2512,8 +2514,8 @@ notebook.grid(row=1, column=0, columnspan=2, sticky="nsew")
 main_tab = ttk.Frame(notebook, style="TNotebook.Tab")
 read_write_tab = ttk.Frame(notebook, style="TNotebook.Tab")
 
-notebook.add(main_tab, text="Control")
-notebook.add(read_write_tab, text="RW Panel")
+notebook.add(main_tab, text=TAB_NAME[0])
+notebook.add(read_write_tab, text=TAB_NAME[1])
 
 
 # Bind Ctrl+Tab and Ctrl+Shift+Tab
