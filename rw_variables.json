@@ -42,5 +42,6 @@
     "LiftMov.level_LookUp_Table[4,1]; LiftMov.H_Infork_Pallet_by_Host",
     "GuidanceCalibration.SensorOffset[4].x",
     "CoreGVL.FlexSeg.Dist_to_PreOp_Point; CoreGVL.FlexSeg.Dist_to_Op_Point",
-    "CoreGVL.ADS_Stop; CoreGVL.ADS_Reset"
+    "CoreGVL.ADS_Stop; CoreGVL.ADS_Reset",
+    "InfoMovements.Mov.shift.curPosition;InfoMovements.Mov.tilt.curPosition;InfoMovements.Mov.lift.curPosition; LibraryInterfaces.LGV.Guid.Rout.remDistToPreOP; LibraryInterfaces.LGV.Guid.Rout.remDistToOP; Devices.Pressure.tilt.weight; Devices.Pressure.lift.weight; FlexSegPhaseHandler.preOpDistFromTheEnd; FlexSegPhaseHandler.segDistAvailable"
 ]

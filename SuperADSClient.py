@@ -28,7 +28,7 @@ if not pyads_available:
     # messagebox.showerror("Attention", "No pyads available")
     print("No pyads available")
 
-__version__ = '2.5.0.9'
+__version__ = '2.5.1.0'
 __icon__ = "./plc.ico"
 
 MAX_WORKERS = 5
@@ -1203,6 +1203,8 @@ def setup_sortable_treeview(treeview, headings, anchor='w', on_sorted=None):
         for index, (_, k) in enumerate(rows):
             treeview.move(k, '', index)
 
+        treeview.yview_moveto(0)
+
         if on_sorted:
             on_sorted(treeview)
 
@@ -1942,8 +1944,8 @@ def read_all_variables_for_lgv(lgv, ams_net_id, tc_type, processed_variables, re
         with pyads.Connection(ams_net_id, port) as ads_connection:
             print(f"Connected to LGV {lgv} ({ams_net_id})")
 
-            ads_connection.set_timeout(1000)
-            
+            ads_connection.set_timeout(700)
+
             for variable_name, display_name in processed_variables.items():
                 try:
                     symbol_info = ads_connection.get_symbol(variable_name)
@@ -2099,7 +2101,7 @@ def prepare_status_table(lgv_data, variables):
 
     status_headings = {col: col for col in status_table["columns"]}
 
-    setup_sortable_treeview(status_table, status_headings, 'center', on_sorted=update_lgv_overlay_order)
+    setup_sortable_treeview(status_table, status_headings, 'center', on_sorted=update_lgv_overlay)
 
 
 def update_status_table(lgv, variable, value):
@@ -2158,16 +2160,17 @@ def adjust_column_width():
 #             anchor="center"
 #         )
 
-def update_lgv_overlay_order(treeview):
-    """
-    Updates the LGV overlay to match the sorted order of the status_table.
-    """
-    lgv_overlay.delete(*lgv_overlay.get_children())  # Clear current overlay
 
-    # Insert LGV numbers in the sorted order
-    for item in treeview.get_children(''):
-        lgv_number = treeview.item(item, "values")[0]  # Extract LGV number from sorted table
-        lgv_overlay.insert("", "end", values=(lgv_number,))
+# def update_lgv_overlay_order(treeview):
+#     """
+#     Updates the LGV overlay to match the sorted order of the status_table.
+#     """
+#     lgv_overlay.delete(*lgv_overlay.get_children())  # Clear current overlay
+
+#     # Insert LGV numbers in the sorted order
+#     for item in treeview.get_children(''):
+#         lgv_number = treeview.item(item, "values")[0]  # Extract LGV number from sorted table
+#         lgv_overlay.insert("", "end", values=(lgv_number,))
 
 
 def clear_entry_field():
@@ -2358,7 +2361,7 @@ def toggle_lgv_overlay(*args):
     else:
         lgv_overlay.grid_remove()  # Hide overlay
 
-def update_lgv_overlay(*args):
+def update_lgv_overlay_deprecated(*args):
     # Handle vertical scrolling for visible rows (yscroll)
     lgv_overlay.delete(*lgv_overlay.get_children())  # Clear current rows in overlay
 
@@ -2378,6 +2381,29 @@ def update_lgv_overlay(*args):
         lgv_name = treeview.item(item, "values")[0]
         lgv_overlay.insert("", "end", values=(lgv_name,))
         # print(f" First elem: {first_visible_row}, Last elem: {last_visible_row}, {len(status_table.get_children())}")
+
+
+def update_lgv_overlay(*args):
+    """
+    Updates the LGV overlay to show only visible rows, in the current sorted order.
+    """
+    lgv_overlay.delete(*lgv_overlay.get_children())  # Clear overlay
+
+    # Get current sorted and filtered items
+    all_items = status_table.get_children()
+
+    # Determine visible range
+    visible_fraction = status_table.yview()
+    total_items = len(all_items)
+    first_visible_index = int(visible_fraction[0] * total_items)
+    last_visible_index = min(int(visible_fraction[1] * total_items), total_items)  # no -1 here
+
+    visible_items = all_items[first_visible_index:last_visible_index]
+
+    # Add only visible sorted items
+    for item_id in visible_items:
+        lgv_name = status_table.item(item_id, "values")[0]
+        lgv_overlay.insert("", "end", values=(lgv_name,))
 
 def on_tab_changed(event):
     selected_tab = event.widget.select()
