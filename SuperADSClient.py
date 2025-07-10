@@ -2220,7 +2220,7 @@ def clear_status():
 
 ###################################################################### Helper methods #########################################################################
 
-def is_host_reachable(host, timeout=0.7):
+def is_host_reachable(host, timeout=1):
     """Ping the host to check if it is reachable."""
     # Define the ping command based on the OS
     if platform.system().lower() == "windows":
@@ -2235,7 +2235,8 @@ def is_host_reachable(host, timeout=0.7):
             ping_cmd, 
             stdout=subprocess.DEVNULL, 
             stderr=subprocess.DEVNULL, 
-            check=True, timeout=timeout + 1,
+            check=True, 
+            timeout=timeout + 1,
             creationflags=creation_flags
         )
         return True
