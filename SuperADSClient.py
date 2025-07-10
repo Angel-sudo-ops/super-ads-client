@@ -2280,7 +2280,7 @@ def create_tab_shortcut_actions():
                 }
             },
             "single_action": {
-                'h': lambda e: print("Disable horn"),
+                'h': lambda e: on_dis_horn_button_click(dis_horn_button),
                 'c': connect_to_plc,
                 't': focus_and_select_first
             }
@@ -2678,8 +2678,8 @@ dis_horn_button.pack(pady=5, fill='x', expand=True, ipady=6)
 #                           function=on_dis_horn_button_click(dis_horn_button),
 #                           shortcuts=[('<Control-h>', '<Control-H>')])
 
-main_tab.bind_all('<Control-h>', lambda event: on_dis_horn_button_click(dis_horn_button))
-main_tab.bind_all('<Control-H>', lambda event: on_dis_horn_button_click(dis_horn_button))
+# main_tab.bind_all('<Control-h>', lambda event: on_dis_horn_button_click(dis_horn_button))
+# main_tab.bind_all('<Control-H>', lambda event: on_dis_horn_button_click(dis_horn_button))
 
 # Test to ensure that <Control-h> triggers
 # root.bind('<Control-h>', lambda event: print("Ctrl+H shortcut detected in root"))  # Test at the root level
