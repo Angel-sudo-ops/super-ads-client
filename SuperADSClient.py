@@ -28,7 +28,7 @@ if not pyads_available:
     # messagebox.showerror("Attention", "No pyads available")
     print("No pyads available")
 
-__version__ = '2.5.1.2'
+__version__ = '2.5.1.4'
 __icon__ = "./plc.ico"
 
 TAB_NAME = ['Control', 'RW Panel']
@@ -2218,14 +2218,25 @@ shortcuts_window = None
 shortcuts_frame = None
 shortcuts_title_label = None
 
-# def open_shortcuts_window_cond():
-#     global shortcuts_window
+shortcuts_window_position = None
 
-#     if shortcuts_window is not None and shortcuts_window.winfo_exists():
-#         shortcuts_window.lift()
-#         shortcuts_window.focus_force()
-#     else:
-#         open_shortcuts_window()
+def toggle_shortcuts_window(event=None):
+    global shortcuts_window, shortcuts_window_position
+
+    if shortcuts_window is not None and shortcuts_window.winfo_exists():
+        geometry = shortcuts_window.geometry()  # e.g. "420x400+123+456"
+        # Extract just the +x+y part
+        pos = geometry.split('+')
+        if len(pos) >= 3:
+            shortcuts_window_position = f"+{pos[1]}+{pos[2]}"
+
+        shortcuts_window.destroy()
+        shortcuts_window = None
+    else:
+        tab_text = notebook.tab(notebook.select(), "text")
+        open_shortcuts_window(tab_text=tab_text)
+
+
 
 def open_shortcuts_window(event=None, tab_text=None):
     global shortcuts_window, shortcuts_frame, shortcuts_title_label
@@ -2244,7 +2255,10 @@ def open_shortcuts_window(event=None, tab_text=None):
 
     window_width = 420
     window_lenght = 400
-    shortcuts_window.geometry(f"{window_width}x{window_lenght}")
+    if shortcuts_window_position:
+        shortcuts_window.geometry(f"{window_width}x{window_lenght}{shortcuts_window_position}")
+    else:
+        shortcuts_window.geometry(f"{window_width}x{window_lenght}")
     shortcuts_window.minsize(window_width, window_lenght)
 
     # Add a label for the title
@@ -2610,7 +2624,7 @@ about_menu = tk.Menu(menu_bar, tearoff=0)
 about_menu.add_command(label="Shortcuts    ", command=open_shortcuts_window)
 menu_bar.add_cascade(label=" About", menu=about_menu)
 
-root.bind("<F1>", open_shortcuts_window)
+root.bind_all("<F1>", toggle_shortcuts_window)
 
 root.config(menu=menu_bar)
 
