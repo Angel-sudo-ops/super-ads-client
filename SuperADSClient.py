@@ -28,7 +28,7 @@ if not pyads_available:
     # messagebox.showerror("Attention", "No pyads available")
     print("No pyads available")
 
-__version__ = '2.5.1.1'
+__version__ = '2.5.1.2'
 __icon__ = "./plc.ico"
 
 TAB_NAME = ['Control', 'RW Panel']
@@ -887,11 +887,11 @@ def bind_button_actions(button, action, shortcuts=None, press_value=True, releas
     button.bind("<ButtonRelease>", lambda event: on_button_release(event))
 
 
-    # Bind keyboard shortcuts (Control + Key press and release)
-    if shortcuts:
-        for press_shortcut, release_shortcut in shortcuts:
-            button.winfo_toplevel().bind(press_shortcut, on_button_press)
-            button.winfo_toplevel().bind(release_shortcut, on_button_release)
+    # # Bind keyboard shortcuts (Control + Key press and release)
+    # if shortcuts:
+    #     for press_shortcut, release_shortcut in shortcuts:
+    #         button.winfo_toplevel().bind(press_shortcut, on_button_press)
+    #         button.winfo_toplevel().bind(release_shortcut, on_button_release)
 
 
 def bind_connect_button_action(button, connect_function, shortcuts=None):
@@ -2634,60 +2634,34 @@ reset_button = ttk.Button(button_frame,
                         #   command=lambda: bind_button_actions(reset_button, 'reset'))
                         #   command=lambda: on_button_action_wrapper('reset', True, False, reset_button))
 reset_button.pack(pady=5, fill='x', expand=True, ipady=6)
-bind_button_actions(reset_button, 'reset',
-                    shortcuts=[('<Control-r>', '<KeyRelease-r>'),
-                               ('<Control-R>', '<KeyRelease-R>')])
+bind_button_actions(reset_button, 'reset')
 
 run_button = ttk.Button(button_frame,
                         text="Run",
                         style='LGV.TButton')
                         # command=lambda: on_button_action_wrapper('run', True, False, run_button))
 run_button.pack(pady=5, fill='x', expand=True, ipady=6)
-bind_button_actions(run_button, 'run',
-                    shortcuts=[('<Control-g>', '<KeyRelease-g>'),
-                               ('<Control-G>', '<KeyRelease-G>')])
+bind_button_actions(run_button, 'run')
 
 stop_button = ttk.Button(button_frame,
                          text="Stop",
                          style='LGV.Pressed.TButton')
                         #  command=lambda: on_button_action_wrapper('stop', False, True, stop_button))
 stop_button.pack(pady=5, fill='x', expand=True, ipady=6)
-bind_button_actions(stop_button, 'stop',
-                    shortcuts=[('<Control-s>', '<KeyRelease-s>'),
-                               ('<Control-S>', '<KeyRelease-S>')],
-                    press_value=False, release_value=True)
+bind_button_actions(stop_button, 'stop', press_value=False, release_value=True)
 
 man_auto_button = ttk.Button(button_frame,
                              text="Man/Auto",
                              style='LGV.TButton')
                             #  command=lambda: on_button_action_wrapper('man_auto', True, False, man_auto_button))
 man_auto_button.pack(pady=5, fill='x', expand=True, ipady=6)
-bind_button_actions(man_auto_button, 'man_auto',
-                    shortcuts=[('<Control-m>', '<KeyRelease-m>'),
-                               ('<Control-M>', '<KeyRelease-M>')])
+bind_button_actions(man_auto_button, 'man_auto')
 
 dis_horn_button = ttk.Button(button_frame,
                              text="Disable Horn",
                              style='LGV.TButton',
                              command=lambda: on_dis_horn_button_click(dis_horn_button))
 dis_horn_button.pack(pady=5, fill='x', expand=True, ipady=6)
-
-
-# bind_toggle_button_action(dis_horn_button,
-#                         #   function=on_test_button_click,
-#                           function=on_dis_horn_button_click(dis_horn_button),
-#                           shortcuts=[('<Control-h>', '<Control-H>')])
-
-# main_tab.bind_all('<Control-h>', lambda event: on_dis_horn_button_click(dis_horn_button))
-# main_tab.bind_all('<Control-H>', lambda event: on_dis_horn_button_click(dis_horn_button))
-
-# Test to ensure that <Control-h> triggers
-# root.bind('<Control-h>', lambda event: print("Ctrl+H shortcut detected in root"))  # Test at the root level
-
-# # Test to ensure that <Control-h> triggers
-# root.bind('<Control-d>', lambda event: print("Ctrl+D shortcut detected in root"))  # Test at the root level
-
-# root.bind('<Control-r>', lambda event: print("Ctrl+R shortcut detected in root"))  # Test at the root level
 
 
 disable_control_buttons()
