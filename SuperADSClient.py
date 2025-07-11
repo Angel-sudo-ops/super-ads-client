@@ -491,6 +491,7 @@ def update_status_in_queue(status, color):
 connection_lock = threading.Lock()
 # Attempt to connect to the selected PLC (starts in a new thread)
 def connect_to_plc(event=None):
+    """Connect to selected LGV"""
     global connection_in_progress
 
     with connection_lock:
@@ -793,6 +794,7 @@ def on_test_button_click(button):
     print(f"Test {button} shortcut triggered")
 
 def on_dis_horn_button_click(button):
+    """Enable/Disable horn"""
     global dis_horn_state
 
     # Get initial state of disable_horn variable to toggle it
@@ -812,6 +814,10 @@ def on_dis_horn_button_click(button):
     else:
         dis_horn_state= False
         print(f"Disable Horn pressed unsuccessful, value: {dis_horn_state}")
+
+def trigger_dis_horn(event=None):
+    """Enable/Disable horn"""
+    on_dis_horn_button_click(dis_horn_button)
 
 
 press_successful = False
@@ -974,26 +980,26 @@ def bind_treeview_focus_action(treeview, focus_shortcuts=None):
             treeview.winfo_toplevel().bind(shortcut, focus_and_select_first)
 
 def focus_and_select_first(event=None):
-        """Set focus on the Treeview and select the first item."""
-        treeview.focus_set()  # Set focus to the Treeview
+    """Select the first item from table"""
+    treeview.focus_set()  # Set focus to the Treeview
 
-        # Get the Treeview's scroll position
-        yview = treeview.yview()
-        if not yview:
-            print("Treeview is empty or has no scroll position")
-            return
+    # Get the Treeview's scroll position
+    yview = treeview.yview()
+    if not yview:
+        print("Treeview is empty or has no scroll position")
+        return
 
-        # Calculate the first visible item based on yview
-        all_items = treeview.get_children()
-        visible_item_index = int(yview[0] * len(all_items))  # Calculate the starting index
+    # Calculate the first visible item based on yview
+    all_items = treeview.get_children()
+    visible_item_index = int(yview[0] * len(all_items))  # Calculate the starting index
 
-        if all_items:
-            first_visible_item = all_items[visible_item_index]
-            treeview.selection_set(first_visible_item)  # Select the first item
-            treeview.focus(first_visible_item)  # Set the focus on the first item
-            print("Treeview focused, first visible item selected")
-        else:
-            print("Treeview is empty, nothing to select")
+    if all_items:
+        first_visible_item = all_items[visible_item_index]
+        treeview.selection_set(first_visible_item)  # Select the first item
+        treeview.focus(first_visible_item)  # Set the focus on the first item
+        print("Treeview focused, first visible item selected")
+    else:
+        print("Treeview is empty, nothing to select")
 
 ####################################################################################################################################################################
 ##################################################################### Read variables ###############################################################################
@@ -1326,64 +1332,6 @@ def on_variable_window_close():
     variable_window.destroy()  # Destroy the window
     variable_window = None  # Reset the reference so it can be reopened
 
-
-####################################################################################################################################################################
-################################################################### Shortcuts Window ###############################################################################
-####################################################################################################################################################################
-shortcuts_window = None
-
-def open_shortcuts_window_cond():
-    global shortcuts_window
-
-    if shortcuts_window is not None and shortcuts_window.winfo_exists():
-        shortcuts_window.lift()
-        shortcuts_window.focus_force()
-    else:
-        open_shortcuts_window()
-
-def open_shortcuts_window():
-    global shortcuts_window
-
-    shortcuts_window = tk.Toplevel(root)
-    shortcuts_window.title("Shortcuts")
-
-    window_width = 420
-    window_lenght = 400
-    shortcuts_window.geometry(f"{window_width}x{window_lenght}")
-    shortcuts_window.minsize(window_width, window_lenght)
-
-    # Add a label for the title
-    tk.Label(shortcuts_window, text="Available Shortcuts", font=("Segoe UI", 14)).pack(pady=10)
-
-    # Add a frame to contain the shortcuts in a neat layout
-    shortcuts_frame = tk.Frame(shortcuts_window)
-    shortcuts_frame.pack(fill="both", expand=True, padx=10, pady=5)
-
-    # Define the shortcuts and descriptions
-    shortcuts = [
-        ("Ctrl+R", "Reset"),
-        ("Ctrl+G", "Run"),
-        ("Ctrl+S", "Stop"),
-        ("Ctrl+M", "Man/Auto"),
-        ("Ctrl+H", "Disable Horn"),
-        ("Ctrl+C", "Connect to selected LGV"),
-        ("Ctrl+T", "Select first element from the table"),
-        ("Ctrl+Shift+Tab", "Change between tabs")
-    ]
-
-    # Display each shortcut in the frame
-    for shortcut, description in shortcuts:
-        tk.Label(shortcuts_frame, text=shortcut, font=("Segoe UI", 12, "bold")).grid(row=shortcuts.index((shortcut, description)), column=0, sticky="w", padx=10, pady=2)
-        tk.Label(shortcuts_frame, text=description, font=("Segoe UI", 12)).grid(row=shortcuts.index((shortcut, description)), column=1, sticky="w", padx=10, pady=2)
-
-    # Handle window close event to reset the reference
-    shortcuts_window.protocol("WM_DELETE_WINDOW", on_shortcuts_window_close)
-
-
-def on_shortcuts_window_close():
-    global shortcuts_window
-    shortcuts_window.destroy()  # Destroy the window
-    shortcuts_window = None  # Reset the reference so it can be reopened
 
 ####################################################################################################################################################################
 ################################################################ Read/Write Management ###########################################################################
@@ -1799,7 +1747,7 @@ def convert_to_number(user_input):
 
 
 def rw_write_variable(event=None):
-    """Start the write operation for all selected LGVs."""
+    """Write variable"""
     global read_write_in_progress
 
     variable_names = variable_menu.get().strip()  # Directly get the variable name
@@ -1962,7 +1910,7 @@ def read_all_variables_for_lgv(lgv, ams_net_id, tc_type, processed_variables, re
             result_queue.put((lgv, display_name, e))
 
 def rw_read_variable(event=None):
-    """Start the read operation for all selected LGVs."""
+    """Read variable(s)"""
     global read_write_in_progress
 
     variable_names = variable_menu.get().strip()  # Get the variable name directly
@@ -2247,6 +2195,113 @@ def is_host_reachable(host, timeout=1):
         # print(f"Ping to {host} failed.")
         return False
     
+
+####################################################################################################################################################################
+################################################################### Shortcuts Window ###############################################################################
+####################################################################################################################################################################
+
+global_shortcuts = [
+    ("Ctrl+Shift+Tab", "Change between tabs"),
+    ("F1", "Show shortcuts help")
+]
+
+
+def get_action_name(func):
+    if hasattr(func, "__doc__") and func.__doc__:
+        return func.__doc__.strip()
+    elif hasattr(func, "__name__"):
+        return func.__name__.replace('_', ' ').capitalize()
+    return "Action"
+
+
+shortcuts_window = None
+shortcuts_frame = None
+shortcuts_title_label = None
+
+# def open_shortcuts_window_cond():
+#     global shortcuts_window
+
+#     if shortcuts_window is not None and shortcuts_window.winfo_exists():
+#         shortcuts_window.lift()
+#         shortcuts_window.focus_force()
+#     else:
+#         open_shortcuts_window()
+
+def open_shortcuts_window(event=None, tab_text=None):
+    global shortcuts_window, shortcuts_frame, shortcuts_title_label
+
+    if tab_text is None:
+        tab_text = notebook.tab(notebook.select(), "text")
+
+    if shortcuts_window is not None and shortcuts_window.winfo_exists():
+        refresh_shortcuts_window(tab_text)
+        shortcuts_window.lift()
+        shortcuts_window.focus_force()
+        return
+
+    shortcuts_window = tk.Toplevel(root)
+    shortcuts_window.title(f"Shortcuts — {tab_text}")
+
+    window_width = 420
+    window_lenght = 400
+    shortcuts_window.geometry(f"{window_width}x{window_lenght}")
+    shortcuts_window.minsize(window_width, window_lenght)
+
+    # Add a label for the title
+    shortcuts_title_label = ttk.Label(shortcuts_window, text=f"Available Shortcuts — {tab_text}", font=("Segoe UI", 14))
+    shortcuts_title_label.pack(pady=10)
+
+    # Add a frame to contain the shortcuts in a neat layout
+    shortcuts_frame = tk.Frame(shortcuts_window)
+    shortcuts_frame.pack(fill="both", expand=True, padx=10, pady=5)
+
+    refresh_shortcuts_window(tab_text)
+
+    # Handle window close event to reset the reference
+    shortcuts_window.protocol("WM_DELETE_WINDOW", on_shortcuts_window_close)
+
+
+def refresh_shortcuts_window(tab_text):
+    global shortcuts_frame, shortcuts_window, shortcuts_title_label
+
+    shortcuts_window.title(f"Shortcuts — {tab_text}")
+    shortcuts_title_label.config(text=f"Available Shortcuts — {tab_text}")
+
+    actions = tab_shortcut_actions.get(tab_text, {})
+
+    for widget in shortcuts_frame.winfo_children():
+        widget.destroy()
+
+    combined_shortcuts = []
+
+    for key, config in actions.get("press_release", {}).items():
+        combined_shortcuts.append((f"Ctrl+{key.upper()}", f"{config['action'].capitalize()} (hold)"))
+
+    for key, func in actions.get("single_action", {}).items():
+        combined_shortcuts.append((f"Ctrl+{key.upper()}", get_action_name(func)))
+
+    if not combined_shortcuts:
+        combined_shortcuts.append(("—", "No shortcuts available for this tab"))
+
+    # Add global shortcuts
+    if global_shortcuts:
+        combined_shortcuts.append(("", ""))
+        combined_shortcuts.append(("— Global Shortcuts —", ""))
+        combined_shortcuts += global_shortcuts
+
+    # Display in grid
+    for i, (shortcut, description) in enumerate(combined_shortcuts):
+        font_style = ("Segoe UI", 12, "bold") if shortcut.startswith("Ctrl") or shortcut.startswith("F") else ("Segoe UI", 11, "italic")
+        tk.Label(shortcuts_frame, text=shortcut, font=font_style).grid(row=i, column=0, sticky="w", padx=10, pady=2)
+        tk.Label(shortcuts_frame, text=description, font=("Segoe UI", 12)).grid(row=i, column=1, sticky="w", padx=10, pady=2)
+
+
+def on_shortcuts_window_close():
+    global shortcuts_window
+    shortcuts_window.destroy()
+    shortcuts_window = None
+
+    
 ############################################################## Shortcut management #######################################################
 current_tab_shortcuts = []
 
@@ -2280,7 +2335,7 @@ def create_tab_shortcut_actions():
                 }
             },
             "single_action": {
-                'h': lambda e: on_dis_horn_button_click(dis_horn_button),
+                'h': trigger_dis_horn,
                 'c': connect_to_plc,
                 't': focus_and_select_first
             }
@@ -2291,6 +2346,7 @@ def create_tab_shortcut_actions():
             "single_action": {
                 't': select_true,
                 'f': select_false,
+                'x': focus_var_entry,
                 'e': focus_other_entry,
                 'l': focus_lgv_entry,
                 'r': rw_read_variable,
@@ -2298,7 +2354,6 @@ def create_tab_shortcut_actions():
             }
         }
     }
-
 
 
 def bind_tab_shortcuts(tab_text):
@@ -2354,6 +2409,9 @@ def focus_other_entry(event=None):
 def focus_lgv_entry(event=None):
     lgv_range_entry.focus_set()
 
+def focus_var_entry(event=None):
+    variable_menu.focus_set()
+
 # Function to check LGV column visibility
 def toggle_lgv_overlay(*args):
     """Show or hide the LGV overlay depending on the visibility of the LGV column."""
@@ -2408,17 +2466,22 @@ def update_lgv_overlay(*args):
         lgv_name = status_table.item(item_id, "values")[0]
         lgv_overlay.insert("", "end", values=(lgv_name,))
 
+
 def on_tab_changed(event):
     selected_tab = event.widget.select()
     tab_text = event.widget.tab(selected_tab, "text")
 
     bind_tab_shortcuts(tab_text)
 
+    if shortcuts_window is not None and shortcuts_window.winfo_exists():
+        refresh_shortcuts_window(tab_text)
+
     # if tab_text == TAB_NAME[1]:
     #     root.after(10, lambda: variable_menu.focus_set())
     #     print(f"Widget in {TAB_NAME[1]} is focused")
     # else:
     #     root.focus_set()
+
 
 def select_next_tab(event=None):
     current = notebook.index(notebook.select())
@@ -2544,9 +2607,10 @@ menu_bar.add_cascade(label=" Options ", menu=options_menu)
 # menu_bar.add_cascade(label=" More ", menu=more_menu)
 
 about_menu = tk.Menu(menu_bar, tearoff=0)
-about_menu.add_command(label="Shortcuts    ", command=open_shortcuts_window_cond)
+about_menu.add_command(label="Shortcuts    ", command=open_shortcuts_window)
 menu_bar.add_cascade(label=" About", menu=about_menu)
 
+root.bind("<F1>", open_shortcuts_window)
 
 root.config(menu=menu_bar)
 
@@ -2660,7 +2724,7 @@ bind_button_actions(man_auto_button, 'man_auto')
 dis_horn_button = ttk.Button(button_frame,
                              text="Disable Horn",
                              style='LGV.TButton',
-                             command=lambda: on_dis_horn_button_click(dis_horn_button))
+                             command=trigger_dis_horn)
 dis_horn_button.pack(pady=5, fill='x', expand=True, ipady=6)
 
 
