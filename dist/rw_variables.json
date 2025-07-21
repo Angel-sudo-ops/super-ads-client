@@ -90,5 +90,12 @@
     "SafetyGlobals.plsFrontHandler.enableExtraLong",
     "LibraryInterfaces.UpdateGuidanceInput.force_Reset_Autocalibration_Data",
     "Agv_Ctrl.AutoReboot.startRequest",
-    "Agv_Ctrl.AutoReboot.autorebootDone"
+    "Agv_Ctrl.AutoReboot.autorebootDone",
+    "LibraryInterfaces.LGV.Status.Local_Mode",
+    "CoreGVL.endMaintenance",
+    "Devices.Muting.rear.feedback",
+    "Devices.Muting.rear.out1",
+    "Devices.Muting.rear.out1,Devices.Muting.rear.bypassAlarms.feedbackNotOk",
+    "Devices.Muting.rear.out1; Devices.Muting.rear.bypassAlarms.feedbackNotOk",
+    "Devices.Muting.rear.out1; Devices.Muting.rear.feedback"
 ]

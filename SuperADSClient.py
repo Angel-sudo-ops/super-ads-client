@@ -28,7 +28,7 @@ if not pyads_available:
     # messagebox.showerror("Attention", "No pyads available")
     print("No pyads available")
 
-__version__ = '2.5.1.4'
+__version__ = '2.5.1.5'
 __icon__ = "./plc.ico"
 
 TAB_NAME = ['Control', 'RW Panel']
@@ -1364,6 +1364,8 @@ def on_variable_window_close():
 
 RW_VARIABLES_FILE = "rw_variables.json"
 
+VAR_DELIM = ';' #variable delimiter when reading/writing group of vars
+
 # Predefined and custom variables
 default_rw_variables = [
     'PressureGVLs.weightPar.touchingWeight',
@@ -1424,36 +1426,62 @@ def filter_combobox(event):
         variable_menu.event_generate('<Down>')
 
 # Functions
-def add_variable():
+
+def normalize_variable_name(variable):
+    return VAR_DELIM.join(part.strip() for part in variable.split(VAR_DELIM))
+
+
+def add_variable(event=None):
     custom_rw_variables = load_custom_variables()
     new_variable = variable_menu.get().strip()
 
     if new_variable:
-        # Normalize variable names to avoid issues with spaces around commas
-        normalized_new_variable = ','.join(part.strip() for part in new_variable.split(','))
+        normalized_new_variable = normalize_variable_name(new_variable)
 
-        # Normalize existing variables for comparison
         normalized_existing_variables = [
-            ','.join(part.strip() for part in var.split(','))
-            for var in default_rw_variables + custom_rw_variables
+            normalize_variable_name(var) for var in default_rw_variables + custom_rw_variables
         ]
 
         if normalized_new_variable.lower() in (var.lower() for var in normalized_existing_variables):
-            # messagebox.showwarning("Duplicate Entry", "This variable already exists.")
             print("Variable already exists")
-            log_message("Variable already exists")
+            log_message("Variable already exists", "warning")
         else:
             custom_rw_variables.append(normalized_new_variable)
             save_variables(custom_rw_variables)
             update_variable_menu()
             print(f"Variable {new_variable} successfully added!")
-            log_message(f"Variable {new_variable} successfully added!")
+            log_message(f"Variable {new_variable} successfully added!", "info")
     else:
         print("Please enter a valid variable name.")
-        log_message("Please enter a valid variable name.")
+        log_message("Please enter a valid variable name.", "error")
 
 
-# result_var = tk.StringVar()
+def del_variable(event=None):
+    custom_rw_variables = load_custom_variables()
+    variable_to_delete = variable_menu.get().strip()
+
+    if variable_to_delete:
+        normalized_to_delete = normalize_variable_name(variable_to_delete)
+
+        normalized_custom_variables = [normalize_variable_name(var) for var in custom_rw_variables]
+
+        matches = [i for i, var in enumerate(normalized_custom_variables) if var.lower() == normalized_to_delete.lower()]
+        if matches:
+            index_to_remove = matches[0]
+            removed_var = custom_rw_variables.pop(index_to_remove)
+            save_variables(custom_rw_variables)
+            update_variable_menu()
+            print(f"Variable {removed_var} successfully deleted!")
+            log_message(f"Variable {removed_var} successfully deleted!", "info")
+        else:
+            print(f"Variable {variable_to_delete} does not exist in custom list.")
+            log_message("Variable does not exist in custom list.", "warning")
+    else:
+        print("Please enter a valid variable name to delete.")
+        log_message("Please enter a valid variable name to delete.", "error")
+
+
+
 
 
 def parse_lgv_range(range_str):
@@ -1516,7 +1544,7 @@ def validate_and_link_lgv():
         # messagebox.showerror("Invalid Input", f"Error: {e}")
         print(f"Invalid input. Error: {e}")
         # messagebox.showerror("Error", f"Invalid input. Error: {e}")
-        log_message(f"Invalid input. Error: {e}")
+        log_message(f"Invalid input. Error: {e}", "error")
         # lgv_range_entry.delete(0, tk.END)
         return None
 
@@ -1755,15 +1783,15 @@ def rw_write_variable(event=None):
     if variable_names == '':
         # messagebox.showerror("Error", "Variable name missing!")
         print("Variable name missing!")
-        log_message("Variable name missing!")
+        log_message("Variable name missing!", "error")
         return
 
     # Split the input by commas and strip each variable name
-    variables = [var.strip() for var in variable_names.split(';') if var.strip()]
+    variables = [var.strip() for var in variable_names.split(VAR_DELIM) if var.strip()]
 
     if not variables:
         print("No valid variable names found!")
-        log_message("No valid variable names found!")
+        log_message("No valid variable names found!", "warning")
         return
 
     # Preprocess variable names for unique representation
@@ -1918,15 +1946,15 @@ def rw_read_variable(event=None):
     if variable_names == '':
         # messagebox.showerror("Error", "Variable name missing!")
         print("Variable name missing!")
-        log_message("Variable name missing!")
+        log_message("Variable name missing!", "error")
         return
 
     # Split the input by commas and strip each variable name
-    variables = [var.strip() for var in variable_names.split(';') if var.strip()]
+    variables = [var.strip() for var in variable_names.split(VAR_DELIM) if var.strip()]
 
     if not variables:
         print("No valid variable names found!")
-        log_message("No valid variable names found!")
+        log_message("No valid variable names found!", "warning")
         return
 
     # Preprocess variable names for unique representation
@@ -2127,11 +2155,17 @@ def clear_entry_field():
     """Disable value entry if True/False radio is selected."""
     value_entry.delete(0, tk.END)  # Clear the entry field
 
-def log_message(message):
+def log_message(message, showtype="error"):
     """Insert log messages into a messagebox."""
     # read_write_window.after(0, lambda: status_widget.insert(tk.END, message + "\n"))
     # read_write_window.after(0, status_widget.see, tk.END)  # Scroll to the bottom
-    messagebox.showerror("Error", message)
+    match showtype.lower():
+        case "error":
+            messagebox.showerror("Error", message)
+        case "warning":
+            messagebox.showwarning("Warning", message)
+        case "info":
+            messagebox.showinfo("Info", message)
 
 def clear_status():
     """Clear the content of the status widget."""
@@ -2254,7 +2288,7 @@ def open_shortcuts_window(event=None, tab_text=None):
     shortcuts_window.title(f"Shortcuts — {tab_text}")
 
     window_width = 420
-    window_lenght = 400
+    window_lenght = 470
     if shortcuts_window_position:
         shortcuts_window.geometry(f"{window_width}x{window_lenght}{shortcuts_window_position}")
     else:
@@ -2365,6 +2399,8 @@ def create_tab_shortcut_actions():
                 'l': focus_lgv_entry,
                 'r': rw_read_variable,
                 'w': rw_write_variable
+                # 'a': add_variable,
+                # 'd': del_variable
             }
         }
     }
@@ -2768,8 +2804,11 @@ variable_menu.bind('<Tab>', filter_combobox)
 
 # variable_menu.configure(postcommand=lambda:filter_combobox(None))
 
-add_var_btn = ttk.Button(variable_frame, text="Add Variable", command=add_variable)
-add_var_btn.grid(row=0, column=1, padx=5, pady=5)
+add_var_btn = ttk.Button(variable_frame, text="Add", width=5, command=add_variable)
+add_var_btn.grid(row=0, column=1, padx=(5,2.5), pady=5)
+
+del_var_btn = ttk.Button(variable_frame, text="Del", width=5, command=del_variable)
+del_var_btn.grid(row=0, column=2, padx=(2.5,5), pady=5)
 
 # Extend variable_frame sideways
 variable_frame.grid_columnconfigure(0, weight=1)
