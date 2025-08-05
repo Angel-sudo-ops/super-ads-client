@@ -89,13 +89,20 @@
     "LibraryInterfaces.LGV.Guid.Odom.Cur_Spd; LibraryInterfaces.LGV.Guid.Odom.Ref_Spd",
     "SafetyGlobals.plsFrontHandler.enableExtraLong",
     "LibraryInterfaces.UpdateGuidanceInput.force_Reset_Autocalibration_Data",
-    "Agv_Ctrl.AutoReboot.startRequest",
-    "Agv_Ctrl.AutoReboot.autorebootDone",
     "LibraryInterfaces.LGV.Status.Local_Mode",
     "CoreGVL.endMaintenance",
     "Devices.Muting.rear.feedback",
     "Devices.Muting.rear.out1",
     "Devices.Muting.rear.out1,Devices.Muting.rear.bypassAlarms.feedbackNotOk",
     "Devices.Muting.rear.out1; Devices.Muting.rear.bypassAlarms.feedbackNotOk",
-    "Devices.Muting.rear.out1; Devices.Muting.rear.feedback"
+    "Devices.Muting.rear.out1; Devices.Muting.rear.feedback",
+    "LibraryInterfaces.LGV.Status.Aut_Run",
+    "Devices.Muting.front.out1;Devices.Muting.front.feedback",
+    "LibraryInterfaces.OpInfo.reelDiameter",
+    "AGV_Ctrl.AutoReboot.startRequest",
+    "InfoMovements.Mov.opCl4.forksInfo[1].curPosition;InfoMovements.Mov.opCl4.forksInfo[2].curPosition;InfoMovements.Mov.opCl4.forksInfo[3].curPosition;InfoMovements.Mov.opCl4.forksInfo[4].curPosition;InfoMovements.Mov.opCl4.curGroupsPosition[1];InfoMovements.Mov.opCl4.curGroupsPosition[2];InfoMovements.Mov.opCl4.curGroupsInterax[1];InfoMovements.Mov.opCl4.curGroupsInterax[2];",
+    "LibraryInterfaces.OpInfo.loadUnitLenght",
+    "LibraryInterfaces.FileManagement.saveRequest[1]",
+    "LibraryInterfaces.FileManagement.saveRequest[5]",
+    "AGV_Ctrl.AutoReboot.autoRebootDone"
 ]

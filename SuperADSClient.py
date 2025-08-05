@@ -2394,7 +2394,7 @@ def create_tab_shortcut_actions():
             "single_action": {
                 't': select_true,
                 'f': select_false,
-                'x': focus_var_entry,
+                'x': focus_var_entry, # it's the same as windows cut
                 'e': focus_other_entry,
                 'l': focus_lgv_entry,
                 'r': rw_read_variable,

@@ -1,103 +1,53 @@
 <?xml version="1.0" ?>
 <LGVData>
     <LGV>
+        <Name>LGV40</Name>
+        <AMSNetId>172.23.51.140.1.1</AMSNetId>
+        <Type>TC3</Type>
+    </LGV>
+    <LGV>
+        <Name>LGV41</Name>
+        <AMSNetId>172.23.51.141.1.1</AMSNetId>
+        <Type>TC3</Type>
+    </LGV>
+    <LGV>
+        <Name>LGV42</Name>
+        <AMSNetId>172.23.51.142.1.1</AMSNetId>
+        <Type>TC3</Type>
+    </LGV>
+    <LGV>
+        <Name>LGV43</Name>
+        <AMSNetId>172.23.51.143.1.1</AMSNetId>
+        <Type>TC3</Type>
+    </LGV>
+    <LGV>
+        <Name>LGV44</Name>
+        <AMSNetId>172.23.51.144.1.1</AMSNetId>
+        <Type>TC3</Type>
+    </LGV>
+    <LGV>
+        <Name>LGV50</Name>
+        <AMSNetId>172.23.51.150.1.1</AMSNetId>
+        <Type>TC3</Type>
+    </LGV>
+    <LGV>
         <Name>LGV51</Name>
-        <AMSNetId>172.20.71.51.1.1</AMSNetId>
+        <AMSNetId>172.23.51.151.1.1</AMSNetId>
         <Type>TC3</Type>
     </LGV>
     <LGV>
         <Name>LGV52</Name>
-        <AMSNetId>172.20.71.52.1.1</AMSNetId>
+        <AMSNetId>172.23.51.152.1.1</AMSNetId>
         <Type>TC3</Type>
     </LGV>
     <LGV>
         <Name>LGV53</Name>
-        <AMSNetId>172.20.71.53.1.1</AMSNetId>
+        <AMSNetId>172.23.51.153.1.1</AMSNetId>
         <Type>TC3</Type>
     </LGV>
     <LGV>
         <Name>LGV54</Name>
-        <AMSNetId>172.20.71.54.1.1</AMSNetId>
-        <Type>TC3</Type>
-    </LGV>
-    <LGV>
-        <Name>LGV61</Name>
-        <AMSNetId>172.20.71.61.1.1</AMSNetId>
-        <Type>TC3</Type>
-    </LGV>
-    <LGV>
-        <Name>LGV62</Name>
-        <AMSNetId>172.20.71.62.1.1</AMSNetId>
-        <Type>TC3</Type>
-    </LGV>
-    <LGV>
-        <Name>LGV63</Name>
-        <AMSNetId>172.20.71.63.1.1</AMSNetId>
-        <Type>TC3</Type>
-    </LGV>
-    <LGV>
-        <Name>LGV64</Name>
-        <AMSNetId>172.20.71.64.1.1</AMSNetId>
-        <Type>TC3</Type>
-    </LGV>
-    <LGV>
-        <Name>LGV65</Name>
-        <AMSNetId>172.20.71.65.1.1</AMSNetId>
-        <Type>TC3</Type>
-    </LGV>
-    <LGV>
-        <Name>LGV66</Name>
-        <AMSNetId>172.20.71.66.1.1</AMSNetId>
-        <Type>TC3</Type>
-    </LGV>
-    <LGV>
-        <Name>LGV71</Name>
-        <AMSNetId>172.20.71.71.1.1</AMSNetId>
-        <Type>TC3</Type>
-    </LGV>
-    <LGV>
-        <Name>LGV72</Name>
-        <AMSNetId>172.20.71.72.1.1</AMSNetId>
-        <Type>TC3</Type>
-    </LGV>
-    <LGV>
-        <Name>LGV73</Name>
-        <AMSNetId>172.20.71.73.1.1</AMSNetId>
-        <Type>TC3</Type>
-    </LGV>
-    <LGV>
-        <Name>LGV81</Name>
-        <AMSNetId>172.20.71.81.1.1</AMSNetId>
-        <Type>TC3</Type>
-    </LGV>
-    <LGV>
-        <Name>LGV82</Name>
-        <AMSNetId>172.20.71.82.1.1</AMSNetId>
-        <Type>TC3</Type>
-    </LGV>
-    <LGV>
-        <Name>LGV83</Name>
-        <AMSNetId>172.20.71.83.1.1</AMSNetId>
-        <Type>TC3</Type>
-    </LGV>
-    <LGV>
-        <Name>LGV84</Name>
-        <AMSNetId>172.20.71.84.1.1</AMSNetId>
-        <Type>TC3</Type>
-    </LGV>
-    <LGV>
-        <Name>LGV85</Name>
-        <AMSNetId>172.20.71.85.1.1</AMSNetId>
-        <Type>TC3</Type>
-    </LGV>
-    <LGV>
-        <Name>LGV86</Name>
-        <AMSNetId>172.20.71.86.1.1</AMSNetId>
-        <Type>TC3</Type>
-    </LGV>
-    <LGV>
-        <Name>LGV87</Name>
-        <AMSNetId>172.20.71.87.1.1</AMSNetId>
+        <AMSNetId>172.23.51.154.1.1</AMSNetId>
         <Type>TC3</Type>
     </LGV>
 </LGVData>
