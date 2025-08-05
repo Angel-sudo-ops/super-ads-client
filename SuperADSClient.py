@@ -12,6 +12,8 @@ import time
 import json
 from queue import Queue, Empty
 import copy
+import subprocess
+import platform
 # from ctypes import sizeof
 
 try:
@@ -26,9 +28,12 @@ if not pyads_available:
     # messagebox.showerror("Attention", "No pyads available")
     print("No pyads available")
 
-__version__ = '2.4.8.9'
+__version__ = '2.5.1.5'
 __icon__ = "./plc.ico"
 
+TAB_NAME = ['Control', 'RW Panel']
+
+MAX_WORKERS = 5
 LGV_DATA = "lgv_data.xml"
 # Variable to hold the current ads connection
 current_ads_connection = None
@@ -52,7 +57,7 @@ def populate_table_from_xml_test():
 def populate_table_from_xml(path=None):
     if not path:
         # Ask the user to select an XML file
-        file_path = filedialog.askopenfilename(title="Select StaticRoutes file", 
+        file_path = filedialog.askopenfilename(title="Select StaticRoutes file",
                                             initialdir="C:\\TwinCAT\\3.1\\Target",
                                             filetypes=[("XML files", "*.xml")])
     else:
@@ -61,7 +66,7 @@ def populate_table_from_xml(path=None):
     if file_path and not os.path.exists(file_path):
         print(f"The file {path} does not exist.")
         return
-    
+
     if file_path:
         try:
             tree = ET.parse(file_path)
@@ -75,18 +80,18 @@ def populate_table_from_xml(path=None):
         if remote_connections is None:
             messagebox.showerror("Error", "XML file does not contain the expected 'RemoteConnections' structure.")
             return
-        
+
         data = treeview.get_children()
         # Clear the existing table data
         if data is not None:
             for i in data:
                 treeview.delete(i)
-            
+
         # Initialize an empty list to hold the data
         routes_data = []
         seen_lgv_names = set()
         invalid_routes = []
-        
+
         # Iterate through each <Route> element in the XML
         for route in remote_connections.findall('Route'):
             name = route.find('Name')
@@ -117,26 +122,26 @@ def populate_table_from_xml(path=None):
             seen_lgv_names.add(lgv_name)
 
             type_tc = "TC3" if route.find('Flags') is not None else "TC2"
-            
+
             # Append the tuple to the list
             routes_data.append((lgv_name, net_id, type_tc))
-        
+
         # Warn the user about invalid routes
         if invalid_routes:
             messagebox.showwarning(
                 "Invalid Routes",
                 f"The following routes were skipped:\n" + "\n".join(invalid_routes)
             )
-        
+
         # Populate the Treeview with the data
         for item in routes_data:
             treeview.insert("", "end", values=item)
         # messagebox.showinfo("Success", "Data loaded successfully from the XML file.")
-        
+
     save_table_data_to_xml(treeview)
-    
+
     # Enable menu for Read/Write if table is updated
-    update_menu()
+    update_tabs()
 
 ####################################################################################################################################################################
 ########################################################## Initial data reading from db3 file ######################################################################
@@ -158,7 +163,7 @@ def read_db3_file(db3_file_path, table_name):
 
         # Query to get all rows from the specified table
         cursor.execute(f"SELECT * FROM {table_name}")
-        
+
         # Fetch all rows
         rows = cursor.fetchall()
 
@@ -178,28 +183,28 @@ def read_db3_file(db3_file_path, table_name):
 
 
 def populate_table_from_db3():
-    db3_path = filedialog.askopenfilename(title="Select config.db3 file", 
+    db3_path = filedialog.askopenfilename(title="Select config.db3 file",
                                           initialdir="C:\\Program Files (x86)\\Elettric80",
                                           filetypes=[("DB3 files", "*.db3")])
     if not db3_path:
         return
-    
+
     table_agvs = "tbl_AGVs"
     rows_agvs = read_db3_file(db3_path, table_agvs)
     if rows_agvs is None:
         return
-    
+
     table_param = "tbl_Parameter"
     rows_param = read_db3_file(db3_path, table_param)
     if rows_param is None:
         return
-    
+
     # # print(columns, rows)
-    
+
     # Clear the existing table data
     for i in treeview.get_children():
         treeview.delete(i)
-    
+
     # Default type_tc based on the transfer mode
     default_type_tc = "TC2"  # Assume TC2 unless specified otherwise
     for row_param in rows_param:
@@ -210,7 +215,7 @@ def populate_table_from_db3():
     routes_data = []
     # Iterate through each <Route> element in the XML
     for route in rows_agvs:
-        if route['dbf_Enabled']: 
+        if route['dbf_Enabled']:
         # if None in (name, address, net_id):
         #     messagebox.showwarning("Warning", "One or more routes are missing required fields (Name, Address, NetId).")
         #     continue  # Skip this route and move to the next
@@ -218,18 +223,18 @@ def populate_table_from_db3():
             name = f"LGV{str(route['dbf_ID']).zfill(2)}"
             address = route['dbf_IP']
             net_id = f"{address}.1.1"
-            
-            # if route['Dbf_Comm_Library']>20 or 
+
+            # if route['Dbf_Comm_Library']>20 or
             if route['LayoutCopy_Protocol']=="SFTP":
-                type_tc = "TC3" 
+                type_tc = "TC3"
             elif route['LayoutCopy_Protocol']=="FTP" or route['LayoutCopy_Protocol']=="NETFOLDER":
-                type_tc = "TC2" 
+                type_tc = "TC2"
             else:
-                type_tc = default_type_tc 
-        
+                type_tc = default_type_tc
+
             # Append the tuple to the list
             routes_data.append((name, net_id, type_tc))
-    
+
     # Populate the Treeview with the data
     for item in routes_data:
         treeview.insert("", "end", values=item)
@@ -237,7 +242,7 @@ def populate_table_from_db3():
     save_table_data_to_xml(treeview)
 
     # Enable menu for Read/Write if table is updated
-    update_menu()
+    update_tabs()
 
 def extract_numeric_part(name):
     match = re.search(r'\d+', name) #Extract numeric part
@@ -251,7 +256,7 @@ def save_table_data_to_xml(tree, filename=LGV_DATA):
     if not tree.get_children():
         print("Treeview is empty. No data to save.")
         return  # Exit the function if the Treeview is empty
-    
+
     # Create the current data structure from the Treeview
     current_data = []
     for row in tree.get_children():
@@ -287,14 +292,14 @@ def save_table_data_to_xml(tree, filename=LGV_DATA):
         if existing_data == current_data:
             print("No changes detected. Data not saved.")
             return  # Exit if there are no changes
-        
+
     lgv_list = ET.Element("LGVData")
     for lgv in current_data:
         lgv_element = ET.SubElement(lgv_list, "LGV")
         ET.SubElement(lgv_element, "Name").text = lgv["Name"]
         ET.SubElement(lgv_element, "AMSNetId").text = lgv["AMSNetId"]
         ET.SubElement(lgv_element, "Type").text = lgv["Type"]
-    
+
     # Convert to a pretty XML string
     xmlstr = minidom.parseString(ET.tostring(lgv_list, 'utf-8')).toprettyxml(indent="    ")
 
@@ -307,7 +312,7 @@ def save_table_data_to_xml(tree, filename=LGV_DATA):
 
 # Load data from XML
 def load_table_data_from_xml(tree, filename=LGV_DATA):
-    if os.path.exists(filename):       
+    if os.path.exists(filename):
         tree_xml = ET.parse(filename)
         lgv_list = tree_xml.getroot()
 
@@ -352,11 +357,11 @@ def monitor_connection_status():
 
     if current_ads_connection is None:
         return
-    
+
     try:
         if not check_plc_status(current_ads_connection):
             raise Exception("PLC not in valid state")
-        
+
         update_status_in_queue("Connected", "green")
 
     except Exception as e:
@@ -370,9 +375,9 @@ def monitor_connection_status():
 
     monitor_timer = threading.Timer(1.0, monitor_connection_status)
     monitor_timer.daemon = True
-    monitor_timer.start()  
+    monitor_timer.start()
 
-    
+
 def check_plc_status(ads_connection):
     status = ads_connection.read_state()[0]
     if status == 5:
@@ -396,7 +401,7 @@ def close_current_connection():
 
             # Stop the read thread
             stop_read_thread()  # Stop and join the thread
-        
+
         if monitor_timer:
             monitor_timer.cancel()
             monitor_timer = None
@@ -406,12 +411,12 @@ def close_current_connection():
 # Background connection handler (runs in a separate thread)
 def background_connect(plc_data):
     global current_ads_connection, connection_in_progress, connection_active
-    
-    try:        
+
+    try:
         # If already connected, don't try to reconnect
         if current_ads_connection is not None:
             return
-        
+
         lgv_name, ams_net_id, tc_type = plc_data
         port = 851 if tc_type == 'TC3' else 801
         # ip_address = ".".join(str(ams_net_id).split(".")[:4])
@@ -440,7 +445,7 @@ def background_connect(plc_data):
             # update_buttons()
             update_buttons_from_plc_thread()
 
-            
+
 
         else:
             raise Exception("PLC not in a valid state")
@@ -485,9 +490,10 @@ def update_status_in_queue(status, color):
 
 connection_lock = threading.Lock()
 # Attempt to connect to the selected PLC (starts in a new thread)
-def connect_to_plc():
+def connect_to_plc(event=None):
+    """Connect to selected LGV"""
     global connection_in_progress
-    
+
     with connection_lock:
 
         # If already connected, don't try to reconnect
@@ -500,7 +506,7 @@ def connect_to_plc():
             print("Connection in progress. Waiting for it to finish. Triggered on connect")
             # messagebox.showinfo("Attention", "Connection in progress. Waiting for it to finish. Triggered on connect")
             return
-        
+
 
         # Get the selected PLC data
         selected_item = treeview.selection()
@@ -526,15 +532,15 @@ connection_in_progress = False
 def on_treeview_select(event):
     global current_ads_connection, previous_selection, connection_in_progress, connection_active
     # Get the currently selected LGV
-    
+
     selected_item = treeview.selection()
     if not selected_item:
         print("No item selected.")
         return
-    
+
     # If the same item is selected, do nothing
-    if ((previous_selection == selected_item) 
-            and current_ads_connection and connection_active 
+    if ((previous_selection == selected_item)
+            and current_ads_connection and connection_active
             and not connection_in_progress):
         print("Target already connected")
         # messagebox.showinfo("Attention", "Target already connected")
@@ -546,7 +552,7 @@ def on_treeview_select(event):
         # messagebox.showinfo("Attention", "Connection in progress. Waiting for it to finish. Triggered on select")
         treeview.selection_remove(treeview.selection())
         return
-    
+
     old_selection = previous_selection
     previous_selection = selected_item  # Update the previously selected item
 
@@ -555,13 +561,13 @@ def on_treeview_select(event):
         if read_variable('disable_horn'):
             old_lgv_name = treeview.item(old_selection)["values"][0]
             messagebox.showwarning("Attention", f"Horn in {old_lgv_name} is disabled!")
-        
+
         print("Stopping read thread and closing current connection.")
         stop_read_thread()  # Ensure the read thread is stopped
 
         disable_control_buttons()
         close_current_connection()
-            
+
     with connection_lock:
         connection_in_progress = False
 
@@ -577,7 +583,7 @@ def enable_control_buttons():
 
 def disable_control_buttons():
     lgv_buttons = (reset_button, run_button, stop_button, man_auto_button, dis_horn_button)
-    
+
     for button in lgv_buttons:
         button.config(style="LGV.TButton")
         button.config(state="disabled")
@@ -650,7 +656,7 @@ def reset_to_defaults():
     start_read_thread()
 
     messagebox.showinfo("Reset", "Variables have been reset to defaults.")
-          
+
 
     # else:
         # messagebox.showinfo("Reset", "No saved configuration found.")
@@ -662,10 +668,11 @@ def update_menu():
     else:
         options_menu.entryconfig("Reset to Defaults ", state="disabled")  # Disable if file doesn't exist
 
+def update_tabs():
     if os.path.exists(LGV_DATA):
-        more_menu.entryconfig("Read/Write    ", state="normal")  # Enable if file exists
+        notebook.tab(read_write_tab, state="normal")  # Enable if file exists
     else:
-        more_menu.entryconfig("Read/Write    ", state="disabled")  # Disable if file doesn't exist
+        notebook.tab(read_write_tab, state="disabled")  # Disable if file doesn't exist
 
 
 # Load variables from JSON or fall back to defaults
@@ -778,7 +785,7 @@ def write_variable(action, tc_type, is_core, value, button):
         print("Connection Error", "No active connection to write to.")
         # messagebox.showerror("Connection Error", "No active connection to write to.")
     return False
-    
+
 
 # Variable to track toggle state for disable_horn
 
@@ -787,13 +794,14 @@ def on_test_button_click(button):
     print(f"Test {button} shortcut triggered")
 
 def on_dis_horn_button_click(button):
+    """Enable/Disable horn"""
     global dis_horn_state
 
     # Get initial state of disable_horn variable to toggle it
-    dis_horn_state = read_variable('disable_horn') 
+    dis_horn_state = read_variable('disable_horn')
 
     lgv_data = get_lgv_data()
-    
+
     if lgv_data is None:
         return
     tc_type = lgv_data[2]
@@ -801,11 +809,16 @@ def on_dis_horn_button_click(button):
     # Toggle the state of disable_horn
     dis_horn_state = not dis_horn_state
     success_write = write_variable('disable_horn', tc_type, is_core, dis_horn_state, button)
-    if success_write:   
+    if success_write:
         print(f"Disable Horn pressed, value: {dis_horn_state}")
     else:
         dis_horn_state= False
         print(f"Disable Horn pressed unsuccessful, value: {dis_horn_state}")
+
+def trigger_dis_horn(event=None):
+    """Enable/Disable horn"""
+    on_dis_horn_button_click(dis_horn_button)
+
 
 press_successful = False
 cooldown_active = False  # Variable to track cooldown state
@@ -816,16 +829,16 @@ def on_button_action(action, value, button, is_release=False):
 
     if cooldown_active:
         return
-    
+
     if not is_release:
         interaction_in_progress = True
-    
+
     button_state = button.cget("state").string
     if  button_state != 'normal':
         return
-    
+
     lgv_data = get_lgv_data()
-    
+
     if lgv_data is None:
         # messagebox.showerror("Error", "No LGV selected or invalid data.")
         press_successful = False
@@ -844,13 +857,13 @@ def on_button_action(action, value, button, is_release=False):
             button.config(style="LGV.Pressed.TButton")
         else:  # If released (False)
             button.config(style="LGV.TButton")
-    
+
     if is_release and interaction_in_progress:
         interaction_in_progress = False
         cooldown_active = True
         button.after(100, lambda: end_cooldown())  # End cooldown after 500ms
 
-    if press_successful:    
+    if press_successful:
         print(f"Button {action} is pressed and value is {value}")
     else:
         print(f"Press {action} unsuccessful")
@@ -865,7 +878,7 @@ def bind_button_actions(button, action, shortcuts=None, press_value=True, releas
 
     def on_button_press(event):
         on_button_action(action, press_value, button)
-    
+
     def on_button_release(event):
         if press_successful:
             on_button_action(action, release_value, button, is_release=True)
@@ -880,15 +893,16 @@ def bind_button_actions(button, action, shortcuts=None, press_value=True, releas
     button.bind("<ButtonRelease>", lambda event: on_button_release(event))
 
 
-    # Bind keyboard shortcuts (Control + Key press and release)
-    if shortcuts:
-        for press_shortcut, release_shortcut in shortcuts:
-            button.winfo_toplevel().bind(press_shortcut, on_button_press)
-            button.winfo_toplevel().bind(release_shortcut, on_button_release)
+    # # Bind keyboard shortcuts (Control + Key press and release)
+    # if shortcuts:
+    #     for press_shortcut, release_shortcut in shortcuts:
+    #         button.winfo_toplevel().bind(press_shortcut, on_button_press)
+    #         button.winfo_toplevel().bind(release_shortcut, on_button_release)
+
 
 def bind_connect_button_action(button, connect_function, shortcuts=None):
     """Bind connect behavior to both button click and keyboard shortcuts."""
-    
+
     def on_connect(event=None):
         """Trigger the connect function."""
         connect_function()
@@ -946,11 +960,11 @@ def on_button_action_wrapper(action, press_value, release_value, button):
 def on_button_release(action, release_value, button):
     global press_successful
 
-    # try:    
+    # try:
         # if press_successful:
             # Release action: simulate releasing the button and sending the value
     on_button_action(action, release_value, button, is_release=True)
- 
+
     # finally:
             # Unbind the release event to prevent multiple triggers
     button.unbind("<ButtonRelease>")
@@ -959,39 +973,39 @@ def on_button_release(action, release_value, button):
 
 def bind_treeview_focus_action(treeview, focus_shortcuts=None):
     """Bind focus behavior to Treeview for keyboard navigation."""
-    
-    def focus_and_select_first(event=None):
-        """Set focus on the Treeview and select the first item."""
-        treeview.focus_set()  # Set focus to the Treeview
-
-        # Get the Treeview's scroll position
-        yview = treeview.yview()
-        if not yview:
-            print("Treeview is empty or has no scroll position")
-            return
-        
-        # Calculate the first visible item based on yview
-        all_items = treeview.get_children()
-        visible_item_index = int(yview[0] * len(all_items))  # Calculate the starting index
-
-        if all_items:
-            first_visible_item = all_items[visible_item_index]
-            treeview.selection_set(first_visible_item)  # Select the first item
-            treeview.focus(first_visible_item)  # Set the focus on the first item
-            print("Treeview focused, first visible item selected")
-        else:
-            print("Treeview is empty, nothing to select")
 
     # Bind keyboard shortcuts if provided
     if focus_shortcuts:
         for shortcut in focus_shortcuts:
             treeview.winfo_toplevel().bind(shortcut, focus_and_select_first)
 
+def focus_and_select_first(event=None):
+    """Select the first item from table"""
+    treeview.focus_set()  # Set focus to the Treeview
+
+    # Get the Treeview's scroll position
+    yview = treeview.yview()
+    if not yview:
+        print("Treeview is empty or has no scroll position")
+        return
+
+    # Calculate the first visible item based on yview
+    all_items = treeview.get_children()
+    visible_item_index = int(yview[0] * len(all_items))  # Calculate the starting index
+
+    if all_items:
+        first_visible_item = all_items[visible_item_index]
+        treeview.selection_set(first_visible_item)  # Select the first item
+        treeview.focus(first_visible_item)  # Set the focus on the first item
+        print("Treeview focused, first visible item selected")
+    else:
+        print("Treeview is empty, nothing to select")
+
 ####################################################################################################################################################################
 ##################################################################### Read variables ###############################################################################
 ####################################################################################################################################################################
 variable_read = {
-    'reset': {  
+    'reset': {
         'TC2': ".Button_Reset",
         ('TC3', False): "LGV.Status.manReset",
         ('TC3', True): "LibraryInterfaces.LGV.Status.manReset"
@@ -1022,11 +1036,11 @@ variable_read = {
 is_core = False
 
 def check_for_core_variable(core_variable):
-    global is_core 
+    global is_core
     try:
         # Attempt to read the core variable
         core_value = current_ads_connection.read_by_name(core_variable, pyads.PLCTYPE_BOOL)
-        
+
         # If the core variable is read successfully, set the variable and update the label
         if core_value is not None:
             is_core = True  # Set the variable to True (core detected)
@@ -1034,7 +1048,7 @@ def check_for_core_variable(core_variable):
         else:
             is_core = False  # Set the variable to False (core not detected)
             core_status_label.config(text="No Core Lib")
-            
+
     except Exception as e:
         is_core = False  # Handle error, set core status to "not detected"
         core_status_label.config(text="No Core Lib")
@@ -1044,7 +1058,7 @@ def read_variable(action):
     lgv_data = get_lgv_data()
     if not lgv_data:
         return
-    
+
     if current_ads_connection is None:
         print("ADS connection is closed. Skipping variable read")
         return None
@@ -1079,7 +1093,7 @@ def update_buttons():
         return
     # Read variables and update button colors for all actions
     actions = ['reset', 'run', 'stop', 'man_auto', 'disable_horn']
-    
+
     # Mapping actions to buttons
     button_mapping = {
         'reset': reset_button,
@@ -1088,12 +1102,12 @@ def update_buttons():
         'man_auto': man_auto_button,
         'disable_horn': dis_horn_button
     }
-    
+
     for action in actions:
         read_value = read_variable(action)  # Read value from PLC
         button = button_mapping[action]
         update_button_color(action, button, read_value)
-    
+
     # Schedule the function to run again after 2s
     root.after(50, update_buttons)
 
@@ -1113,18 +1127,18 @@ def update_buttons_from_plc_thread():
     global current_ads_connection
 
     actions = ['run', 'disable_horn']
-    
+
     # Mapping actions to buttons
     button_mapping = {
         'run': run_button,
         'disable_horn': dis_horn_button
     }
-    
+
     # with read_lock:
     while not stop_thread_event.is_set():
         if current_ads_connection is None:
             return
-        
+
         # print(f"Current state of variable write: {variable_write['disable_horn']['TC3']['core']}")
         for action in actions:
             read_value = read_variable(action)  # Read value from PLC
@@ -1132,11 +1146,11 @@ def update_buttons_from_plc_thread():
             root.after(0, update_button_color, action, button, read_value)
 
         stop_thread_event.wait(0.1)
-    
+
     print("Read thread stopped...")
 
     # t = threading.Timer(0.1, update_buttons_from_plc_thread)
-    # t.daemon = True 
+    # t.daemon = True
     # t.start()
 read_thread = None
 
@@ -1177,44 +1191,54 @@ def get_lgv_data():
 
 
 # Dictionary to maintain custom headings
-headings = {
+main_headings = {
     'Name': 'Name',
     'NetId': 'AMS Net Id',
     'Type': 'Type'
 }
 
-def setup_treeview():
+def setup_sortable_treeview(treeview, headings, anchor='w', on_sorted=None):
+    def natural_keys(text):
+        return [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', text)]
+
+    def sort_column(col, reverse):
+        # Retrieve all data from the treeview
+        rows = [(treeview.set(k, col), k) for k in treeview.get_children('')]
+        # Sort the data
+        rows.sort(reverse=reverse, key=lambda t: natural_keys(t[0]))
+
+        # Rearrange items in sorted positions
+        for index, (_, k) in enumerate(rows):
+            treeview.move(k, '', index)
+
+        treeview.yview_moveto(0)
+
+        if on_sorted:
+            on_sorted(treeview)
+
+        # Change the heading to show the sort direction
+        for column in treeview['columns']:
+            arrow = ' ↓' if reverse and column == col else ' ↑' if not reverse and column == col else ''
+            treeview.heading(
+                column,
+                text=headings.get(column, column) + arrow,
+                command=lambda _col=column: sort_column(_col, not reverse)
+            )
+
     for col in treeview['columns']:
-        treeview.heading(col, text=headings[col], command=lambda _col=col: treeview_sort_column(treeview, _col, False), anchor='w')
-
-def treeview_sort_column(tv, col, reverse):
-    # Retrieve all data from the treeview
-    l = [(tv.set(k, col), k) for k in tv.get_children('')]
-    
-    # Sort the data
-    l.sort(reverse=reverse, key=lambda t: natural_keys(t[0]))
-
-    # Rearrange items in sorted positions
-    for index, (val, k) in enumerate(l):
-        tv.move(k, '', index)
-
-    # Change the heading to show the sort direction
-    for column in tv['columns']:
-        heading_text = headings[column] + (' ↓' if reverse and column == col else ' ↑' if not reverse and column == col else '')
-        tv.heading(column, text=heading_text, command=lambda _col=column: treeview_sort_column(tv, _col, not reverse))
-
-def natural_keys(text):
-    """
-    Alphanumeric (natural) sort to handle numbers within strings correctly
-    """
-    return [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', text)]
+        treeview.heading(
+            col,
+            text=headings.get(col, col),
+            command=lambda _col=col: sort_column(_col, False),
+            anchor=anchor
+        )
 
 
 ####################################################################################################################################################################
 ################################################################ Window To Set Variables ###########################################################################
 ####################################################################################################################################################################
 
-variable_window = None 
+variable_window = None
 
 def open_variable_window_cond():
     global variable_window
@@ -1307,643 +1331,683 @@ def on_variable_window_close():
     global variable_window
     variable_window.destroy()  # Destroy the window
     variable_window = None  # Reset the reference so it can be reopened
-   
+
 
 ####################################################################################################################################################################
-############################################################## Window To Show Shortcuts ############################################################################
+################################################################ Read/Write Management ###########################################################################
 ####################################################################################################################################################################
-shortcuts_window = None 
+# read_write_window = None
 
-def open_shortcuts_window_cond():
-    global shortcuts_window
+# def open_read_write_window_cond():
+#     global read_write_window
 
-    if shortcuts_window is not None and shortcuts_window.winfo_exists():
-        shortcuts_window.lift()
-        shortcuts_window.focus_force()
-    else:
-        open_shortcuts_window()
-
-def open_shortcuts_window():
-    global shortcuts_window
-
-    shortcuts_window = tk.Toplevel(root)
-    shortcuts_window.title("Shortcuts")
-
-    window_width = 360
-    window_lenght = 300
-    shortcuts_window.geometry(f"{window_width}x{window_lenght}")
-    shortcuts_window.minsize(window_width, window_lenght)
-
-    # Add a label for the title
-    tk.Label(shortcuts_window, text="Available Shortcuts", font=("Segoe UI", 14)).pack(pady=10)
-
-    # Add a frame to contain the shortcuts in a neat layout
-    shortcuts_frame = tk.Frame(shortcuts_window)
-    shortcuts_frame.pack(fill="both", expand=True, padx=10, pady=5)
-
-    # Define the shortcuts and descriptions
-    shortcuts = [
-        ("Ctrl+R", "Reset"),
-        ("Ctrl+G", "Run"),
-        ("Ctrl+S", "Stop"),
-        ("Ctrl+M", "Man/Auto"),
-        ("Ctrl+H", "Disable Horn"),
-        ("Ctrl+C", "Connect to selected LGV"),
-        ("Ctrl+T", "Select first element from the table"),
-    ]
-
-    # Display each shortcut in the frame
-    for shortcut, description in shortcuts:
-        tk.Label(shortcuts_frame, text=shortcut, font=("Segoe UI", 12, "bold")).grid(row=shortcuts.index((shortcut, description)), column=0, sticky="w", padx=10, pady=2)
-        tk.Label(shortcuts_frame, text=description, font=("Segoe UI", 12)).grid(row=shortcuts.index((shortcut, description)), column=1, sticky="w", padx=10, pady=2)
-
-    # Handle window close event to reset the reference
-    shortcuts_window.protocol("WM_DELETE_WINDOW", on_shortcuts_window_close)
+#     if read_write_window is not None and read_write_window.winfo_exists():
+#         read_write_window.lift()
+#         read_write_window.focus_force()
+#     else:
+#         open_read_write_window()
 
 
-def on_shortcuts_window_close():
-    global shortcuts_window
-    shortcuts_window.destroy()  # Destroy the window
-    shortcuts_window = None  # Reset the reference so it can be reopened
+# def open_read_write_window():
+#     global read_write_window
 
-####################################################################################################################################################################
-######################################################## Window To Read/Write Custom Variables #####################################################################
-####################################################################################################################################################################
-read_write_window = None 
+#     read_write_window = tk.Toplevel(root)
+#     read_write_window.title("Read/Write ")
 
-def open_read_write_window_cond():
-    global read_write_window
+#     window_width = 475
+#     window_lenght = 375
+#     read_write_window.geometry(f"{window_width}x{window_lenght}")
+#     read_write_window.minsize(window_width, window_lenght)
 
-    if read_write_window is not None and read_write_window.winfo_exists():
-        read_write_window.lift()
-        read_write_window.focus_force()
-    else:
-        open_read_write_window()
+#     # Apply the icon after the window is initialized
+#     read_write_window.after(100, set_icon, read_write_window)
 
+RW_VARIABLES_FILE = "rw_variables.json"
 
-def open_read_write_window():
-    global read_write_window
+VAR_DELIM = ';' #variable delimiter when reading/writing group of vars
 
-    read_write_window = tk.Toplevel(root)
-    read_write_window.title("Read/Write ")
-
-    window_width = 475
-    window_lenght = 375
-    read_write_window.geometry(f"{window_width}x{window_lenght}")
-    read_write_window.minsize(window_width, window_lenght)
-
-    # Apply the icon after the window is initialized
-    read_write_window.after(100, set_icon, read_write_window)
-
-    RW_VARIABLES_FILE = "rw_variables.json"
-
-    # Predefined and custom variables
-    default_rw_variables = [
-        'PressureGVLs.weightPar.touchingWeight',
-        'CoreGVL.AutoReboot.startRequest', 
-        'CoreGVL.AutoReboot.autorebootDone',
-        'Shutdown.DEBUG_forceShutdown',
-        'LibraryInterfaces.FileManagement.loadRequest[3]']
-    
-    
-    def load_custom_variables():
-        if os.path.exists(RW_VARIABLES_FILE):
-            try:
-                with open(RW_VARIABLES_FILE, "r") as file:
-                    data = json.load(file)
-                    if isinstance(data, list):  # Ensure the data is a list
-                        return data
-                    else:
-                        print("Invalid data format in JSON, resetting to empty list.")
-                        return []
-            except json.JSONDecodeError:
-                print("JSON file is empty or invalid, resetting to empty list.")
-                return []  # Return empty list if the file is invalid
-        else:
-            # Default variables if JSON does not exist
-            return []
-                
-    # Save variables to JSON
-    def save_variables(variables):
-        with open(RW_VARIABLES_FILE, "w") as file:
-            json.dump(variables, file, indent=4)
-            file.write('\n')
-
-    def update_variable_menu(event=None):
-        custom_rw_variables = load_custom_variables()
-
-        combined_rw_variables = sorted (
-            default_rw_variables + custom_rw_variables, key=str.lower
-        )
-        variable_menu["values"] = combined_rw_variables
-    
-    def filter_combobox(event):
-        typed_text = variable_menu.get()
-        custom_rw_variables = load_custom_variables()
-        combined_rw_variables = sorted (default_rw_variables + custom_rw_variables, key=str.lower)
+# Predefined and custom variables
+default_rw_variables = [
+    'PressureGVLs.weightPar.touchingWeight',
+    'CoreGVL.AutoReboot.startRequest',
+    'CoreGVL.AutoReboot.autorebootDone',
+    'Shutdown.DEBUG_forceShutdown',
+    'LibraryInterfaces.FileManagement.loadRequest[3]']
 
 
-        if typed_text == '':
-            filtered_variables = combined_rw_variables
-        else:
-            filtered_variables = [var for var in combined_rw_variables if typed_text.lower() in var.lower()]
-
-        variable_menu['values'] = filtered_variables
-        
-        if filtered_variables and not variable_menu['state'] == 'readonly':
-            variable_menu.event_generate('<Down>')
-
-    # Functions
-    def add_variable():
-        custom_rw_variables = load_custom_variables()
-        new_variable = variable_menu.get().strip()
-
-        if new_variable:
-            # Normalize variable names to avoid issues with spaces around commas
-            normalized_new_variable = ','.join(part.strip() for part in new_variable.split(','))
-
-            # Normalize existing variables for comparison
-            normalized_existing_variables = [
-                ','.join(part.strip() for part in var.split(','))
-                for var in default_rw_variables + custom_rw_variables
-            ]
-
-            if normalized_new_variable.lower() in (var.lower() for var in normalized_existing_variables):
-                # messagebox.showwarning("Duplicate Entry", "This variable already exists.")
-                print("Variable already exists")
-                log_message("Variable already exists")
-            else:
-                custom_rw_variables.append(normalized_new_variable)
-                save_variables(custom_rw_variables)
-                update_variable_menu()
-                print(f"Variable {new_variable} successfully added!")
-                log_message(f"Variable {new_variable} successfully added!")
-        else:
-            print("Please enter a valid variable name.")
-            log_message("Please enter a valid variable name.")
-        
-
-    result_var = tk.StringVar()
-
-    
-    def parse_lgv_range(range_str):
-        """Parse LGV range input into a list of LGV numbers."""
-        lgv_numbers = set()
-        parts = range_str.split(",")
-        for part in parts:
-            if "-" in part:
-                start, end = map(int, part.split("-"))
-                lgv_numbers.update(range(start, end + 1))
-            else:
-                lgv_numbers.add(int(part))
-        return lgv_numbers
-
-    def validate_and_link_lgv():
+def load_custom_variables():
+    if os.path.exists(RW_VARIABLES_FILE):
         try:
-            if lgv_range_entry.get().strip() == '':
-                # messagebox.showerror("Error", "LGV range is empty!")
-                print("LGV range is empty!")
-                log_message("LGV range is empty!")
-                return
-            
-            lgv_numbers = parse_lgv_range(lgv_range_entry.get())
-            found_entries = []
-
-            remaining_children = list(treeview.get_children())
-
-            # Iterate through Treeview to find matching LGVs
-            for lgv in lgv_numbers:
-                for child in remaining_children:
-                    name = treeview.item(child)["values"][0]  # e.g., "LGV01"
-                    match = re.search(r"\d+", name)
-
-                    if match and int(match.group()) == lgv:
-                        amsnet_id = treeview.item(child)["values"][1]
-                        tc_type = treeview.item(child)["values"][2]
-                        found_entries.append((lgv, amsnet_id, tc_type))
-
-                        # Remove matched child from remaining children list 
-                        remaining_children.remove(child)
-                        break
-
-            if len(found_entries) == len(lgv_numbers) and found_entries != []:
-                # Display AMS Net IDs and types for the found LGVs
-                print("LGV data found!")
-                return found_entries
-            else:
-                overflow = len(lgv_numbers) - len(found_entries)
-                if overflow > 0:
-                    raise ValueError(f"Range not matching LGV list. \nContains {overflow} extra elements than in list")
+            with open(RW_VARIABLES_FILE, "r") as file:
+                data = json.load(file)
+                if isinstance(data, list):  # Ensure the data is a list
+                    return data
                 else:
-                    raise ValueError(f"Some LGVs were not found, check range")
-        except ValueError as e:
-            # messagebox.showerror("Invalid Input", f"Error: {e}")
-            print(f"Invalid input. Error: {e}")
-            # messagebox.showerror("Error", f"Invalid input. Error: {e}")
-            log_message(f"Invalid input. Error: {e}")
-            # lgv_range_entry.delete(0, tk.END)
-            return None
-
-
-    # Mapping of symbol type strings to pyads data types
-    if pyads_available: 
-        SYMBOL_TYPE_MAP = {
-            'BOOL'      : pyads.PLCTYPE_BOOL,
-            'INT'       : pyads.PLCTYPE_INT,
-            'DINT'      : pyads.PLCTYPE_DINT,
-            'REAL'      : pyads.PLCTYPE_REAL,
-            'LREAL'     : pyads.PLCTYPE_LREAL,
-            'STRING'    : pyads.PLCTYPE_STRING,
-            'BYTE'      : pyads.PLCTYPE_BYTE,
-            'WORD'      : pyads.PLCTYPE_WORD,
-            'DWORD'     : pyads.PLCTYPE_DWORD,
-            # 'LWORD'     : pyads.PLCTYPE_LWORD,
-            'SINT'      : pyads.PLCTYPE_SINT,
-            'USINT'     : pyads.PLCTYPE_USINT,
-            'UINT'      : pyads.PLCTYPE_UINT,
-            'UDINT'     : pyads.PLCTYPE_UDINT,
-            'LINT'      : pyads.PLCTYPE_LINT,
-            'ULINT'     : pyads.PLCTYPE_ULINT,
-            'TIME'      : pyads.PLCTYPE_TIME,
-            # 'LTIME'     : pyads.PLCTYPE_LTIME,
-            'DATE'      : pyads.PLCTYPE_DATE,
-            'TOD'       : pyads.PLCTYPE_TOD,  # Time of Day
-            'DT'        : pyads.PLCTYPE_DT,    # Date and Time
-            'WSTRING'   : pyads.PLCTYPE_WSTRING,
-        }
+                    print("Invalid data format in JSON, resetting to empty list.")
+                    return []
+        except json.JSONDecodeError:
+            print("JSON file is empty or invalid, resetting to empty list.")
+            return []  # Return empty list if the file is invalid
     else:
-        # Use strings or None so the app loads without crashing
-        SYMBOL_TYPE_MAP = {
-            'BOOL'      : 'BOOL',
-            'INT'       : 'INT',
-            'DINT'      : 'DINT',
-            'REAL'      : 'REAL',
-            'LREAL'     : 'LREAL',
-            'STRING'    : 'STRING',
-            'BYTE'      : 'BYTE',
-            'WORD'      : 'WORD',
-            'DWORD'     : 'DWORD',
-            'SINT'      : 'SINT',
-            'USINT'     : 'USINT',
-            'UINT'      : 'UINT',
-            'UDINT'     : 'UDINT',
-            'LINT'      : 'LINT',
-            'ULINT'     : 'ULINT',
-            'TIME'      : 'TIME',
-            'DATE'      : 'DATE',
-            'TOD'       : 'TOD',
-            'DT'        : 'DT',
-            'WSTRING'   : 'WSTRING',
-        }
+        # Default variables if JSON does not exist
+        return []
 
-    def get_pyads_type(symbol_type_str):
-        """
-        Map the symbol type string to a pyads type, handling arrays and other variations.
-        """
-        # Normalize the type string: Remove array and dimensions, strip whitespace
-        array_match = re.search(r'ARRAY\s*\[.*?\]\s*OF\s*(\w+)', symbol_type_str.strip(), re.IGNORECASE)
-        
-        if array_match:
-            # Extract the base type from the array declaration
-            base_type = array_match.group(1).strip()
-            if base_type in SYMBOL_TYPE_MAP:
-                return SYMBOL_TYPE_MAP[base_type]
+# Save variables to JSON
+def save_variables(variables):
+    with open(RW_VARIABLES_FILE, "w") as file:
+        json.dump(variables, file, indent=4)
+        file.write('\n')
+
+def update_variable_menu(event=None):
+    custom_rw_variables = load_custom_variables()
+
+    combined_rw_variables = sorted (
+        default_rw_variables + custom_rw_variables, key=str.lower
+    )
+    variable_menu["values"] = combined_rw_variables
+
+def filter_combobox(event):
+    if event.state & (0x0001 | 0x0004):  # Shift or Ctrl is pressed
+        return  # Skip filtering
+    
+    typed_text = variable_menu.get()
+    custom_rw_variables = load_custom_variables()
+    combined_rw_variables = sorted (default_rw_variables + custom_rw_variables, key=str.lower)
+
+
+    if typed_text == '':
+        filtered_variables = combined_rw_variables
+    else:
+        filtered_variables = [var for var in combined_rw_variables if typed_text.lower() in var.lower()]
+
+    variable_menu['values'] = filtered_variables
+
+    if filtered_variables and not variable_menu['state'] == 'readonly':
+        variable_menu.event_generate('<Down>')
+
+# Functions
+
+def normalize_variable_name(variable):
+    return VAR_DELIM.join(part.strip() for part in variable.split(VAR_DELIM))
+
+
+def add_variable(event=None):
+    custom_rw_variables = load_custom_variables()
+    new_variable = variable_menu.get().strip()
+
+    if new_variable:
+        normalized_new_variable = normalize_variable_name(new_variable)
+
+        normalized_existing_variables = [
+            normalize_variable_name(var) for var in default_rw_variables + custom_rw_variables
+        ]
+
+        if normalized_new_variable.lower() in (var.lower() for var in normalized_existing_variables):
+            print("Variable already exists")
+            log_message("Variable already exists", "warning")
+        else:
+            custom_rw_variables.append(normalized_new_variable)
+            save_variables(custom_rw_variables)
+            update_variable_menu()
+            print(f"Variable {new_variable} successfully added!")
+            log_message(f"Variable {new_variable} successfully added!", "info")
+    else:
+        print("Please enter a valid variable name.")
+        log_message("Please enter a valid variable name.", "error")
+
+
+def del_variable(event=None):
+    custom_rw_variables = load_custom_variables()
+    variable_to_delete = variable_menu.get().strip()
+
+    if variable_to_delete:
+        normalized_to_delete = normalize_variable_name(variable_to_delete)
+
+        normalized_custom_variables = [normalize_variable_name(var) for var in custom_rw_variables]
+
+        matches = [i for i, var in enumerate(normalized_custom_variables) if var.lower() == normalized_to_delete.lower()]
+        if matches:
+            index_to_remove = matches[0]
+            removed_var = custom_rw_variables.pop(index_to_remove)
+            save_variables(custom_rw_variables)
+            update_variable_menu()
+            print(f"Variable {removed_var} successfully deleted!")
+            log_message(f"Variable {removed_var} successfully deleted!", "info")
+        else:
+            print(f"Variable {variable_to_delete} does not exist in custom list.")
+            log_message("Variable does not exist in custom list.", "warning")
+    else:
+        print("Please enter a valid variable name to delete.")
+        log_message("Please enter a valid variable name to delete.", "error")
+
+
+
+
+
+def parse_lgv_range(range_str):
+    """Parse LGV range input into a list of LGV numbers."""
+    lgv_numbers = set()
+    parts = range_str.split(",")
+    for part in parts:
+        if "-" in part:
+            start, end = map(int, part.split("-"))
+            lgv_numbers.update(range(start, end + 1))
+        else:
+            lgv_numbers.add(int(part))
+    return lgv_numbers
+
+def validate_and_link_lgv():
+    try:
+        if lgv_range_entry.get().strip() == '':
+            # messagebox.showerror("Error", "LGV range is empty!")
+            print("LGV range is empty!")
+            log_message("LGV range is empty!")
+            return
+
+        lgv_numbers = parse_lgv_range(lgv_range_entry.get())
+
+        semaphore_size = min(10, max(3, len(lgv_numbers) // 10 or 1))  # Ensure at least 1
+        global semaphore
+        semaphore = threading.Semaphore(semaphore_size)
+        print(f"Detected {len(lgv_numbers)} LGVs — using semaphore size: {semaphore_size}")
+
+        found_entries = []
+
+        remaining_children = list(treeview.get_children())
+
+        # Iterate through Treeview to find matching LGVs
+        for lgv in lgv_numbers:
+            for child in remaining_children:
+                name = treeview.item(child)["values"][0]  # e.g., "LGV01"
+                match = re.search(r"\d+", name)
+
+                if match and int(match.group()) == lgv:
+                    amsnet_id = treeview.item(child)["values"][1]
+                    tc_type = treeview.item(child)["values"][2]
+                    found_entries.append((lgv, amsnet_id, tc_type))
+
+                    # Remove matched child from remaining children list
+                    remaining_children.remove(child)
+                    break
+
+        if len(found_entries) == len(lgv_numbers) and found_entries != []:
+            # Display AMS Net IDs and types for the found LGVs
+            print("LGV data found!")
+            return found_entries
+        else:
+            overflow = len(lgv_numbers) - len(found_entries)
+            if overflow > 0:
+                raise ValueError(f"Range not matching LGV list. \nContains {overflow} extra elements than in list")
             else:
-                print(f"Unknown array type detected: {symbol_type_str}. Defaulting to BYTE.")
-                return pyads.PLCTYPE_BYTE  # Default for unknown array types
-
-        # Remove any other dimensions or custom suffixes (e.g., STRING(80))
-        normalized_type = re.sub(r'\(.*?\)', '', symbol_type_str.strip())
-
-        # Map to a known type
-        standard_type = SYMBOL_TYPE_MAP.get(normalized_type)
-        if standard_type:
-            return standard_type
-
-        # Handle unknown or custom types
-        print(f"Unknown type detected: {symbol_type_str}. Defaulting to BYTE.")
-        return pyads.PLCTYPE_BYTE  # Default for unknown types
+                raise ValueError(f"Some LGVs were not found, check range")
+    except ValueError as e:
+        # messagebox.showerror("Invalid Input", f"Error: {e}")
+        print(f"Invalid input. Error: {e}")
+        # messagebox.showerror("Error", f"Invalid input. Error: {e}")
+        log_message(f"Invalid input. Error: {e}", "error")
+        # lgv_range_entry.delete(0, tk.END)
+        return None
 
 
-    def check_type(value):
-        """Determine the appropriate PLC data type based on the value."""
-        if isinstance(value, bool):
-            return pyads.PLCTYPE_BOOL
-        elif isinstance(value, int):
-            # Use INT or DINT depending on the size of the integer
-            return pyads.PLCTYPE_INT if -32768 <= value <= 32767 else pyads.PLCTYPE_DINT
-        elif isinstance(value, float):
-            # Use REAL or LREAL based on precision
-            return pyads.PLCTYPE_REAL if abs(value) < 3.4e38 else pyads.PLCTYPE_LREAL
-        elif isinstance(value, str):
-            # Use STRING type for string inputs
-            return pyads.PLCTYPE_STRING
+# Mapping of symbol type strings to pyads data types
+if pyads_available:
+    SYMBOL_TYPE_MAP = {
+        'BOOL'      : pyads.PLCTYPE_BOOL,
+        'INT'       : pyads.PLCTYPE_INT,
+        'DINT'      : pyads.PLCTYPE_DINT,
+        'REAL'      : pyads.PLCTYPE_REAL,
+        'LREAL'     : pyads.PLCTYPE_LREAL,
+        'STRING'    : pyads.PLCTYPE_STRING,
+        'BYTE'      : pyads.PLCTYPE_BYTE,
+        'WORD'      : pyads.PLCTYPE_WORD,
+        'DWORD'     : pyads.PLCTYPE_DWORD,
+        # 'LWORD'     : pyads.PLCTYPE_LWORD,
+        'SINT'      : pyads.PLCTYPE_SINT,
+        'USINT'     : pyads.PLCTYPE_USINT,
+        'UINT'      : pyads.PLCTYPE_UINT,
+        'UDINT'     : pyads.PLCTYPE_UDINT,
+        'LINT'      : pyads.PLCTYPE_LINT,
+        'ULINT'     : pyads.PLCTYPE_ULINT,
+        'TIME'      : pyads.PLCTYPE_TIME,
+        # 'LTIME'     : pyads.PLCTYPE_LTIME,
+        'DATE'      : pyads.PLCTYPE_DATE,
+        'TOD'       : pyads.PLCTYPE_TOD,  # Time of Day
+        'DT'        : pyads.PLCTYPE_DT,    # Date and Time
+        'WSTRING'   : pyads.PLCTYPE_WSTRING,
+    }
+else:
+    # Use strings or None so the app loads without crashing
+    SYMBOL_TYPE_MAP = {
+        'BOOL'      : 'BOOL',
+        'INT'       : 'INT',
+        'DINT'      : 'DINT',
+        'REAL'      : 'REAL',
+        'LREAL'     : 'LREAL',
+        'STRING'    : 'STRING',
+        'BYTE'      : 'BYTE',
+        'WORD'      : 'WORD',
+        'DWORD'     : 'DWORD',
+        'SINT'      : 'SINT',
+        'USINT'     : 'USINT',
+        'UINT'      : 'UINT',
+        'UDINT'     : 'UDINT',
+        'LINT'      : 'LINT',
+        'ULINT'     : 'ULINT',
+        'TIME'      : 'TIME',
+        'DATE'      : 'DATE',
+        'TOD'       : 'TOD',
+        'DT'        : 'DT',
+        'WSTRING'   : 'WSTRING',
+    }
+
+def get_pyads_type(symbol_type_str):
+    """
+    Map the symbol type string to a pyads type, handling arrays and other variations.
+    """
+    # Normalize the type string: Remove array and dimensions, strip whitespace
+    array_match = re.search(r'ARRAY\s*\[.*?\]\s*OF\s*(\w+)', symbol_type_str.strip(), re.IGNORECASE)
+
+    if array_match:
+        # Extract the base type from the array declaration
+        base_type = array_match.group(1).strip()
+        if base_type in SYMBOL_TYPE_MAP:
+            return SYMBOL_TYPE_MAP[base_type]
         else:
-            raise ValueError(f"Unsupported type: {type(value)}")
+            print(f"Unknown array type detected: {symbol_type_str}. Defaulting to BYTE.")
+            return pyads.PLCTYPE_BYTE  # Default for unknown array types
 
-    # Global dictionary to store handles with context
-    handles = {}
-    next_handle_id = 0  # Unique integer handle ID generator
+    # Remove any other dimensions or custom suffixes (e.g., STRING(80))
+    normalized_type = re.sub(r'\(.*?\)', '', symbol_type_str.strip())
 
-    def get_new_handle_id():
-        """Generate a new unique handle ID."""
-        nonlocal next_handle_id
-        handle_id = next_handle_id
-        next_handle_id += 1
-        return handle_id
+    # Map to a known type
+    standard_type = SYMBOL_TYPE_MAP.get(normalized_type)
+    if standard_type:
+        return standard_type
 
-    def on_notification(adr, notification, user_handle):
-        """Callback function to detect when the variable changes."""
-        value = notification.contents.value
-        print(f"Notification: Variable changed to {value}")
+    # Handle unknown or custom types
+    print(f"Unknown type detected: {symbol_type_str}. Defaulting to BYTE.")
+    return pyads.PLCTYPE_BYTE  # Default for unknown types
 
-        # Access the stop event and expected value from the handles dictionary
-        if handles[user_handle]["expected_value"] == value:
-            handles[user_handle]["stop_event"].set()  # Signal to stop notification
 
-    semaphore = threading.Semaphore(5)
+def check_type(value):
+    """Determine the appropriate PLC data type based on the value."""
+    if isinstance(value, bool):
+        return pyads.PLCTYPE_BOOL
+    elif isinstance(value, int):
+        # Use INT or DINT depending on the size of the integer
+        return pyads.PLCTYPE_INT if -32768 <= value <= 32767 else pyads.PLCTYPE_DINT
+    elif isinstance(value, float):
+        # Use REAL or LREAL based on precision
+        return pyads.PLCTYPE_REAL if abs(value) < 3.4e38 else pyads.PLCTYPE_LREAL
+    elif isinstance(value, str):
+        # Use STRING type for string inputs
+        return pyads.PLCTYPE_STRING
+    else:
+        raise ValueError(f"Unsupported type: {type(value)}")
 
-    def safe_write_variable_for_lgv(*args):
-        with semaphore:
-            write_variable_for_lgv(*args)
+# Global dictionary to store handles with context
+handles = {}
+next_handle_id = 0  # Unique integer handle ID generator
 
-    def safe_read_variable_for_lgv(*args):
-        with semaphore:
-            read_variable_for_lgv(*args)
+def get_new_handle_id():
+    """Generate a new unique handle ID."""
+    global next_handle_id
+    handle_id = next_handle_id
+    next_handle_id += 1
+    return handle_id
 
-    def write_variable_for_lgv(lgv, ams_net_id, tc_type, variable_name, display_name, value, result_queue):
-        """Write a variable and confirm it via ADS notification."""
-        # stop_event = threading.Event()  # Event to track when the notification should stop
-        handle_id = get_new_handle_id()
-        print(f"Generated handle: {handle_id}, Type: {type(handle_id)}")
+def on_notification(adr, notification, user_handle):
+    """Callback function to detect when the variable changes."""
+    value = notification.contents.value
+    print(f"Notification: Variable changed to {value}")
 
-        # Store the context in the global handles dictionary
-        # handles[handle_id] = {"expected_value": value, "stop_event": stop_event}
+    # Access the stop event and expected value from the handles dictionary
+    if handles[user_handle]["expected_value"] == value:
+        handles[user_handle]["stop_event"].set()  # Signal to stop notification
 
-        port = 851 if tc_type == "TC3" else 801
 
-        try:
-            # Create a new connection for this LGV
-            with pyads.Connection(ams_net_id, port) as ads_connection:
-                print(f"Establishing connection for LGV {lgv} with AMS Net ID: {ams_net_id}")
+semaphore = threading.Semaphore(MAX_WORKERS)
 
-                # type_var = check_type(value)
 
-                # Get symbol info and determine the appropriate pyads type
-                symbol_info = ads_connection.get_symbol(variable_name)
-                symbol_type_str = symbol_info.symbol_type
-                expected_type = get_pyads_type(symbol_type_str)
+def safe_write_variable_for_lgv(*args):
+    with semaphore:
+        write_variable_for_lgv(*args)
 
-                print(f"Handle ID: {handle_id}, Type: {type(handle_id)}")  # Verify the type
+def safe_read_variable_for_lgv(*args):
+    with semaphore:
+        read_variable_for_lgv(*args)
 
-                # Add a notification with a user handle containing the expected value and stop event
+def safe_read_all_variables_for_lgv(*args):
+    with semaphore:
+        read_all_variables_for_lgv(*args)
 
-                # attr = pyads.NotificationAttrib(sizeof(expected_type))  # Adjust length as needed
-                # notification_handle = ads_connection.add_device_notification(
-                #     variable_name, attr, on_notification, handle_id
-                # )
 
-                # Write the value to the PLC using the provided variable name
-                ads_connection.write_by_name(variable_name, value, expected_type)
-                # print(f"Attempting to write {value} to {variable_name} for LGV {lgv}")
+read_write_in_progress = False
 
-                # # Wait for the notification to confirm the change or timeout after 5 seconds
-                # if not stop_event.wait(timeout=5):
-                #     print(f"Write confirmation timed out for {variable_name} on LGV {lgv}")
-                #     log_message(f"Error: {variable_name} not confirmed for LGV{lgv:02d}")
-                # else:
-                #     print(f"Successfully wrote {value} to {variable_name} for LGV {lgv}")
-                print(f"Variable value in LGV{lgv:02d} is now {value}")
-                # Add result to queue
-                result_queue.put((lgv, display_name, value))
 
-                # Remove the notification after use
-                # ads_connection.del_device_notification(notification_handle, handle_id)
-        except Exception as e:
-            # Add error result to queue
-            result_queue.put((lgv, display_name, e))   
-        # except pyads.ADSError as ads_err:
-        #     # Handle ADS-specific errors with more detail
-        #     error_message = f"Error writing to LGV{lgv:02d}: {ads_err}"
-        #     print(error_message)
-        #     log_message(error_message)
 
-        # except ValueError as val_err:
-        #     # Handle type-related errors
-        #     error_message = f"Value Error for LGV{lgv:02d}: {val_err}"
-        #     print(error_message)
-        #     log_message(error_message)
+def write_variable_for_lgv(lgv, ams_net_id, tc_type, variable_name, display_name, value, result_queue):
+    """Write a variable and confirm it via ADS notification."""
 
-        # except Exception as e:
-        #     # Handle any other general exceptions
-        #     error_message = f"Unexpected error for LGV{lgv:02d}: {str(e)}"
-        #     print(error_message)
-        #     log_message(error_message)
-
+    ip = '.'.join(ams_net_id.split('.')[:4])
+    if not is_host_reachable(ip):
+        print(f"[WRITE] LGV {lgv} unreachable at {ip}, skipping write")
+        result_queue.put((lgv, display_name, "Timeout"))  # or "Unreachable"
+        return
     
-    def convert_to_number(user_input):
-        """Convert input to int or float; return None if conversion fails."""
+    # stop_event = threading.Event()  # Event to track when the notification should stop
+    handle_id = get_new_handle_id()
+    print(f"Generated handle: {handle_id}, Type: {type(handle_id)}")
+
+    # Store the context in the global handles dictionary
+    # handles[handle_id] = {"expected_value": value, "stop_event": stop_event}
+
+    port = 851 if tc_type == "TC3" else 801
+
+    try:
+        # Create a new connection for this LGV
+        with pyads.Connection(ams_net_id, port) as ads_connection:
+            print(f"Establishing connection for LGV {lgv} with AMS Net ID: {ams_net_id}")
+
+            # type_var = check_type(value)
+
+            # Get symbol info and determine the appropriate pyads type
+            symbol_info = ads_connection.get_symbol(variable_name)
+            symbol_type_str = symbol_info.symbol_type
+            expected_type = get_pyads_type(symbol_type_str)
+
+            print(f"Handle ID: {handle_id}, Type: {type(handle_id)}")  # Verify the type
+
+            # Add a notification with a user handle containing the expected value and stop event
+
+            # attr = pyads.NotificationAttrib(sizeof(expected_type))  # Adjust length as needed
+            # notification_handle = ads_connection.add_device_notification(
+            #     variable_name, attr, on_notification, handle_id
+            # )
+
+            # Write the value to the PLC using the provided variable name
+            ads_connection.write_by_name(variable_name, value, expected_type)
+            # print(f"Attempting to write {value} to {variable_name} for LGV {lgv}")
+
+            # # Wait for the notification to confirm the change or timeout after 5 seconds
+            # if not stop_event.wait(timeout=5):
+            #     print(f"Write confirmation timed out for {variable_name} on LGV {lgv}")
+            #     log_message(f"Error: {variable_name} not confirmed for LGV{lgv:02d}")
+            # else:
+            #     print(f"Successfully wrote {value} to {variable_name} for LGV {lgv}")
+            print(f"Variable value in LGV{lgv:02d} is now {value}")
+            # Add result to queue
+            result_queue.put((lgv, display_name, value))
+
+            # Remove the notification after use
+            # ads_connection.del_device_notification(notification_handle, handle_id)
+    except Exception as e:
+        # Add error result to queue
+        result_queue.put((lgv, display_name, e))
+    # except pyads.ADSError as ads_err:
+    #     # Handle ADS-specific errors with more detail
+    #     error_message = f"Error writing to LGV{lgv:02d}: {ads_err}"
+    #     print(error_message)
+    #     log_message(error_message)
+
+    # except ValueError as val_err:
+    #     # Handle type-related errors
+    #     error_message = f"Value Error for LGV{lgv:02d}: {val_err}"
+    #     print(error_message)
+    #     log_message(error_message)
+
+    # except Exception as e:
+    #     # Handle any other general exceptions
+    #     error_message = f"Unexpected error for LGV{lgv:02d}: {str(e)}"
+    #     print(error_message)
+    #     log_message(error_message)
+
+
+def convert_to_number(user_input):
+    """Convert input to int or float; return None if conversion fails."""
+    try:
+        return int(user_input)
+    except ValueError:
         try:
-            return int(user_input)
+            return float(user_input)
         except ValueError:
-            try:
-                return float(user_input)
-            except ValueError:
-                return None  # Not a number, possibly a string
+            return None  # Not a number, possibly a string
 
+
+def rw_write_variable(event=None):
+    """Write variable"""
+    global read_write_in_progress
+
+    variable_names = variable_menu.get().strip()  # Directly get the variable name
+
+    if variable_names == '':
+        # messagebox.showerror("Error", "Variable name missing!")
+        print("Variable name missing!")
+        log_message("Variable name missing!", "error")
+        return
+
+    # Split the input by commas and strip each variable name
+    variables = [var.strip() for var in variable_names.split(VAR_DELIM) if var.strip()]
+
+    if not variables:
+        print("No valid variable names found!")
+        log_message("No valid variable names found!", "warning")
+        return
+
+    # Preprocess variable names for unique representation
+    processed_variables = process_variable_names(variables)
+
+    # Get the validated LGV data
+    lgv_data = validate_and_link_lgv()
+    if lgv_data is None:
+        # messagebox.showerror("Error", "LGV range is empty")
+        return  # Exit if validation failed
     
-    def write_variable():
-        """Start the write operation for all selected LGVs."""
+    if read_write_in_progress :
+        print("Read/Write operation already in progress!")
+        return
 
-        variable_names = variable_menu.get().strip()  # Directly get the variable name
+    # Prepare result table
+    prepare_status_table(lgv_data, list(processed_variables.values()))
 
-        if variable_names == '':
-            # messagebox.showerror("Error", "Variable name missing!")
-            print("Variable name missing!")
-            log_message("Variable name missing!")
-            return
+    # Result queue and thread tracking
+    result_queue = Queue()
+    threads = []
 
-        # Split the input by commas and strip each variable name
-        variables = [var.strip() for var in variable_names.split(';') if var.strip()]
+    radio_value = var_type.get()
+    entry_value = value_entry.get().strip()
 
-        if not variables:
-            print("No valid variable names found!")
-            log_message("No valid variable names found!")
-            return
-        
-        # Preprocess variable names for unique representation
-        processed_variables = process_variable_names(variables)
+    # Validate the entry value: Ignore if it's "True" or "False"
+    if entry_value.lower() in ["true", "false", ""]:
+        value = radio_value  # Use the radio button value if the entry is empty or boolean-like
+    else:
+        # Try to convert to a number, otherwise keep it as a string
+        converted_value = convert_to_number(entry_value)
+        value = converted_value if converted_value is not None else entry_value
 
-        # Get the validated LGV data
-        lgv_data = validate_and_link_lgv()
-        if lgv_data is None:
-            # messagebox.showerror("Error", "LGV range is empty")
-            return  # Exit if validation failed
-        
-        # Prepare result table
-        prepare_status_table(lgv_data, list(processed_variables.values()))
+    # Delete entry_value after reading it to avoid using it the next time
+    clear_entry_field()
 
-        # Result queue and thread tracking
-        result_queue = Queue()
-        threads = []
-        
-        radio_value = var_type.get()
-        entry_value = value_entry.get().strip()
+    # Start a thread for each LGV to perform the write operation
+    for lgv, ams_net_id, tc_type in lgv_data:
+        for variable_name, display_name in processed_variables.items():
+            thread = threading.Thread(
+                target=safe_write_variable_for_lgv,
+                args=(lgv, ams_net_id, tc_type, variable_name, display_name, value, result_queue)
+            )
+            thread.daemon = True
+            thread.start()
+            threads.append(thread)
 
-        # Validate the entry value: Ignore if it's "True" or "False"
-        if entry_value.lower() in ["true", "false", ""]:
-            value = radio_value  # Use the radio button value if the entry is empty or boolean-like
-        else:
-            # Try to convert to a number, otherwise keep it as a string
-            converted_value = convert_to_number(entry_value)
-            value = converted_value if converted_value is not None else entry_value
-        
-        # Delete entry_value after reading it to avoid using it the next time 
-        clear_entry_field()
-        
-        # Start a thread for each LGV to perform the write operation
-        for lgv, ams_net_id, tc_type in lgv_data:
-            for variable_name, display_name in processed_variables.items():
-                thread = threading.Thread(
-                    target=safe_write_variable_for_lgv, 
-                    args=(lgv, ams_net_id, tc_type, variable_name, display_name, value, result_queue)
-                )
-                thread.daemon = True
-                thread.start()
-                threads.append(thread)
+    # Start a background thread to monitor results
+    threading.Thread(
+        target=process_results_in_background,
+        args=(threads, result_queue, lgv_data),
+        daemon=True
+    ).start()
 
-        # Start a background thread to monitor results
-        threading.Thread(
-            target=process_results_in_background,
-            args=(threads, result_queue, lgv_data),
-            daemon=True
-        ).start()
-        
+    read_write_in_progress = True
 
-    def process_variable_names(variables):
-        """
-        Process variable names to determine how many parts to include for uniqueness.
-        If the last parts are unique, keep only the last part.
-        If duplicates exist, include the second-to-last part for disambiguation.
-        """
-        last_parts = {}
-        processed_variables = {}
 
-        # Collect occurrences of last parts
-        for variable in variables:
-            parts = variable.split('.')
-            last_part = parts[-1]
-            last_parts.setdefault(last_part, []).append(variable)
+def process_variable_names(variables):
+    """
+    Process variable names to determine how many parts to include for uniqueness.
+    If the last parts are unique, keep only the last part.
+    If duplicates exist, include the second-to-last part for disambiguation.
+    """
+    last_parts = {}
+    processed_variables = {}
 
-        # Determine the display names for variables
-        for last_part, full_vars in last_parts.items():
-            if len(full_vars) > 1:  # Duplicate last parts found
-                # Include the second-to-last part for these variables
-                for var in full_vars:
-                    parts = var.split('.')
-                    processed_variables[var] = '.'.join(parts[-2:])  # Take last two parts
-            else:  # No duplicate, keep only the last part
-                var = full_vars[0]
+    # Collect occurrences of last parts
+    for variable in variables:
+        parts = variable.split('.')
+        last_part = parts[-1]
+        last_parts.setdefault(last_part, []).append(variable)
+
+    # Determine the display names for variables
+    for last_part, full_vars in last_parts.items():
+        if len(full_vars) > 1:  # Duplicate last parts found
+            # Include the second-to-last part for these variables
+            for var in full_vars:
                 parts = var.split('.')
-                processed_variables[var] = parts[-1]  # Keep only the last part
+                processed_variables[var] = '.'.join(parts[-2:])  # Take last two parts
+        else:  # No duplicate, keep only the last part
+            var = full_vars[0]
+            parts = var.split('.')
+            processed_variables[var] = parts[-1]  # Keep only the last part
 
-        return processed_variables
+    return processed_variables
 
 
-    def read_variable_for_lgv(lgv, ams_net_id, tc_type, variable_name, display_name, result_queue):
-        """Handle reading for each LGV in its own thread."""
-        try:
-            port = 851 if tc_type == "TC3" else 801
-            # Create a new connection for this LGV
-            with pyads.Connection(ams_net_id, port) as ads_connection:
-                print(f"Establishing connection for LGV {lgv} with AMS Net ID: {ams_net_id}")
+def read_variable_for_lgv(lgv, ams_net_id, tc_type, variable_name, display_name, result_queue):
+    """Handle reading for each LGV in its own thread."""
+    try:
+        port = 851 if tc_type == "TC3" else 801
+        # Create a new connection for this LGV
+        with pyads.Connection(ams_net_id, port) as ads_connection:
+            print(f"Establishing connection for LGV {lgv} with AMS Net ID: {ams_net_id}")
 
-                # Get symbol info to validate type and existence
-                symbol_info = ads_connection.get_symbol(variable_name)
-                symbol_type_str = symbol_info.symbol_type
-                expected_type = get_pyads_type(symbol_type_str)
-                
-                # Read the value from the PLC
-                value = ads_connection.read_by_name(variable_name, expected_type)
-                print(f"Successfully read {value} from {variable_name} for LGV {lgv}")
-                
-                # Add result to queue
-                result_queue.put((lgv, display_name, value))
+            # Get symbol info to validate type and existence
+            symbol_info = ads_connection.get_symbol(variable_name)
+            symbol_type_str = symbol_info.symbol_type
+            expected_type = get_pyads_type(symbol_type_str)
 
-                # # Log the read value
-                # log_message(f"{variable_last_part} value in LGV{lgv:02d} is {value}")
+            # Read the value from the PLC
+            value = ads_connection.read_by_name(variable_name, expected_type)
+            print(f"Successfully read {value} from {variable_name} for LGV {lgv}")
 
-        except Exception as e:
-            # Add error result to queue
+            # Add result to queue
+            result_queue.put((lgv, display_name, value))
+
+            # # Log the read value
+            # log_message(f"{variable_last_part} value in LGV{lgv:02d} is {value}")
+
+    except Exception as e:
+        # Add error result to queue
+        result_queue.put((lgv, display_name, e))
+
+def read_all_variables_for_lgv(lgv, ams_net_id, tc_type, processed_variables, result_queue):
+    # Extract IP from ams net id
+    ip = '.'.join(ams_net_id.split('.')[:4])
+
+    # Check if reachable before attempting connection
+    if not is_host_reachable(ip):
+        print(f"[READ] LGV {lgv} unreachable at {ip}, skipping")
+        for display_name in processed_variables.values():
+            result_queue.put((lgv, display_name, "Timeout"))
+        return
+    
+    try:
+        port = 851 if tc_type == "TC3" else 801
+        with pyads.Connection(ams_net_id, port) as ads_connection:
+            print(f"Connected to LGV {lgv} ({ams_net_id})")
+
+            ads_connection.set_timeout(700)
+
+            for variable_name, display_name in processed_variables.items():
+                try:
+                    symbol_info = ads_connection.get_symbol(variable_name)
+                    expected_type = get_pyads_type(symbol_info.symbol_type)
+                    value = ads_connection.read_by_name(variable_name, expected_type)
+                    print(f"Read {value} from {variable_name} for LGV {lgv}")
+                    result_queue.put((lgv, display_name, value))
+                except Exception as e:
+                    result_queue.put((lgv, display_name, e))
+    except Exception as e:
+        for display_name in processed_variables.values():
             result_queue.put((lgv, display_name, e))
 
-    def read_variable():
-        """Start the read operation for all selected LGVs."""
+def rw_read_variable(event=None):
+    """Read variable(s)"""
+    global read_write_in_progress
 
-        variable_names = variable_menu.get().strip()  # Get the variable name directly
+    variable_names = variable_menu.get().strip()  # Get the variable name directly
 
-        if variable_names == '':
-            # messagebox.showerror("Error", "Variable name missing!")
-            print("Variable name missing!")
-            log_message("Variable name missing!")
-            return
+    if variable_names == '':
+        # messagebox.showerror("Error", "Variable name missing!")
+        print("Variable name missing!")
+        log_message("Variable name missing!", "error")
+        return
 
-        # Split the input by commas and strip each variable name
-        variables = [var.strip() for var in variable_names.split(';') if var.strip()]
+    # Split the input by commas and strip each variable name
+    variables = [var.strip() for var in variable_names.split(VAR_DELIM) if var.strip()]
 
-        if not variables:
-            print("No valid variable names found!")
-            log_message("No valid variable names found!")
-            return
-        
-        # Preprocess variable names for unique representation
-        processed_variables = process_variable_names(variables)
+    if not variables:
+        print("No valid variable names found!")
+        log_message("No valid variable names found!", "warning")
+        return
 
-        # Get the validated LGV data
-        lgv_data = validate_and_link_lgv()
-        if lgv_data is None:
-            return  # Exit if validation failed
+    # Preprocess variable names for unique representation
+    processed_variables = process_variable_names(variables)
 
-        # Prepare result table
-        prepare_status_table(lgv_data, list(processed_variables.values()))
+    # Get the validated LGV data
+    lgv_data = validate_and_link_lgv()
+    if lgv_data is None:
+        return  # Exit if validation failed
+    
+    if read_write_in_progress :
+        print("Read/Write operation already in progress!")
+        return
 
-        # Result queue and thread tracking
-        result_queue = Queue()
-        threads = []
+    # Prepare result table
+    prepare_status_table(lgv_data, list(processed_variables.values()))
 
-        # Start a thread for each LGV to perform the read operation
-        for lgv, ams_net_id, tc_type in lgv_data:
-            for variable_name, display_name in processed_variables.items():
-                thread = threading.Thread(
-                    target=safe_read_variable_for_lgv, 
-                    args=(lgv, ams_net_id, tc_type, variable_name, display_name, result_queue)
-                )
-                thread.daemon = True
-                thread.start()
-                threads.append(thread)
+    # Result queue and thread tracking
+    result_queue = Queue()
+    threads = []
 
-        # Start a background thread to monitor results
-        threading.Thread(
-            target=process_results_in_background,
-            args=(threads, result_queue, lgv_data),
-            daemon=True
-        ).start()
+    # Start a thread for each LGV to perform the read operation
+    for lgv, ams_net_id, tc_type in lgv_data:
+        thread = threading.Thread(
+            target=safe_read_all_variables_for_lgv,
+            args=(lgv, ams_net_id, tc_type, processed_variables, result_queue)
+        )
+        thread.daemon = True
+        thread.start()
+        threads.append(thread)
 
-    def process_results_in_background(threads, result_queue, lgv_data):
-        """Monitor threads and process results in the background."""
-        timeout = 0.5
-        start_time = time.time()
+    # Start a background thread to monitor results
+    threading.Thread(
+        target=process_results_in_background,
+        args=(threads, result_queue, lgv_data),
+        daemon=True
+    ).start()
 
-        # Wait for threads to finish or timeout
-        while any(t.is_alive() for t in threads):
-            if time.time() - start_time > timeout:
-                break
-            time.sleep(0.1)
+    read_write_in_progress = True
 
-        # Collect results
-        results = {}
-        responded_lgvs = set()  # Track which LGVs responded
+def process_results_in_background(threads, result_queue, lgv_data):
+    """Monitor threads and update UI as results arrive."""
 
+    # Collect results
+    results = {}
+    responded_lgvs = set()  # Track which LGVs responded
+
+    # Handle LGVs that didn't respond
+    all_lgvs = {lgv for lgv, _, _ in lgv_data}
+    variables = status_table["columns"][1:]
+
+    def check_and_update():
+        # Process new items in the result queue
         while not result_queue.empty():
             lgv, variable, value = result_queue.get()
 
@@ -1955,339 +2019,173 @@ def open_read_write_window():
             results[lgv][variable] = value
 
             # Update the table dynamically
-            root.after(0, update_status_table, lgv, variable, value)
-
-        # Handle LGVs that didn't respond
-        all_lgvs = {lgv for lgv, _, _ in lgv_data}
-        missing_lgvs = all_lgvs - responded_lgvs
-
-        for lgv in missing_lgvs:
-            for variable in status_table["columns"][1:]:  # Skip "LGV" column
-                root.after(0, update_status_table, lgv, variable, "Timeout")
-
-        # Handle variables that weren't updated for responding LGVs
-        for lgv in responded_lgvs:
-            for variable in status_table["columns"][1:]:
-                if variable not in results[lgv]:
-                    root.after(0, update_status_table, lgv, variable, "Timeout")
-
-
-    def prepare_status_table(lgv_data, variables):
-        """Pre-populate the table with LGVs and empty variable columns."""
-        status_table.delete(*status_table.get_children())  # Clear the table
-
-        lgv_overlay.delete(*lgv_overlay.get_children())
-
-        # Set up dynamic columns: LGV + variable columns
-        status_table["columns"] = ["LGV"] + variables
-        status_table.heading("#0", text="", anchor="w")  # Hide default empty column
-        status_table.column("#0", width=0, stretch=tk.NO)
-
-        # Configure columns
-        for col in status_table["columns"]:
-            status_table.heading(col, text=col, anchor="center")
-            status_table.column(col, anchor="center", width=150, stretch=False)  # Set default width
-
-        # Pre-populate rows with LGVs
-        for lgv, ams_net_id, _ in lgv_data:
-            row_values = [f"LGV{lgv:02d}"] + ["" for _ in variables]
-            status_table.insert("", "end", values=row_values)
-
-            lgv_overlay.insert("", "end", values=row_values) # Populate lgv_overlay as well
-
-        setup_rw_data(status_table)
-    
-
-    def update_status_table(lgv, variable, value):
-        """Update the table for a specific LGV and variable."""
-        for child in status_table.get_children():
-            row_values = status_table.item(child, "values")
-            if row_values[0] == f"LGV{lgv:02d}":  # Match the LGV row
-                # Find the column index for the variable
-                column_index = status_table["columns"].index(variable)
-                new_row_values = list(row_values)  # Convert to mutable list
-
-                new_row_values[column_index] = value  # Update the specific cell
-
-                tag = "" if value in ["Timeout", "Error"] else ""
-                status_table.item(child, values=new_row_values, tags=(tag,))  # Update the row
-                break
-        # Adjust column widths
-        adjust_column_width()
-
-
-    def adjust_column_width():
-        """Dynamically adjust the width of each column based on content."""
-        for col in status_table["columns"]:
-            max_length = max(
-                len(str(status_table.set(child, col)))  # Get cell value
-                for child in status_table.get_children()
-            )
-            max_length = max(max_length, len(col))      # Ensure header is included
-            col_width = max(max_length*10, 20)          # Set a minimum width of 20 px in case of single char
-            status_table.column(col, width=col_width)   # Adjust width (10px per char)
-
-
-    # Dictionary to store original column headings for sorting indicators
-    dynamic_headings = {}
-
-    def setup_rw_data(treeview):
-        """
-        Setup sorting for dynamically generated columns.
-        """
-        for col in treeview['columns']:
-            dynamic_headings[col] = col  # Store original column heading
-            treeview.heading(
-                col, 
-                text=col, 
-                command=lambda _col=col: treeview_sort_column(treeview, _col, False), 
-                anchor="center"
-            )
-
-    def treeview_sort_column(tv, col, reverse):
-        """
-        Sort the selected column naturally.
-        """
-        # Retrieve all data from the treeview
-        rows = [(tv.set(k, col), k) for k in tv.get_children('')]
-
-        # Sort the data using natural keys for mixed alphanumeric sorting
-        rows.sort(reverse=reverse, key=lambda t: natural_keys(t[0]))
-
-        # Rearrange items in sorted positions
-        for index, (_, k) in enumerate(rows):
-            tv.move(k, '', index)
-
-        update_lgv_overlay_order(tv)
-
-        # Update column headers to reflect sorting direction
-        for column in tv["columns"]:
-            heading_text = dynamic_headings[column] + (' ↓' if reverse and column == col else ' ↑' if not reverse and column == col else '')
-            tv.heading(column, text=heading_text, command=lambda _col=column: treeview_sort_column(tv, _col, not reverse))
-
-    def natural_keys(text):
-        """
-        Alphanumeric (natural) sorting for numbers within strings.
-        """
-        import re
-        return [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', text)]
-
-    def update_lgv_overlay_order(tv):
-        """
-        Updates the LGV overlay to match the sorted order of the status_table.
-        """
-        lgv_overlay.delete(*lgv_overlay.get_children())  # Clear current overlay
-
-        # Insert LGV numbers in the sorted order
-        for item in tv.get_children(''):
-            lgv_number = tv.item(item, "values")[0]  # Extract LGV number from sorted table
-            lgv_overlay.insert("", "end", values=(lgv_number,))
-
-
-    def clear_entry_field():
-        """Disable value entry if True/False radio is selected."""
-        value_entry.delete(0, tk.END)  # Clear the entry field
-
-    def log_message(message):
-        """Insert log messages into a messagebox."""
-        # read_write_window.after(0, lambda: status_widget.insert(tk.END, message + "\n"))
-        # read_write_window.after(0, status_widget.see, tk.END)  # Scroll to the bottom
-        messagebox.showerror("Error", message)
-
-    def clear_status():
-        """Clear the content of the status widget."""
-        # status_widget.delete(1.0, tk.END)  # Clear all content
-
-    # Variables Frame
-    variable_frame = ttk.LabelFrame(read_write_window, text="Variables")
-    variable_frame.grid(row=0, column=0, padx=10, pady=5, sticky="nsew")
-
-    # ttk.Label(variable_frame, text="Select or Add Variable:").grid(row=0, column=0, padx=5, pady=5)
-    variable_menu = ttk.Combobox(variable_frame)
-    variable_menu.grid(row=0, column=0, padx=5, pady=5, sticky='ew')
-    variable_menu.bind('<ButtonPress>', update_variable_menu)
-    # Bind the filter function to update on key release
-    variable_menu.bind('<Tab>', filter_combobox)
-
-    # variable_menu.configure(postcommand=lambda:filter_combobox(None))
-
-    ttk.Button(variable_frame, text="Add Variable", command=add_variable).grid(row=0, column=1, padx=5, pady=5)
-
-    # Value Input Frame
-    value_frame = ttk.LabelFrame(read_write_window, text="Set Value")
-    value_frame.grid(row=1, column=0, padx=10, pady=5, sticky="nsew")
-
-    # Allow variable_frame to expand horizontally
-    read_write_window.columnconfigure(0, weight=1)
-    variable_frame.columnconfigure(0, weight=1)
-
-    bool_value_frame = ttk.Frame(value_frame)
-    bool_value_frame.grid(row=0, column=0, padx=5, pady=5)
-
-    var_type = tk.BooleanVar()
-    true_radio = ttk.Radiobutton(bool_value_frame, text="True", variable=var_type, value=True, command=clear_entry_field)
-    true_radio.grid(row=0, column=0, padx=5, pady=5)
-
-    false_radio = ttk.Radiobutton(bool_value_frame, text="False", variable=var_type, value=False, command=clear_entry_field)
-    false_radio.grid(row=0, column=1, padx=5, pady=5)
-
-    entry_value_frame = ttk.Frame(value_frame)
-    entry_value_frame.grid(row=0, column=1, padx=5, pady=5)
-    ttk.Label(entry_value_frame, text="Other:").grid(row=0, column=0, padx=5, pady=5)
-    value_entry = ttk.Entry(entry_value_frame)
-    value_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
-
-    # Keyboard shortcut functions
-    def select_true(event=None):
-        var_type.set(True)
-        clear_entry_field()
-
-    def select_false(event=None):
-        var_type.set(False)
-        clear_entry_field()
-
-    def focus_other_entry(event=None):
-        value_entry.focus_set()
-
-    # Bind shortcuts to root window
-    read_write_window.bind('<Control-t>', select_true)
-    read_write_window.bind('<Control-T>', select_true)
-
-    read_write_window.bind('<Control-f>', select_false)
-    read_write_window.bind('<Control-F>', select_false)
-
-    read_write_window.bind('<Control-e>', focus_other_entry)
-    read_write_window.bind('<Control-E>', focus_other_entry)
-
-    # LGV Range Frame
-    lgv_frame = ttk.Frame(read_write_window)
-    lgv_frame.grid(row=2, column=0, padx=10, pady=5, sticky="ew")
-
-    input_frame = ttk.Frame(lgv_frame)
-    input_frame.grid(row=0, column=0, padx=5, pady=5)
-    ttk.Label(input_frame, text="LGV:").grid(row=0, column=0, padx=5, pady=5)
-    lgv_range_entry = ttk.Entry(input_frame)
-    lgv_range_entry.grid(row=0, column=1, padx=5, pady=5)
-
-    # Buttons Frame
-    button_frame = ttk.Frame(lgv_frame)
-    button_frame.grid(row=0, column=2, columnspan=2, pady=10, padx=30, sticky='e')
-
-    read_button = ttk.Button(button_frame, text="Read", command=read_variable)
-    read_button.grid(row=0, column=0, padx=10, ipadx=2, ipady=2)
-    write_button = ttk.Button(button_frame, text="Write", command=write_variable)
-    write_button.grid(row=0, column=1, padx=10, ipadx=2, ipady=2)
-
-    # Bind keyboard shortcuts to the toplevel window
-    read_write_window.bind("<Control-r>", lambda event: read_variable())
-    read_write_window.bind("<Control-R>", lambda event: read_variable())
-    read_write_window.bind("<Control-w>", lambda event: write_variable())
-    read_write_window.bind("<Control-W>", lambda event: write_variable())
-
-    # Status table frame
-    status_table_frame = ttk.Frame(read_write_window)
-    status_table_frame.grid(row=4, column=0, columnspan=2, sticky="nsew")
-
-
-    # LGV overlay Treeview
-    lgv_overlay = ttk.Treeview(
-        status_table_frame,
-        show="headings",
-        height=5
-        # selectmode="none"  # Prevent selection
-    )
-    lgv_overlay.grid(row=0, column=0, padx=(15,0), pady=(5,0), sticky="nsw")  # Align to the left
-    lgv_overlay["columns"] = ["LGV"]
-    lgv_overlay.heading("LGV", text="LGV", anchor="center")
-    lgv_overlay.column("LGV", width=70, stretch=False, anchor="center")
-
-    lgv_overlay.grid_remove()  # Hide overlay initially
-
-    # Disable vertical scrolling on the LGV overlay
-    lgv_overlay.unbind("<MouseWheel>")  # Disable mouse scroll (Windows)
-    lgv_overlay.unbind("<Button-4>")    # Disable mouse scroll up (Linux)
-    lgv_overlay.unbind("<Button-5>")    # Disable mouse scroll down (Linux)
-
-    # Prevent programmatic vertical scrolling
-    lgv_overlay.yview = lambda *args: None
-
-
-    # Add the dynamic status table
-    status_table = ttk.Treeview(
-        status_table_frame,
-        show="headings",
-        height=5
-    )
-    status_table.grid(row=0, column=0, padx=(15,0), pady=(5,0), sticky="nsew")
-
-    # Configure tags for the status table (e.g., red text for errors)
-    status_table.tag_configure("error", foreground="red")
-
-    # Configure scrollbars for the status table
-    scroll_y = ttk.Scrollbar(status_table_frame, orient="vertical", command=status_table.yview)   
-    scroll_y.grid(row=0, column=1, sticky="ns")
-
-    scroll_x = ttk.Scrollbar(status_table_frame, orient="horizontal", command=status_table.xview)
-    scroll_x.grid(row=1, column=0, columnspan=2, sticky="ew")
-
-
-   # Make the table frame expandable
-    status_table_frame.grid_columnconfigure(0, weight=1)
-    status_table_frame.grid_rowconfigure(0, weight=1)
-
-     
-    # Function to check LGV column visibility
-    def toggle_lgv_overlay(*args):
-        """Show or hide the LGV overlay depending on the visibility of the LGV column."""
-        x = status_table.xview()[0]  # Get the normalized scroll position (0 to 1)
-        if x > 0:  # If the scroll position is not at the beginning
-            lgv_overlay.grid()  # Show overlay
-            lgv_overlay.lift()
-        else:
-            lgv_overlay.grid_remove()  # Hide overlay
-
-    def update_lgv_overlay(*args):
-        # Handle vertical scrolling for visible rows (yscroll)
-        lgv_overlay.delete(*lgv_overlay.get_children())  # Clear current rows in overlay
-
-        # Get visible range
-        visible_fraction = status_table.yview()  # Returns (start, end) as fractions
-        total_rows = len(status_table.get_children())  # Total rows in the Treeview
-
-        # Calculate visible row indices
-        first_visible_row = int(visible_fraction[0] * total_rows)
-        last_visible_row = min(int(visible_fraction[1] * total_rows)-1, total_rows-1)
+            update_status_table(lgv, variable, value)
         
-        # Populate overlay with visible rows only
-        for i in range(first_visible_row, last_visible_row+1):
-            lgv_name = f"LGV{(i+1):02d}"  # Example LGV name (adjust to your data) 
-            lgv_overlay.insert("", "end", values=(lgv_name,))
-            print(f" First elem: {first_visible_row}, Last elem: {last_visible_row}, {len(status_table.get_children())}")
+        # If all threads are done, handle timeouts and stop scheduling
+        if all(not t.is_alive() for t in threads):
+            missing_lgvs = all_lgvs - responded_lgvs
+
+            for lgv in missing_lgvs:
+                for variable in variables:
+                    update_status_table(lgv, variable, "Timeout")
+
+            # Handle variables that weren't updated for responding LGVs
+            for lgv in responded_lgvs:
+                for variable in variables:
+                    if variable not in results[lgv]:
+                        update_status_table(lgv, variable, "Timeout")
+            
+            # Reset the flag after all threads are done
+            global read_write_in_progress
+            read_write_in_progress = False
+
+        else:
+            # Schedule next check
+            root.after(200, check_and_update)
+
+    # Start checking 
+    root.after(200, check_and_update)
 
 
-    # Attach the function to the horizontal scrollbar
-    status_table.configure(
-        xscrollcommand=lambda *args: (scroll_x.set(*args), toggle_lgv_overlay(*args)),
-        yscrollcommand=lambda *args: (scroll_y.set(*args), update_lgv_overlay(*args))
-    )
+def prepare_status_table(lgv_data, variables):
+    """Pre-populate the table with LGVs and empty variable columns."""
+    status_table.delete(*status_table.get_children())  # Clear the table
 
-    update_lgv_overlay()
-   
+    lgv_overlay.delete(*lgv_overlay.get_children())
 
-    # Make the window layout expand properly
-    read_write_window.grid_rowconfigure(4, weight=1)
-    read_write_window.grid_columnconfigure(0, weight=1)
-    read_write_window.grid_columnconfigure(1, weight=1)
+    print("Preparing table with variables:", variables)
+    print("Current children:", status_table.get_children())
+    print("Current columns:", status_table["columns"])
 
-    exceptions = [value_frame, read_button, write_button]
+    # Set up dynamic columns: LGV + variable columns
+    status_table["columns"] = ["LGV"] + variables
+    status_table.heading("#0", text="", anchor="w")  # Hide default empty column
+    status_table.column("#0", width=0, stretch=tk.NO)
 
-    # Handle window close event to reset the reference
-    read_write_window.protocol("WM_DELETE_WINDOW", on_read_write_window_close)
+    # Configure columns
+    for col in status_table["columns"]:
+        status_table.heading(col, text=col, anchor="center")
+        header_lenght = len(str(col))
+        col_width = max(header_lenght * 10, 50)
+        status_table.column(col, anchor="center", width=col_width, stretch=False)  # Set default width
 
-def on_read_write_window_close():
-    global read_write_window
-    read_write_window.destroy()
-    read_write_window = None
+    # Pre-populate rows with LGVs
+    for lgv, ams_net_id, _ in sorted(lgv_data, key=lambda x: x[0]):
+        row_id = f"LGV{lgv:02d}"
+        row_values = [row_id] + ["" for _ in variables]
+        status_table.insert("", "end", iid=row_id, values=row_values)
+
+        lgv_overlay.insert("", "end", iid=row_id, values=row_values) # Populate lgv_overlay as well
+
+    status_headings = {col: col for col in status_table["columns"]}
+
+    setup_sortable_treeview(status_table, status_headings, 'center', on_sorted=update_lgv_overlay)
+
+
+def update_status_table(lgv, variable, value):
+    """Update the table for a specific LGV and variable."""
+    row_id = f"LGV{lgv:02d}"
+    try:
+        item = status_table.item(row_id)
+        values = list(item["values"])
+
+        if variable in status_table["columns"]:
+            col_index = status_table["columns"].index(variable)
+            values[col_index] = value
+
+            tag = "" if value in ["Timeout", "Error"] else ""
+            status_table.item(row_id, values=values, tags=(tag,))
+    except Exception as e:
+        print(f"Failed to update status for {row_id}, variable {variable}: {e}")
+
+    # Adjust column widths
+    adjust_column_width()
+
+
+def adjust_column_width():
+    """Dynamically adjust the width of each column based on content."""
+    if not status_table.get_children():
+        return
+
+    if not status_table["columns"]:
+        return
+    
+    # status_table["displaycolumns"] = status_table["columns"]
+
+    for col in status_table["columns"]:
+        max_length = max(
+            len(str(status_table.set(child, col)))  # Get cell value
+            for child in status_table.get_children()
+        )
+        max_length = max(max_length, len(col))      # Ensure header is included
+        col_width = max(max_length*10, 20)          # Set a minimum width of 20 px in case of single char
+        status_table.column(col, width=col_width, stretch=False)   # Adjust width (10px per char)
+
+
+# # Dictionary to store original column headings for sorting indicators
+# dynamic_headings = {}
+
+# def setup_rw_data(treeview):
+#     """
+#     Setup sorting for dynamically generated columns.
+#     """
+#     for col in treeview['columns']:
+#         dynamic_headings[col] = col  # Store original column heading
+#         treeview.heading(
+#             col,
+#             text=col,
+#             command=lambda _col=col: treeview_sort_column(treeview, _col, False),
+#             anchor="center"
+#         )
+
+
+# def update_lgv_overlay_order(treeview):
+#     """
+#     Updates the LGV overlay to match the sorted order of the status_table.
+#     """
+#     lgv_overlay.delete(*lgv_overlay.get_children())  # Clear current overlay
+
+#     # Insert LGV numbers in the sorted order
+#     for item in treeview.get_children(''):
+#         lgv_number = treeview.item(item, "values")[0]  # Extract LGV number from sorted table
+#         lgv_overlay.insert("", "end", values=(lgv_number,))
+
+
+def clear_entry_field():
+    """Disable value entry if True/False radio is selected."""
+    value_entry.delete(0, tk.END)  # Clear the entry field
+
+def log_message(message, showtype="error"):
+    """Insert log messages into a messagebox."""
+    # read_write_window.after(0, lambda: status_widget.insert(tk.END, message + "\n"))
+    # read_write_window.after(0, status_widget.see, tk.END)  # Scroll to the bottom
+    match showtype.lower():
+        case "error":
+            messagebox.showerror("Error", message)
+        case "warning":
+            messagebox.showwarning("Warning", message)
+        case "info":
+            messagebox.showinfo("Info", message)
+
+def clear_status():
+    """Clear the content of the status widget."""
+    # status_widget.delete(1.0, tk.END)  # Clear all content
+
+
+#     # Make the window layout expand properly
+#     read_write_window.grid_rowconfigure(4, weight=1)
+#     read_write_window.grid_columnconfigure(0, weight=1)
+#     read_write_window.grid_columnconfigure(1, weight=1)
+
+#     exceptions = [value_frame, read_button, write_button]
+
+#     # Handle window close event to reset the reference
+#     read_write_window.protocol("WM_DELETE_WINDOW", on_read_write_window_close)
+
+# def on_read_write_window_close():
+#     global read_write_window
+#     read_write_window.destroy()
+#     read_write_window = None
 
 
     # entry to input LGV range
@@ -2302,10 +2200,354 @@ def on_read_write_window_close():
 
     # Read and write will be multi thread
 
+###################################################################### Helper methods #########################################################################
+
+def is_host_reachable(host, timeout=1):
+    """Ping the host to check if it is reachable."""
+    # Define the ping command based on the OS
+    if platform.system().lower() == "windows":
+        ping_cmd = ["ping", "-n", "1", "-w", str(timeout * 1000), host]
+        creation_flags = subprocess.CREATE_NO_WINDOW
+    else:
+        ping_cmd = ["ping", "-c", "1", "-W", str(timeout), host]
+        creation_flags = 0
+
+    try:
+        subprocess.run(
+            ping_cmd, 
+            stdout=subprocess.DEVNULL, 
+            stderr=subprocess.DEVNULL, 
+            check=True, 
+            timeout=timeout + 1,
+            creationflags=creation_flags
+        )
+        return True
+    except subprocess.TimeoutExpired:
+        # print(f"Ping to {host} timed out.")
+        return False
+    except subprocess.CalledProcessError:
+        # print(f"Ping to {host} failed.")
+        return False
+    
 
 ####################################################################################################################################################################
-####################################################################### Create UI ##################################################################################
+################################################################### Shortcuts Window ###############################################################################
 ####################################################################################################################################################################
+
+global_shortcuts = [
+    ("Ctrl+Shift+Tab", "Change between tabs"),
+    ("F1", "Show shortcuts help")
+]
+
+
+def get_action_name(func):
+    if hasattr(func, "__doc__") and func.__doc__:
+        return func.__doc__.strip()
+    elif hasattr(func, "__name__"):
+        return func.__name__.replace('_', ' ').capitalize()
+    return "Action"
+
+
+shortcuts_window = None
+shortcuts_frame = None
+shortcuts_title_label = None
+
+shortcuts_window_position = None
+
+def toggle_shortcuts_window(event=None):
+    global shortcuts_window, shortcuts_window_position
+
+    if shortcuts_window is not None and shortcuts_window.winfo_exists():
+        geometry = shortcuts_window.geometry()  # e.g. "420x400+123+456"
+        # Extract just the +x+y part
+        pos = geometry.split('+')
+        if len(pos) >= 3:
+            shortcuts_window_position = f"+{pos[1]}+{pos[2]}"
+
+        shortcuts_window.destroy()
+        shortcuts_window = None
+    else:
+        tab_text = notebook.tab(notebook.select(), "text")
+        open_shortcuts_window(tab_text=tab_text)
+
+
+
+def open_shortcuts_window(event=None, tab_text=None):
+    global shortcuts_window, shortcuts_frame, shortcuts_title_label
+
+    if tab_text is None:
+        tab_text = notebook.tab(notebook.select(), "text")
+
+    if shortcuts_window is not None and shortcuts_window.winfo_exists():
+        refresh_shortcuts_window(tab_text)
+        shortcuts_window.lift()
+        shortcuts_window.focus_force()
+        return
+
+    shortcuts_window = tk.Toplevel(root)
+    shortcuts_window.title(f"Shortcuts — {tab_text}")
+
+    window_width = 420
+    window_lenght = 470
+    if shortcuts_window_position:
+        shortcuts_window.geometry(f"{window_width}x{window_lenght}{shortcuts_window_position}")
+    else:
+        shortcuts_window.geometry(f"{window_width}x{window_lenght}")
+    shortcuts_window.minsize(window_width, window_lenght)
+
+    # Add a label for the title
+    shortcuts_title_label = ttk.Label(shortcuts_window, text=f"Available Shortcuts — {tab_text}", font=("Segoe UI", 14))
+    shortcuts_title_label.pack(pady=10)
+
+    # Add a frame to contain the shortcuts in a neat layout
+    shortcuts_frame = tk.Frame(shortcuts_window)
+    shortcuts_frame.pack(fill="both", expand=True, padx=10, pady=5)
+
+    refresh_shortcuts_window(tab_text)
+
+    # Handle window close event to reset the reference
+    shortcuts_window.protocol("WM_DELETE_WINDOW", on_shortcuts_window_close)
+
+
+def refresh_shortcuts_window(tab_text):
+    global shortcuts_frame, shortcuts_window, shortcuts_title_label
+
+    shortcuts_window.title(f"Shortcuts — {tab_text}")
+    shortcuts_title_label.config(text=f"Available Shortcuts — {tab_text}")
+
+    actions = tab_shortcut_actions.get(tab_text, {})
+
+    for widget in shortcuts_frame.winfo_children():
+        widget.destroy()
+
+    combined_shortcuts = []
+
+    for key, config in actions.get("press_release", {}).items():
+        combined_shortcuts.append((f"Ctrl+{key.upper()}", f"{config['action'].capitalize()} (hold)"))
+
+    for key, func in actions.get("single_action", {}).items():
+        combined_shortcuts.append((f"Ctrl+{key.upper()}", get_action_name(func)))
+
+    if not combined_shortcuts:
+        combined_shortcuts.append(("—", "No shortcuts available for this tab"))
+
+    # Add global shortcuts
+    if global_shortcuts:
+        combined_shortcuts.append(("", ""))
+        combined_shortcuts.append(("— Global Shortcuts —", ""))
+        combined_shortcuts += global_shortcuts
+
+    # Display in grid
+    for i, (shortcut, description) in enumerate(combined_shortcuts):
+        font_style = ("Segoe UI", 12, "bold") if shortcut.startswith("Ctrl") or shortcut.startswith("F") else ("Segoe UI", 11, "italic")
+        tk.Label(shortcuts_frame, text=shortcut, font=font_style).grid(row=i, column=0, sticky="w", padx=10, pady=2)
+        tk.Label(shortcuts_frame, text=description, font=("Segoe UI", 12)).grid(row=i, column=1, sticky="w", padx=10, pady=2)
+
+
+def on_shortcuts_window_close():
+    global shortcuts_window
+    shortcuts_window.destroy()
+    shortcuts_window = None
+
+    
+############################################################## Shortcut management #######################################################
+current_tab_shortcuts = []
+
+def create_tab_shortcut_actions():
+    return {
+        TAB_NAME[0]: {
+            "press_release": {
+                'r': {
+                    'action': 'reset',
+                    'button': reset_button,
+                    'press_value': True,
+                    'release_value': False
+                },
+                'g': {
+                    'action': 'run',
+                    'button': run_button,
+                    'press_value': True,
+                    'release_value': False
+                },
+                's': {
+                    'action': 'stop',
+                    'button': stop_button,
+                    'press_value': False,
+                    'release_value': True
+                },
+                'm': {
+                    'action': 'man_auto',
+                    'button': man_auto_button,
+                    'press_value': True,
+                    'release_value': False
+                }
+            },
+            "single_action": {
+                'h': trigger_dis_horn,
+                'c': connect_to_plc,
+                't': focus_and_select_first
+            }
+        },
+
+        TAB_NAME[1]: {
+            "press_release": {},
+            "single_action": {
+                't': select_true,
+                'f': select_false,
+                'x': focus_var_entry, # it's the same as windows cut
+                'e': focus_other_entry,
+                'l': focus_lgv_entry,
+                'r': rw_read_variable,
+                'w': rw_write_variable
+                # 'a': add_variable,
+                # 'd': del_variable
+            }
+        }
+    }
+
+
+def bind_tab_shortcuts(tab_text):
+    global current_tab_shortcuts
+    for shortcut in current_tab_shortcuts:
+        root.unbind(shortcut)
+    current_tab_shortcuts.clear()
+
+    if tab_text not in tab_shortcut_actions:
+        return
+
+    tab_actions = tab_shortcut_actions[tab_text]
+
+    # --- Press + Release shortcuts ---
+    for key, config in tab_actions.get("press_release", {}).items():
+        for case in (key.lower(), key.upper()):
+            press_shortcut = f"<Control-{case}>"
+            release_shortcut = f"<KeyRelease-{case}>"
+
+            def make_press_handler(c=config):
+                return lambda e: on_button_action(c['action'], c['press_value'], c['button'])
+
+            def make_release_handler(c=config):
+                return lambda e: on_button_action(c['action'], c['release_value'], c['button'], is_release=True)
+
+            root.bind(press_shortcut, make_press_handler())
+            root.bind(release_shortcut, make_release_handler())
+
+            current_tab_shortcuts.extend([press_shortcut, release_shortcut])
+
+    # --- Single-action shortcuts (press only) ---
+    for key, func in tab_actions.get("single_action", {}).items():
+        for case in (key.lower(), key.upper()):
+            shortcut = f"<Control-{case}>"
+            root.bind(shortcut, func)
+            current_tab_shortcuts.append(shortcut)
+
+
+####################################################################  UI methods ###############################################################
+
+# Keyboard shortcut functions
+def select_true(event=None):
+    var_type.set(True)
+    clear_entry_field()
+
+def select_false(event=None):
+    var_type.set(False)
+    clear_entry_field()
+
+def focus_other_entry(event=None):
+    value_entry.focus_set()
+
+def focus_lgv_entry(event=None):
+    lgv_range_entry.focus_set()
+
+def focus_var_entry(event=None):
+    variable_menu.focus_set()
+
+# Function to check LGV column visibility
+def toggle_lgv_overlay(*args):
+    """Show or hide the LGV overlay depending on the visibility of the LGV column."""
+    x = status_table.xview()[0]  # Get the normalized scroll position (0 to 1)
+    if x > 0:  # If the scroll position is not at the beginning
+        lgv_overlay.grid()  # Show overlay
+        lgv_overlay.lift()
+    else:
+        lgv_overlay.grid_remove()  # Hide overlay
+
+def update_lgv_overlay_deprecated(*args):
+    # Handle vertical scrolling for visible rows (yscroll)
+    lgv_overlay.delete(*lgv_overlay.get_children())  # Clear current rows in overlay
+
+    # Get visible range
+    visible_fraction = status_table.yview()  # Returns (start, end) as fractions
+    total_rows = len(status_table.get_children())  # Total rows in the Treeview
+
+    # Calculate visible row indices
+    first_visible_row = int(visible_fraction[0] * total_rows)
+    last_visible_row = min(int(visible_fraction[1] * total_rows)-1, total_rows-1)
+
+    all_items = treeview.get_children()
+    visible_items = all_items[first_visible_row:last_visible_row + 1]
+
+    # Populate overlay with visible rows only
+    for item in visible_items:
+        lgv_name = treeview.item(item, "values")[0]
+        lgv_overlay.insert("", "end", values=(lgv_name,))
+        # print(f" First elem: {first_visible_row}, Last elem: {last_visible_row}, {len(status_table.get_children())}")
+
+
+def update_lgv_overlay(*args):
+    """
+    Updates the LGV overlay to show only visible rows, in the current sorted order.
+    """
+    lgv_overlay.delete(*lgv_overlay.get_children())  # Clear overlay
+
+    # Get current sorted and filtered items
+    all_items = status_table.get_children()
+
+    # Determine visible range
+    visible_fraction = status_table.yview()
+    total_items = len(all_items)
+    first_visible_index = int(visible_fraction[0] * total_items)
+    last_visible_index = min(int(visible_fraction[1] * total_items), total_items)  # no -1 here
+
+    visible_items = all_items[first_visible_index:last_visible_index]
+
+    # Add only visible sorted items
+    for item_id in visible_items:
+        lgv_name = status_table.item(item_id, "values")[0]
+        lgv_overlay.insert("", "end", values=(lgv_name,))
+
+
+def on_tab_changed(event):
+    selected_tab = event.widget.select()
+    tab_text = event.widget.tab(selected_tab, "text")
+
+    bind_tab_shortcuts(tab_text)
+
+    if shortcuts_window is not None and shortcuts_window.winfo_exists():
+        refresh_shortcuts_window(tab_text)
+
+    # if tab_text == TAB_NAME[1]:
+    #     root.after(10, lambda: variable_menu.focus_set())
+    #     print(f"Widget in {TAB_NAME[1]} is focused")
+    # else:
+    #     root.focus_set()
+
+
+def select_next_tab(event=None):
+    current = notebook.index(notebook.select())
+    total = len(notebook.tabs())
+    notebook.select((current + 1) % total)
+    print("next tab")
+    return "break"  # prevents default behavior
+
+def select_previous_tab(event=None):
+    current = notebook.index(notebook.select())
+    total = len(notebook.tabs())
+    prev_index = (current - 1) % total
+    notebook.select(prev_index)
+    print("previous tab")
+    return "break"
+
 
 ############################# Set GUI icon ##########################
 def set_icon(window):
@@ -2313,6 +2555,10 @@ def set_icon(window):
         window.iconbitmap(icon_path)
     else:
         print("Icon file not found.")
+
+####################################################################################################################################################################
+####################################################################### Create UI ##################################################################################
+####################################################################################################################################################################
 
 
 # Create the root window
@@ -2331,8 +2577,8 @@ else:
     icon_path = os.path.abspath(__icon__)
 # root.iconbitmap(icon_path)
 
-window_width = 490
-window_lenght = 425
+window_width = 480
+window_lenght = 460
 root.geometry(f"{window_width}x{window_lenght}")
 root.minsize(window_width, window_lenght)
 
@@ -2342,34 +2588,53 @@ root.after(100, set_icon, root)
 
 style = ttk.Style()
 
-style.configure("LGV.TButton", 
+style.configure("LGV.TButton",
                 padding=(4,4),
                 anchor="center",
-                foreground='black', 
+                foreground='black',
                 font=("Segoe UI", 18))
 
-style.configure("LGV.Pressed.TButton", 
+style.configure("LGV.Pressed.TButton",
                 padding=(4,4),
                 anchor="center",
-                foreground='#2D68C4', 
+                foreground='#2D68C4',
                 font=("Segoe UI", 18, "bold"))
 # #1E90FF, #1560bd, #005A9C, #1877F2, #0071c5, #1C39BB, #2D68C4
 
-style.configure("LGV.Connected.TButton", 
+style.configure("LGV.Connected.TButton",
                 padding=(4,4),
                 anchor="center",
-                foreground='green', 
+                foreground='green',
                 font=("Segoe UI", 18, "bold"))
 
-style.configure("LGV.Disconnected.TButton", 
+style.configure("LGV.Disconnected.TButton",
                 padding=(4,4),
                 anchor="center",
-                foreground='red',  
+                foreground='red',
                 font=("Segoe UI", 18))
 
 style.configure("Connect.TButton",
                 padding=2,
                 font=("Segoe UI", 13))
+
+style.configure("TNotebook.Tab",
+                padding=[3, 5],
+                font=("Segoe UI", 9))
+
+
+notebook = ttk.Notebook(root)
+notebook.grid(row=1, column=0, columnspan=2, sticky="nsew")
+
+main_tab = ttk.Frame(notebook, style="TNotebook.Tab")
+read_write_tab = ttk.Frame(notebook, style="TNotebook.Tab")
+
+notebook.add(main_tab, text=TAB_NAME[0])
+notebook.add(read_write_tab, text=TAB_NAME[1])
+
+
+# Bind Ctrl+Tab and Ctrl+Shift+Tab
+root.bind_all("<Control-Tab>", select_next_tab)
+root.bind_all("<Control-Shift-Tab>", select_previous_tab)
 
 
 # Create the menu bar
@@ -2385,50 +2650,53 @@ menu_bar.add_cascade(label="  File ", menu=file_menu)
 options_menu = tk.Menu(menu_bar, tearoff=0)
 options_menu.add_command(label="Set Variables    ", command=open_variable_window_cond)
 options_menu.add_command(label="Reset to Defaults ", command=reset_to_defaults)
-menu_bar.add_cascade(label=" Options ", menu=options_menu) 
+menu_bar.add_cascade(label=" Options ", menu=options_menu)
 
-more_menu = tk.Menu(menu_bar, tearoff=0)
-more_menu.add_command(label="Read/Write    ", command=open_read_write_window_cond)
-menu_bar.add_cascade(label=" More ", menu=more_menu)
+# more_menu = tk.Menu(menu_bar, tearoff=0)
+# more_menu.add_command(label="Read/Write    ", command=open_read_write_window_cond)
+# menu_bar.add_cascade(label=" More ", menu=more_menu)
 
 about_menu = tk.Menu(menu_bar, tearoff=0)
-about_menu.add_command(label="Shortcuts    ", command=open_shortcuts_window_cond)
+about_menu.add_command(label="Shortcuts    ", command=open_shortcuts_window)
 menu_bar.add_cascade(label=" About", menu=about_menu)
 
-   
+root.bind_all("<F1>", toggle_shortcuts_window)
 
 root.config(menu=menu_bar)
 
 # Update the menu based on whether the file exists
 update_menu()
 
+update_tabs()
 
-frame_connect = ttk.Frame(root, width=100)
+
+frame_connect = ttk.Frame(main_tab, width=100)
 # frame_connect.grid_propagate(False)
 frame_connect.grid(row=0, column=0, padx=20, pady=5)
-
-# Add a button to connect to the PLC
-connect_button = ttk.Button(frame_connect, text="Connect", style='Connect.TButton')
-connect_button.grid(row=0, column=1, padx=10, ipady=4, sticky='w')
-bind_connect_button_action(connect_button, connect_function=connect_to_plc,
-                            shortcuts=['<Control-c>', '<Control-C>'])
-
 
 # Create a label as an indicator
 core_status_label = ttk.Label(frame_connect, text="No Core Lib", foreground="#4682B4") # #3CB371, #6495ED, 4682B4
 core_status_label.grid(row=0, column=0, padx=20, pady=0, sticky='e')
 
 
+# Add a button to connect to the PLC
+connect_button = ttk.Button(frame_connect, text="Connect", style='Connect.TButton')
+connect_button.grid(row=0, column=1, padx=10, ipady=4, sticky='w')
+connect_button.bind("<ButtonPress>", connect_to_plc)
+
+# bind_connect_button_action(connect_button, connect_function=connect_to_plc,
+#                             shortcuts=['<Control-c>', '<Control-C>'])
+
+
 
 # Connection status label
-status_label = ttk.Label(root, text="Disconnected", foreground="red", font=("Segoe UI", 13))
+status_label = ttk.Label(main_tab, text="Disconnected", foreground="red", font=("Segoe UI", 13))
 status_label.grid(row=0, column=1, padx=5, pady=5)
 
 
 
-
 # Create a frame for the table (Treeview)
-table_frame = ttk.Frame(root)
+table_frame = ttk.Frame(main_tab)
 table_frame.grid(row=1, column=0, padx=10, pady=20, sticky='nsew')
 
 # Let the table_frame expand its contents
@@ -2445,11 +2713,11 @@ columns = ("Name", "NetId", "Type")
 treeview = ttk.Treeview(table_frame, columns=columns, show="headings")
 
 # Define the column widths
-treeview.column("Name", width=80, anchor='w')
+treeview.column("Name", width=70, anchor='w')
 treeview.column("NetId", width=120, anchor='w')
 treeview.column("Type", width=50, anchor='w')
 
-setup_treeview()
+setup_sortable_treeview(treeview, main_headings)
 
 # Add the treeview to the table frame
 treeview.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -2457,7 +2725,7 @@ treeview.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 treeview.bind("<<TreeviewSelect>>", on_treeview_select)
 treeview.bind('<Delete>', delete_selected_record)
 
-bind_treeview_focus_action(treeview, focus_shortcuts=['<Control-t>', '<Control-T>'])
+# bind_treeview_focus_action(treeview, focus_shortcuts=['<Control-t>', '<Control-T>'])
 
 # Create a vertical scrollbar for the table
 scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=treeview.yview)
@@ -2468,72 +2736,46 @@ scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
 
 # Create a frame for the buttons
-button_frame = ttk.Frame(root, width=170, height=350)
+button_frame = ttk.Frame(main_tab, width=170, height=350)
 button_frame.pack_propagate(False)
 button_frame.grid(row=1, column=1, padx=10, pady=10, sticky='new')
 
 
 # Add some buttons to the right frame
-reset_button = ttk.Button(button_frame, 
-                          text="Reset", 
+reset_button = ttk.Button(button_frame,
+                          text="Reset",
                           style='LGV.TButton')
                         #   command=lambda: bind_button_actions(reset_button, 'reset'))
                         #   command=lambda: on_button_action_wrapper('reset', True, False, reset_button))
 reset_button.pack(pady=5, fill='x', expand=True, ipady=6)
-bind_button_actions(reset_button, 'reset', 
-                    shortcuts=[('<Control-r>', '<KeyRelease-r>'),
-                               ('<Control-R>', '<KeyRelease-R>')])
+bind_button_actions(reset_button, 'reset')
 
-run_button = ttk.Button(button_frame, 
+run_button = ttk.Button(button_frame,
                         text="Run",
                         style='LGV.TButton')
                         # command=lambda: on_button_action_wrapper('run', True, False, run_button))
 run_button.pack(pady=5, fill='x', expand=True, ipady=6)
-bind_button_actions(run_button, 'run', 
-                    shortcuts=[('<Control-g>', '<KeyRelease-g>'),
-                               ('<Control-G>', '<KeyRelease-G>')])
+bind_button_actions(run_button, 'run')
 
-stop_button = ttk.Button(button_frame, 
-                         text="Stop", 
+stop_button = ttk.Button(button_frame,
+                         text="Stop",
                          style='LGV.Pressed.TButton')
                         #  command=lambda: on_button_action_wrapper('stop', False, True, stop_button))
 stop_button.pack(pady=5, fill='x', expand=True, ipady=6)
-bind_button_actions(stop_button, 'stop', 
-                    shortcuts=[('<Control-s>', '<KeyRelease-s>'),
-                               ('<Control-S>', '<KeyRelease-S>')], 
-                    press_value=False, release_value=True)
+bind_button_actions(stop_button, 'stop', press_value=False, release_value=True)
 
-man_auto_button = ttk.Button(button_frame, 
+man_auto_button = ttk.Button(button_frame,
                              text="Man/Auto",
                              style='LGV.TButton')
                             #  command=lambda: on_button_action_wrapper('man_auto', True, False, man_auto_button))
 man_auto_button.pack(pady=5, fill='x', expand=True, ipady=6)
-bind_button_actions(man_auto_button, 'man_auto', 
-                    shortcuts=[('<Control-m>', '<KeyRelease-m>'),
-                               ('<Control-M>', '<KeyRelease-M>')])
+bind_button_actions(man_auto_button, 'man_auto')
 
-dis_horn_button = ttk.Button(button_frame, 
-                             text="Disable Horn",   
-                             style='LGV.TButton', 
-                             command=lambda: on_dis_horn_button_click(dis_horn_button))
+dis_horn_button = ttk.Button(button_frame,
+                             text="Disable Horn",
+                             style='LGV.TButton',
+                             command=trigger_dis_horn)
 dis_horn_button.pack(pady=5, fill='x', expand=True, ipady=6)
-
-
-# bind_toggle_button_action(dis_horn_button, 
-#                         #   function=on_test_button_click, 
-#                           function=on_dis_horn_button_click(dis_horn_button),
-#                           shortcuts=[('<Control-h>', '<Control-H>')])
-
-root.bind_all('<Control-h>', lambda event: on_dis_horn_button_click(dis_horn_button))
-root.bind_all('<Control-H>', lambda event: on_dis_horn_button_click(dis_horn_button))
-
-# Test to ensure that <Control-h> triggers
-# root.bind('<Control-h>', lambda event: print("Ctrl+H shortcut detected in root"))  # Test at the root level
-
-# # Test to ensure that <Control-h> triggers
-# root.bind('<Control-d>', lambda event: print("Ctrl+D shortcut detected in root"))  # Test at the root level
-
-# root.bind('<Control-r>', lambda event: print("Ctrl+R shortcut detected in root"))  # Test at the root level
 
 
 disable_control_buttons()
@@ -2546,6 +2788,154 @@ variable_write = load_variables()
 start_read_thread()
 
 root.after(100, process_status_updates)
+
+######################################################### RW Panel #################################################################
+
+# Variables Frame
+variable_frame = ttk.LabelFrame(read_write_tab, text="Variables")
+variable_frame.grid(row=0, column=0, padx=10, pady=5, sticky="nsew")
+
+# ttk.Label(variable_frame, text="Select or Add Variable:").grid(row=0, column=0, padx=5, pady=5)
+variable_menu = ttk.Combobox(variable_frame)
+variable_menu.grid(row=0, column=0, padx=5, pady=5, sticky='ew')
+variable_menu.bind('<ButtonPress>', update_variable_menu)
+# Bind the filter function to update on key release
+variable_menu.bind('<Tab>', filter_combobox)
+
+# variable_menu.configure(postcommand=lambda:filter_combobox(None))
+
+add_var_btn = ttk.Button(variable_frame, text="Add", width=5, command=add_variable)
+add_var_btn.grid(row=0, column=1, padx=(5,2.5), pady=5)
+
+del_var_btn = ttk.Button(variable_frame, text="Del", width=5, command=del_variable)
+del_var_btn.grid(row=0, column=2, padx=(2.5,5), pady=5)
+
+# Extend variable_frame sideways
+variable_frame.grid_columnconfigure(0, weight=1)
+# variable_frame.grid_rowconfigure(0, weight=1)
+
+# Value Input Frame
+value_frame = ttk.LabelFrame(read_write_tab, text="Set Value")
+value_frame.grid(row=1, column=0, padx=10, pady=5, sticky="nsew")
+
+
+
+bool_value_frame = ttk.Frame(value_frame)
+bool_value_frame.grid(row=0, column=0, padx=5, pady=5)
+
+var_type = tk.BooleanVar()
+true_radio = ttk.Radiobutton(bool_value_frame, text="True", variable=var_type, value=True, command=clear_entry_field)
+true_radio.grid(row=0, column=0, padx=5, pady=5)
+
+false_radio = ttk.Radiobutton(bool_value_frame, text="False", variable=var_type, value=False, command=clear_entry_field)
+false_radio.grid(row=0, column=1, padx=5, pady=5)
+
+entry_value_frame = ttk.Frame(value_frame)
+entry_value_frame.grid(row=0, column=1, padx=5, pady=5)
+ttk.Label(entry_value_frame, text="Other:").grid(row=0, column=0, padx=5, pady=5)
+value_entry = ttk.Entry(entry_value_frame)
+value_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
+
+
+# LGV Range Frame
+lgv_frame = ttk.Frame(read_write_tab)
+lgv_frame.grid(row=2, column=0, padx=10, pady=5, sticky="ew")
+
+input_frame = ttk.Frame(lgv_frame)
+input_frame.grid(row=0, column=0, padx=5, pady=5)
+ttk.Label(input_frame, text="LGV:").grid(row=0, column=0, padx=5, pady=5)
+lgv_range_entry = ttk.Entry(input_frame)
+lgv_range_entry.grid(row=0, column=1, padx=5, pady=5)
+
+# Buttons Frame
+button_frame = ttk.Frame(lgv_frame)
+button_frame.grid(row=0, column=2, columnspan=2, pady=10, padx=30, sticky='e')
+
+read_button = ttk.Button(button_frame, text="Read", command=rw_read_variable)
+read_button.grid(row=0, column=0, padx=10, ipadx=2, ipady=2)
+write_button = ttk.Button(button_frame, text="Write", command=rw_write_variable)
+write_button.grid(row=0, column=1, padx=10, ipadx=2, ipady=2)
+
+
+# Status table frame
+status_table_frame = ttk.Frame(read_write_tab)
+status_table_frame.grid(row=4, column=0, columnspan=2, sticky="nsew")
+
+status_table_frame.grid_columnconfigure(0, weight=1)
+status_table_frame.grid_rowconfigure(0, weight=1)
+
+
+# LGV overlay Treeview
+lgv_overlay = ttk.Treeview(
+    status_table_frame,
+    show="headings",
+    height=5
+    # selectmode="none"  # Prevent selection
+)
+lgv_overlay.grid(row=0, column=0, padx=(15,0), pady=(5,0), sticky="nsw")  # Align to the left
+lgv_overlay["columns"] = ["LGV"]
+lgv_overlay.heading("LGV", text="LGV", anchor="center")
+lgv_overlay.column("LGV", width=70, stretch=False, anchor="center")
+
+lgv_overlay.grid_remove()  # Hide overlay initially
+
+# Disable vertical scrolling on the LGV overlay
+lgv_overlay.unbind("<MouseWheel>")  # Disable mouse scroll (Windows)
+lgv_overlay.unbind("<Button-4>")    # Disable mouse scroll up (Linux)
+lgv_overlay.unbind("<Button-5>")    # Disable mouse scroll down (Linux)
+
+# Prevent programmatic vertical scrolling
+lgv_overlay.yview = lambda *args: None
+
+
+# Add the dynamic status table
+status_table = ttk.Treeview(
+    status_table_frame,
+    show="headings",
+    height=5
+)
+
+status_table.grid(row=0, column=0, padx=(15,0), pady=(5,0), sticky="nsew")
+
+# Configure tags for the status table (e.g., red text for errors)
+status_table.tag_configure("error", foreground="red")
+
+# Extend status_table sideways
+status_table.grid_columnconfigure(0, weight=1)
+# status_table.grid_rowconfigure(0, weight=1)
+
+# Configure scrollbars for the status table
+scroll_y = ttk.Scrollbar(status_table_frame, orient="vertical", command=status_table.yview)
+scroll_y.grid(row=0, column=1, sticky="ns")
+
+scroll_x = ttk.Scrollbar(status_table_frame, orient="horizontal", command=status_table.xview)
+scroll_x.grid(row=1, column=0, columnspan=2, sticky="ew")
+
+# Attach the function to the horizontal scrollbar
+status_table.configure(
+    xscrollcommand=lambda *args: (scroll_x.set(*args), toggle_lgv_overlay(*args)),
+    yscrollcommand=lambda *args: (scroll_y.set(*args), update_lgv_overlay(*args))
+)
+
+
+root.grid_columnconfigure(0, weight=1)
+root.grid_rowconfigure(1, weight=1)
+
+# Make the table in the main tab expandable downwards
+main_tab.grid_columnconfigure(0, weight=0)
+main_tab.grid_rowconfigure(1, weight=1)
+
+# Make the window layout expand properly
+read_write_tab.grid_rowconfigure(4, weight=1)
+read_write_tab.grid_columnconfigure(0, weight=1)
+
+
+update_lgv_overlay()
+
+notebook.bind("<<NotebookTabChanged>>", on_tab_changed)
+
+
+tab_shortcut_actions = create_tab_shortcut_actions()
 
 def on_closing():
     close_current_connection()  # Close connection before exiting
@@ -2564,7 +2954,7 @@ root.mainloop()
 # root.focus_set()
 
 
-# 1. select LGV, 
+# 1. select LGV,
 # changing lgv drops previous connection
 
 
