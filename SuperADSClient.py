@@ -28,7 +28,7 @@ if not pyads_available:
     # messagebox.showerror("Attention", "No pyads available")
     print("No pyads available")
 
-__version__ = '2.5.1.8'
+__version__ = '2.5.2'
 __icon__ = "./plc.ico"
 
 TAB_NAME = ['Control', 'RW Panel']
@@ -1795,6 +1795,7 @@ def convert_to_number(user_input):
             return None  # Not a number, possibly a string
 
 
+@reentry_guard
 def rw_write_variable(event=None):
     """Write variable"""
     global read_write_in_progress
