@@ -2050,8 +2050,17 @@ def rw_read_variable(event=None):
 START_ICON = "▶"   # Start Live Read
 STOP_ICON = "🛑"    # Stop Live Read
 
+live_read_toggle_lock = False
+
 def toggle_periodic_reading(event=None):
-    global periodic_reading_active
+    global periodic_reading_active, live_read_toggle_lock
+
+    if live_read_toggle_lock:
+        return
+    
+    live_read_toggle_lock = True
+
+    root.after(500, lambda:unlock_live_read_toggle())
 
     if not periodic_reading_active:
         start_periodic_reading()
@@ -2061,6 +2070,10 @@ def toggle_periodic_reading(event=None):
         stop_periodic_reading()
         live_read_button.config(text=START_ICON)
         tooltip_text.set("Start Live Read")
+
+def unlock_live_read_toggle():
+    global live_read_toggle_lock
+    live_read_toggle_lock = False
 
 def start_periodic_reading():
     global periodic_reading_active
