@@ -28,7 +28,7 @@ if not pyads_available:
     # messagebox.showerror("Attention", "No pyads available")
     print("No pyads available")
 
-__version__ = '2.5.1.7'
+__version__ = '2.5.1.8'
 __icon__ = "./plc.ico"
 
 TAB_NAME = ['Control', 'RW Panel']
@@ -39,6 +39,21 @@ LGV_DATA = "lgv_data.xml"
 current_ads_connection = None
 
 connection_active = False
+
+############################################################# Helper logic methods #################################################################################
+
+def reentry_guard(func):
+    """Prevents the function from being entered again while it's already running."""
+    def wrapper(*args, **kwargs):
+        if getattr(func, "_is_running", False):
+            print(f"[Guarded] {func.__name__} is already running.")
+            return
+        func._is_running = True
+        try:
+            return func(*args, **kwargs)
+        finally:
+            func._is_running = False
+    return wrapper
 
 ####################################################################################################################################################################
 ########################################################## Initial data reading from xml file ######################################################################
@@ -1955,7 +1970,7 @@ def read_all_variables_for_lgv(lgv, ams_net_id, tc_type, processed_variables, re
         for display_name in processed_variables.values():
             result_queue.put((lgv, display_name, e))
 
-
+@reentry_guard
 def rw_read_variable(event=None):
     """Read variable(s)"""
     global read_write_in_progress, periodic_reading_active
@@ -2048,19 +2063,10 @@ def rw_read_variable(event=None):
 
 #################################### Live Read Control ####################################
 START_ICON = "▶"   # Start Live Read
-STOP_ICON = "🛑"    # Stop Live Read
-
-live_read_toggle_lock = False
+STOP_ICON = "◼"    # Stop Live Read
 
 def toggle_periodic_reading(event=None):
-    global periodic_reading_active, live_read_toggle_lock
-
-    if live_read_toggle_lock:
-        return
-    
-    live_read_toggle_lock = True
-
-    root.after(500, lambda:unlock_live_read_toggle())
+    global periodic_reading_active
 
     if not periodic_reading_active:
         start_periodic_reading()
@@ -2070,10 +2076,6 @@ def toggle_periodic_reading(event=None):
         stop_periodic_reading()
         live_read_button.config(text=START_ICON)
         tooltip_text.set("Start Live Read")
-
-def unlock_live_read_toggle():
-    global live_read_toggle_lock
-    live_read_toggle_lock = False
 
 def start_periodic_reading():
     global periodic_reading_active
@@ -2662,7 +2664,7 @@ def select_previous_tab(event=None):
     print("previous tab")
     return "break"
 
-def on_lgv_entry_change(*args):
+def on_user_intervention(*args):
     global periodic_reading_active
     if periodic_reading_active:
         stop_periodic_reading()
@@ -2676,8 +2678,20 @@ def create_tooltip(widget, text_var):
 
     def on_enter(event):
         tooltip.config(text=text_var.get())
-        x, y = event.x_root-50, event.y_root-80
-        tooltip.place(x=x, y=y)
+        # Place it in the global reference
+        # tooltip.place(x=400, y=160)
+
+        widget = event.widget
+
+        # Use widget-relative placement inside the same parent
+        tooltip.place(
+            in_=widget,  # Anchor to the button
+            relx=0.5,    # Centered horizontally
+            rely=0.0,    # Just above the button
+            x=0,
+            y=0,       # Shift up
+            anchor="s"   # Anchor the bottom center of tooltip to relx/rel...
+        )
 
     def on_leave(event):
         tooltip.place_forget()
@@ -2940,7 +2954,7 @@ variable_menu.bind('<ButtonPress>', update_variable_menu)
 # Bind the filter function to update on key release
 variable_menu.bind('<Tab>', filter_combobox)
 
-variable_entry_var.trace_add('write', on_lgv_entry_change)
+variable_entry_var.trace_add('write', on_user_intervention)
 
 # variable_menu.configure(postcommand=lambda:filter_combobox(None))
 
@@ -2989,7 +3003,7 @@ lgv_entry_var = tk.StringVar()
 lgv_range_entry = ttk.Entry(input_frame, textvariable=lgv_entry_var)
 lgv_range_entry.grid(row=0, column=1, padx=5, pady=5)
 
-lgv_entry_var.trace_add('write', on_lgv_entry_change)
+lgv_entry_var.trace_add('write', on_user_intervention)
 
 # Buttons Frame
 button_frame = ttk.Frame(lgv_frame)
