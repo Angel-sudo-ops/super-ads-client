@@ -28,7 +28,7 @@ if not pyads_available:
     # messagebox.showerror("Attention", "No pyads available")
     print("No pyads available")
 
-__version__ = '2.5.1.5'
+__version__ = '2.5.1.7'
 __icon__ = "./plc.ico"
 
 TAB_NAME = ['Control', 'RW Panel']
@@ -1684,6 +1684,12 @@ def safe_read_all_variables_for_lgv(*args):
 
 read_write_in_progress = False
 
+periodic_reading_active = False
+
+# LGV Retry Tracking
+timeout_counters = {}  # {lgv: count}
+skip_until = {}        # {lgv: timestamp}
+
 
 
 def write_variable_for_lgv(lgv, ams_net_id, tc_type, variable_name, display_name, value, result_queue):
@@ -1778,6 +1784,10 @@ def rw_write_variable(event=None):
     """Write variable"""
     global read_write_in_progress
 
+    if read_write_in_progress :
+        print("Read/Write operation already in progress!")
+        return
+
     variable_names = variable_menu.get().strip()  # Directly get the variable name
 
     if variable_names == '':
@@ -1803,9 +1813,6 @@ def rw_write_variable(event=None):
         # messagebox.showerror("Error", "LGV range is empty")
         return  # Exit if validation failed
     
-    if read_write_in_progress :
-        print("Read/Write operation already in progress!")
-        return
 
     # Prepare result table
     prepare_status_table(lgv_data, list(processed_variables.values()))
@@ -1913,6 +1920,12 @@ def read_all_variables_for_lgv(lgv, ams_net_id, tc_type, processed_variables, re
     # Check if reachable before attempting connection
     if not is_host_reachable(ip):
         print(f"[READ] LGV {lgv} unreachable at {ip}, skipping")
+
+        timeout_counters[lgv] = timeout_counters.get(lgv, 0) + 1
+        if timeout_counters[lgv] >= 5:
+            skip_until[lgv] = time.time() + 10  # Skip for 10 seconds
+            print(f"[Skip] {lgv} will be skipped for 10 seconds due to consecutive failures")
+
         for display_name in processed_variables.values():
             result_queue.put((lgv, display_name, "Timeout"))
         return
@@ -1931,15 +1944,25 @@ def read_all_variables_for_lgv(lgv, ams_net_id, tc_type, processed_variables, re
                     value = ads_connection.read_by_name(variable_name, expected_type)
                     print(f"Read {value} from {variable_name} for LGV {lgv}")
                     result_queue.put((lgv, display_name, value))
+                    timeout_counters[lgv]=0 # Reset timeout counter on success
                 except Exception as e:
                     result_queue.put((lgv, display_name, e))
     except Exception as e:
+        timeout_counters[lgv] = timeout_counters.get(lgv, 0) + 1
+        if timeout_counters[lgv] >= 5:
+            skip_until[lgv] = time.time() + 10  # Skip for 10 seconds
+            print(f"[Skip] {lgv} will be skipped for 10 seconds due to consecutive failures")
         for display_name in processed_variables.values():
             result_queue.put((lgv, display_name, e))
 
+
 def rw_read_variable(event=None):
     """Read variable(s)"""
-    global read_write_in_progress
+    global read_write_in_progress, periodic_reading_active
+
+    if read_write_in_progress :
+        print("Read/Write operation already in progress!")
+        return
 
     variable_names = variable_menu.get().strip()  # Get the variable name directly
 
@@ -1947,6 +1970,14 @@ def rw_read_variable(event=None):
         # messagebox.showerror("Error", "Variable name missing!")
         print("Variable name missing!")
         log_message("Variable name missing!", "error")
+
+         # --- STOP LIVE READ if active ---
+        if periodic_reading_active:
+            stop_periodic_reading()
+            live_read_button.config(text=START_ICON)
+            tooltip_text.set("Start Live Read")
+        
+        read_write_in_progress = False
         return
 
     # Split the input by commas and strip each variable name
@@ -1955,6 +1986,14 @@ def rw_read_variable(event=None):
     if not variables:
         print("No valid variable names found!")
         log_message("No valid variable names found!", "warning")
+
+         # --- STOP LIVE READ if active ---
+        if periodic_reading_active:
+            stop_periodic_reading()
+            live_read_button.config(text=START_ICON)
+            tooltip_text.set("Start Live Read")
+        
+        read_write_in_progress = False
         return
 
     # Preprocess variable names for unique representation
@@ -1963,11 +2002,17 @@ def rw_read_variable(event=None):
     # Get the validated LGV data
     lgv_data = validate_and_link_lgv()
     if lgv_data is None:
+
+         # --- STOP LIVE READ if active ---
+        if periodic_reading_active:
+            stop_periodic_reading()
+            live_read_button.config(text=START_ICON)
+            tooltip_text.set("Start Live Read")
+        
+        read_write_in_progress = False
+
         return  # Exit if validation failed
     
-    if read_write_in_progress :
-        print("Read/Write operation already in progress!")
-        return
 
     # Prepare result table
     prepare_status_table(lgv_data, list(processed_variables.values()))
@@ -1978,6 +2023,11 @@ def rw_read_variable(event=None):
 
     # Start a thread for each LGV to perform the read operation
     for lgv, ams_net_id, tc_type in lgv_data:
+
+        if lgv in skip_until and time.time() < skip_until[lgv]:
+            print(f"[Skip] Skipping {lgv} due to consecutive timeouts")
+            continue
+
         thread = threading.Thread(
             target=safe_read_all_variables_for_lgv,
             args=(lgv, ams_net_id, tc_type, processed_variables, result_queue)
@@ -1995,6 +2045,49 @@ def rw_read_variable(event=None):
 
     read_write_in_progress = True
 
+
+#################################### Live Read Control ####################################
+START_ICON = "▶"   # Start Live Read
+STOP_ICON = "🛑"    # Stop Live Read
+
+def toggle_periodic_reading(event=None):
+    global periodic_reading_active
+
+    if not periodic_reading_active:
+        start_periodic_reading()
+        live_read_button.config(text=STOP_ICON)
+        tooltip_text.set("Stop Live Read")
+    else:
+        stop_periodic_reading()
+        live_read_button.config(text=START_ICON)
+        tooltip_text.set("Start Live Read")
+
+def start_periodic_reading():
+    global periodic_reading_active
+    periodic_reading_active = True
+    threading.Thread(target=periodic_read_loop, daemon=True).start()
+
+def stop_periodic_reading():
+    global periodic_reading_active
+    periodic_reading_active = False
+
+
+#################################### Periodic Read Loop ###################################
+LIVE_READ_INTERVAL = 1.0
+
+def periodic_read_loop():
+    while periodic_reading_active:
+        
+        if not read_write_in_progress:
+            rw_read_variable()
+
+        # Wait for read to complete
+        while read_write_in_progress:
+            time.sleep(0.05)
+        
+        time.sleep(LIVE_READ_INTERVAL)
+
+
 def process_results_in_background(threads, result_queue, lgv_data):
     """Monitor threads and update UI as results arrive."""
 
@@ -2002,11 +2095,16 @@ def process_results_in_background(threads, result_queue, lgv_data):
     results = {}
     responded_lgvs = set()  # Track which LGVs responded
 
+    # Determine LGVs actively read in this cycle (skipped LGVs won't be in here)
+    active_lgvs = {lgv for lgv, _, _ in lgv_data if lgv not in skip_until or time.time() >= skip_until[lgv]}
+
     # Handle LGVs that didn't respond
-    all_lgvs = {lgv for lgv, _, _ in lgv_data}
+    # all_lgvs = {lgv for lgv, _, _ in lgv_data}
     variables = status_table["columns"][1:]
 
     def check_and_update():
+        nonlocal results, responded_lgvs
+
         # Process new items in the result queue
         while not result_queue.empty():
             lgv, variable, value = result_queue.get()
@@ -2023,7 +2121,7 @@ def process_results_in_background(threads, result_queue, lgv_data):
         
         # If all threads are done, handle timeouts and stop scheduling
         if all(not t.is_alive() for t in threads):
-            missing_lgvs = all_lgvs - responded_lgvs
+            missing_lgvs = active_lgvs - responded_lgvs
 
             for lgv in missing_lgvs:
                 for variable in variables:
@@ -2032,10 +2130,9 @@ def process_results_in_background(threads, result_queue, lgv_data):
             # Handle variables that weren't updated for responding LGVs
             for lgv in responded_lgvs:
                 for variable in variables:
-                    if variable not in results[lgv]:
+                    if lgv not in results or variable not in results[lgv]:
                         update_status_table(lgv, variable, "Timeout")
             
-            # Reset the flag after all threads are done
             global read_write_in_progress
             read_write_in_progress = False
 
@@ -2047,11 +2144,15 @@ def process_results_in_background(threads, result_queue, lgv_data):
     root.after(200, check_and_update)
 
 
+################################################ Adjust results table ####################################
 def prepare_status_table(lgv_data, variables):
     """Pre-populate the table with LGVs and empty variable columns."""
     status_table.delete(*status_table.get_children())  # Clear the table
 
-    lgv_overlay.delete(*lgv_overlay.get_children())
+    try:
+        lgv_overlay.delete(*lgv_overlay.get_children())
+    except tk.TclError as e:
+        print(f"[Warning] Tried to clear lgv_overlay but got: {e}")
 
     print("Preparing table with variables:", variables)
     print("Current children:", status_table.get_children())
@@ -2548,6 +2649,29 @@ def select_previous_tab(event=None):
     print("previous tab")
     return "break"
 
+def on_lgv_entry_change(*args):
+    global periodic_reading_active
+    if periodic_reading_active:
+        stop_periodic_reading()
+        live_read_button.config(text=START_ICON)
+        tooltip_text.set("Start Live Read")
+
+# Tooltip Logic
+def create_tooltip(widget, text_var):
+    tooltip = tk.Label(root, text="", bg="white", relief="solid", bd=1, font=("helvetica", "8", "normal"), padx=1, pady=1)
+    tooltip.place_forget()
+
+    def on_enter(event):
+        tooltip.config(text=text_var.get())
+        x, y = event.x_root-50, event.y_root-80
+        tooltip.place(x=x, y=y)
+
+    def on_leave(event):
+        tooltip.place_forget()
+
+    widget.bind("<Enter>", on_enter)
+    widget.bind("<Leave>", on_leave)
+
 
 ############################# Set GUI icon ##########################
 def set_icon(window):
@@ -2796,11 +2920,14 @@ variable_frame = ttk.LabelFrame(read_write_tab, text="Variables")
 variable_frame.grid(row=0, column=0, padx=10, pady=5, sticky="nsew")
 
 # ttk.Label(variable_frame, text="Select or Add Variable:").grid(row=0, column=0, padx=5, pady=5)
-variable_menu = ttk.Combobox(variable_frame)
+variable_entry_var = tk.StringVar()
+variable_menu = ttk.Combobox(variable_frame, textvariable=variable_entry_var)
 variable_menu.grid(row=0, column=0, padx=5, pady=5, sticky='ew')
 variable_menu.bind('<ButtonPress>', update_variable_menu)
 # Bind the filter function to update on key release
 variable_menu.bind('<Tab>', filter_combobox)
+
+variable_entry_var.trace_add('write', on_lgv_entry_change)
 
 # variable_menu.configure(postcommand=lambda:filter_combobox(None))
 
@@ -2844,17 +2971,28 @@ lgv_frame.grid(row=2, column=0, padx=10, pady=5, sticky="ew")
 input_frame = ttk.Frame(lgv_frame)
 input_frame.grid(row=0, column=0, padx=5, pady=5)
 ttk.Label(input_frame, text="LGV:").grid(row=0, column=0, padx=5, pady=5)
-lgv_range_entry = ttk.Entry(input_frame)
+
+lgv_entry_var = tk.StringVar()
+lgv_range_entry = ttk.Entry(input_frame, textvariable=lgv_entry_var)
 lgv_range_entry.grid(row=0, column=1, padx=5, pady=5)
+
+lgv_entry_var.trace_add('write', on_lgv_entry_change)
 
 # Buttons Frame
 button_frame = ttk.Frame(lgv_frame)
-button_frame.grid(row=0, column=2, columnspan=2, pady=10, padx=30, sticky='e')
+button_frame.grid(row=0, column=2, columnspan=2, pady=10, padx=(20,10), sticky='e')
 
 read_button = ttk.Button(button_frame, text="Read", command=rw_read_variable)
 read_button.grid(row=0, column=0, padx=10, ipadx=2, ipady=2)
 write_button = ttk.Button(button_frame, text="Write", command=rw_write_variable)
 write_button.grid(row=0, column=1, padx=10, ipadx=2, ipady=2)
+
+# Live Read Icon Button
+tooltip_text = tk.StringVar(value="Start Live Read")
+live_read_button = ttk.Button(button_frame, text=START_ICON, width=3, command=toggle_periodic_reading)
+live_read_button.grid(row=0, column=2, padx=(5,5), ipadx=2, ipady=2)
+
+create_tooltip(live_read_button, tooltip_text)
 
 
 # Status table frame

@@ -104,5 +104,7 @@
     "LibraryInterfaces.OpInfo.loadUnitLenght",
     "LibraryInterfaces.FileManagement.saveRequest[1]",
     "LibraryInterfaces.FileManagement.saveRequest[5]",
-    "AGV_Ctrl.AutoReboot.autoRebootDone"
+    "AGV_Ctrl.AutoReboot.autoRebootDone",
+    "TiltMov.tiltEncoder.staticSampleWeight",
+    "CoreGVL.AutoReboot.silencePlease"
 ]

@@ -1,6 +1,11 @@
 <?xml version="1.0" ?>
 <LGVData>
     <LGV>
+        <Name>LGV07</Name>
+        <AMSNetId>172.23.52.178.1.1</AMSNetId>
+        <Type>TC2</Type>
+    </LGV>
+    <LGV>
         <Name>LGV40</Name>
         <AMSNetId>172.23.51.140.1.1</AMSNetId>
         <Type>TC3</Type>
