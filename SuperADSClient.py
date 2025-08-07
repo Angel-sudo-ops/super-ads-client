@@ -14,6 +14,7 @@ from queue import Queue, Empty
 import copy
 import subprocess
 import platform
+import functools
 # from ctypes import sizeof
 
 try:
@@ -28,7 +29,7 @@ if not pyads_available:
     # messagebox.showerror("Attention", "No pyads available")
     print("No pyads available")
 
-__version__ = '2.5.2'
+__version__ = '2.5.2.1'
 __icon__ = "./plc.ico"
 
 TAB_NAME = ['Control', 'RW Panel']
@@ -44,6 +45,7 @@ connection_active = False
 
 def reentry_guard(func):
     """Prevents the function from being entered again while it's already running."""
+    @functools.wraps(func)
     def wrapper(*args, **kwargs):
         if getattr(func, "_is_running", False):
             print(f"[Guarded] {func.__name__} is already running.")
