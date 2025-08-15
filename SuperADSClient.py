@@ -16,7 +16,7 @@ import subprocess
 import platform
 import functools
 
-from myutils.autoupdater import check_for_updates
+from myutils.autoupdater import check_for_updates, get_app_version
 # from ctypes import sizeof
 
 try:
@@ -31,7 +31,7 @@ if not pyads_available:
     # messagebox.showerror("Attention", "No pyads available")
     print("No pyads available")
 
-__version__ = '2.5.2.1'
+# __version__ = '2.5.2.1'
 __icon__ = "./plc.ico"
 
 TAB_NAME = ['Control', 'RW Panel']
@@ -42,6 +42,10 @@ LGV_DATA = "lgv_data.xml"
 current_ads_connection = None
 
 connection_active = False
+
+################################################################# Version check #####################################################################
+
+VERSION = get_app_version()
 
 ############################################################# Helper logic methods #################################################################################
 
@@ -2719,7 +2723,7 @@ def set_icon(window):
 
 # Create the root window
 root = tk.Tk()
-root.title(f"Super ADS Client {__version__}")
+root.title(f"Super ADS Client {VERSION}")
 # root.geometry("600x400")  # Adjust the window size
 
 # Let the table_frame grow inside root
