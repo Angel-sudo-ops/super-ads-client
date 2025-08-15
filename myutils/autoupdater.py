@@ -26,7 +26,7 @@ def fetch_latest_version(version_url):
 
 def ask_and_update(current_version, latest_version, download_url, app_name):
     root = Tk(); root.withdraw()
-    display_name = app_name or os.path.splitext(os.path.basename(sys.executable))[0]
+    display_name = get_app_display_name()
     answer = messagebox.askyesno(
         "Update Available",
         f"A new version ({latest_version}) of {display_name} is available.\nDo you want to update now?"
@@ -39,7 +39,14 @@ def ask_and_update(current_version, latest_version, download_url, app_name):
 def download_and_prepare_batch(current_version, latest_version, download_url, app_name):
     try:
         temp_dir = tempfile.mkdtemp()
-        current_exe_path = os.path.abspath(sys.executable)
+
+        if getattr(sys, 'frozen', False):
+            # Running as a PyInstaller .exe
+            current_exe_path = os.path.abspath(sys.executable)
+        else:
+            # Running as a .py file (script), fallback to main script
+            current_exe_path = os.path.abspath(sys.argv[0])
+
         current_dir = os.path.dirname(current_exe_path)
         current_exe_name = os.path.basename(current_exe_path)
         base_app_name = app_name or os.path.splitext(current_exe_name)[0]
@@ -62,9 +69,14 @@ def download_and_prepare_batch(current_version, latest_version, download_url, ap
             batch.write(f"cd /d \"{current_dir}\"\n")
             batch.write(f"rename \"{current_exe_name}\" \"{old_version_name}\"\n")
             batch.write(f"move \"{new_exe_path}\" \"{current_exe_name}\"\n")
-            batch.write(f"start \"\" \"{current_exe_name}\"\n")
+
+            # Launch the new .exe with --updated flag
+            batch.write(f"start \"\" \"{current_exe_name}\" --updated\n")
+
             batch.write("timeout /t 2 >nul\n")
             batch.write(f"del \"{old_version_name}\"\n")
+
+            # Delete the batch file itself
             batch.write("cmd /c del \"%~f0\"\n")
         print("[Updater] Running updater batch...")
         subprocess.Popen([batch_path], shell=True)
@@ -74,6 +86,21 @@ def download_and_prepare_batch(current_version, latest_version, download_url, ap
         root = Tk(); root.withdraw()
         messagebox.showerror("Update Failed", f"Could not update {app_name or 'application'}:\n{e}")
         root.destroy()
+
+def get_app_display_name(app_name=None):
+    if app_name:
+        return app_name  # if manually provided
+
+    if getattr(sys, 'frozen', False):
+        # Running as .exe
+        base_name = os.path.basename(sys.executable)
+    else:
+        # Running as script
+        base_name = os.path.basename(sys.argv[0])
+
+    display_name = os.path.splitext(base_name)[0]
+    return display_name
+
 
 
 def get_app_version():

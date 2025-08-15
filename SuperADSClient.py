@@ -47,11 +47,18 @@ connection_active = False
 
 VERSION = get_app_version()
 
-check_for_updates(
-    current_version=VERSION,
-    version_url="https://raw.githubusercontent.com/Angel-sudo-ops/super-ads-client/autoupdate_implementation/version.txt",
-    download_url="https://github.com/Angel-sudo-ops/super-ads-client/releases/latest/download/SuperADSClient.exe"
-)
+if "--updated" in sys.argv:
+    sys.argv.remove("--updated")  # Optional: clean it up
+    print("[Updater] App launched after update.")
+    # You could show a message or log something if needed
+
+if getattr(sys, 'frozen', False):  # Only in PyInstaller .exe
+    check_for_updates(
+        current_version=VERSION,
+        version_url="https://raw.githubusercontent.com/Angel-sudo-ops/super-ads-client/autoupdate_implementation/version.txt?now=1",
+        download_url="https://github.com/Angel-sudo-ops/super-ads-client/releases/latest/download/SuperADSClient.exe",
+        app_name="SuperADSClient"
+    )
 
 ############################################################# Helper logic methods #################################################################################
 
