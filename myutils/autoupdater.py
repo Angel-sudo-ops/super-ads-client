@@ -74,3 +74,20 @@ def download_and_prepare_batch(current_version, latest_version, download_url, ap
         root = Tk(); root.withdraw()
         messagebox.showerror("Update Failed", f"Could not update {app_name or 'application'}:\n{e}")
         root.destroy()
+
+
+def get_app_version():
+    """Read version.txt whether running from source or PyInstaller .exe."""
+    if hasattr(sys, '_MEIPASS'):  
+        # Running from PyInstaller bundle
+        base_path = sys._MEIPASS
+    else:
+        # Running from source
+        base_path = os.path.abspath(os.path.dirname(__file__))
+
+    version_file = os.path.join(base_path, "version.txt")
+    try:
+        with open(version_file, "r", encoding="utf-8") as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        return "Unknown"
