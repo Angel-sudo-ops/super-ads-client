@@ -47,7 +47,11 @@ connection_active = False
 
 VERSION = get_app_version()
 
-
+check_for_updates(
+    current_version=VERSION,
+    version_url="https://raw.githubusercontent.com/Angel-sudo-ops/super-ads-client/autoupdate_implementation/version.txt",
+    download_url="https://github.com/Angel-sudo-ops/super-ads-client/releases/latest/download/SuperADSClient.exe"
+)
 
 ############################################################# Helper logic methods #################################################################################
 
