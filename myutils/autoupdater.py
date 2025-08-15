@@ -82,8 +82,8 @@ def get_app_version():
         # Running from PyInstaller bundle
         base_path = sys._MEIPASS
     else:
-        # Running from source
-        base_path = os.path.abspath(os.path.dirname(__file__))
+        # Running from source - use current working directory
+        base_path = os.getcwd()
 
     version_file = os.path.join(base_path, "version.txt")
     try:

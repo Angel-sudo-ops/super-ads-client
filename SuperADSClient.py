@@ -47,6 +47,8 @@ connection_active = False
 
 VERSION = get_app_version()
 
+
+
 ############################################################# Helper logic methods #################################################################################
 
 def reentry_guard(func):
