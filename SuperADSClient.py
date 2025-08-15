@@ -15,6 +15,8 @@ import copy
 import subprocess
 import platform
 import functools
+
+from myutils.autoupdater import check_for_updates
 # from ctypes import sizeof
 
 try:
