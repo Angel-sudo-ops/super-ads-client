@@ -67,19 +67,26 @@ def download_and_prepare_batch(current_version, latest_version, download_url, ap
             batch.write("@echo off\n")
             batch.write("timeout /t 1 >nul\n")
             batch.write(f"cd /d \"{current_dir}\"\n")
+
+            # Rename current exe to preserve old version
             batch.write(f"rename \"{current_exe_name}\" \"{old_version_name}\"\n")
+
+            # Move new exe to original location
             batch.write(f"move \"{new_exe_path}\" \"{current_exe_name}\"\n")
 
-            # Launch the new .exe with --updated flag
+            # Launch the new exe with an --updated flag
             batch.write(f"start \"\" \"{current_exe_name}\" --updated\n")
 
+            # Wait for the new app to start and lock the old one
             batch.write("timeout /t 2 >nul\n")
-            batch.write(f"del \"{old_version_name}\"\n")
 
-            # Delete the batch file itself
-            batch.write("cmd /c del \"%~f0\"\n")
+            # Try to delete the old version (may silently fail if locked)
+            batch.write(f"del \"{old_version_name}\" >nul 2>&1\n")
+
+            # Self-delete the batch script
+            batch.write("del \"%~f0\" >nul 2>&1\n")
         print("[Updater] Running updater batch...")
-        subprocess.Popen([batch_path], shell=True)
+        subprocess.Popen(["cmd.exe", "/c", batch_path], creationflags=subprocess.CREATE_NO_WINDOW)
         print("[Updater] Exiting current app...")
         sys.exit(0)
     except Exception as e:
