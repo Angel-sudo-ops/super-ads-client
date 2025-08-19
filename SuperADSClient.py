@@ -15,6 +15,8 @@ import copy
 import subprocess
 import platform
 import functools
+
+from myutils.autoupdater import check_for_updates, get_app_version
 # from ctypes import sizeof
 
 try:
@@ -29,7 +31,7 @@ if not pyads_available:
     # messagebox.showerror("Attention", "No pyads available")
     print("No pyads available")
 
-__version__ = '2.5.2.1'
+# __version__ = '2.5.2.1'
 __icon__ = "./plc.ico"
 
 TAB_NAME = ['Control', 'RW Panel']
@@ -40,6 +42,23 @@ LGV_DATA = "lgv_data.xml"
 current_ads_connection = None
 
 connection_active = False
+
+################################################################# Version check #####################################################################
+
+VERSION = get_app_version()
+
+if "--updated" in sys.argv:
+    sys.argv.remove("--updated")  # Optional: clean it up
+    print("[Updater] App launched after update.")
+    # You could show a message or log something if needed
+
+if getattr(sys, 'frozen', False):  # Only in PyInstaller .exe
+    check_for_updates(
+        current_version=VERSION,
+        version_url="https://raw.githubusercontent.com/Angel-sudo-ops/super-ads-client/autoupdate_implementation/version.txt?now=1",
+        download_url="https://github.com/Angel-sudo-ops/super-ads-client/releases/latest/download/SuperADSClient.exe",
+        app_name="SuperADSClient"
+    )
 
 ############################################################# Helper logic methods #################################################################################
 
@@ -2717,7 +2736,7 @@ def set_icon(window):
 
 # Create the root window
 root = tk.Tk()
-root.title(f"Super ADS Client {__version__}")
+root.title(f"Super ADS Client {VERSION}")
 # root.geometry("600x400")  # Adjust the window size
 
 # Let the table_frame grow inside root
