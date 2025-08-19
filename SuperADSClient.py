@@ -1986,6 +1986,7 @@ def read_all_variables_for_lgv(lgv, ams_net_id, tc_type, processed_variables, re
         return
     
     try:
+        start_total_connection = time.time()
         port = 851 if tc_type == "TC3" else 801
         with pyads.Connection(ams_net_id, port) as ads_connection:
             print(f"Connected to LGV {lgv} ({ams_net_id})")
@@ -1996,12 +1997,16 @@ def read_all_variables_for_lgv(lgv, ams_net_id, tc_type, processed_variables, re
 
                     symbol_info = ads_connection.get_symbol(variable_name)
                     expected_type = get_pyads_type(symbol_info.symbol_type)
+
+                    start = time.time()
                     value = ads_connection.read_by_name(variable_name, expected_type)
-                    print(f"Read {value} from {variable_name} for LGV {lgv}")
+                    print(f"Read {variable_name} took {time.time() - start:.3f}s")
+
                     result_queue.put((lgv, display_name, value))
                     timeout_counters[lgv]=0 # Reset timeout counter on success
                 except Exception as e:
                     result_queue.put((lgv, display_name, e))
+        print(f"Total ADS session took {time.time() - start_total_connection:.3f}s")
     except Exception as e:
         timeout_counters[lgv] = timeout_counters.get(lgv, 0) + 1
         if timeout_counters[lgv] >= 5:
