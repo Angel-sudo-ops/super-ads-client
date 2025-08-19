@@ -1718,6 +1718,24 @@ def safe_read_all_variables_for_lgv(*args):
         read_all_variables_for_lgv(*args)
 
 
+# Global cache to avoid unnecessary redraws
+last_prepared_lgvs = None
+last_prepared_variables = None
+
+def should_prepare_table(lgv_data, variables):
+    """Check if we need to recreate the status table."""
+    global last_prepared_lgvs, last_prepared_variables
+
+    current_lgvs = sorted(lgv for lgv, _, _ in lgv_data)
+    current_vars = sorted(variables)
+
+    if current_lgvs != last_prepared_lgvs or current_vars != last_prepared_variables:
+        last_prepared_lgvs = current_lgvs
+        last_prepared_variables = current_vars
+        return True
+    return False
+
+
 read_write_in_progress = False
 
 periodic_reading_active = False
@@ -1972,10 +1990,10 @@ def read_all_variables_for_lgv(lgv, ams_net_id, tc_type, processed_variables, re
         with pyads.Connection(ams_net_id, port) as ads_connection:
             print(f"Connected to LGV {lgv} ({ams_net_id})")
 
-            ads_connection.set_timeout(700)
-
             for variable_name, display_name in processed_variables.items():
                 try:
+                    ads_connection.set_timeout(800)
+
                     symbol_info = ads_connection.get_symbol(variable_name)
                     expected_type = get_pyads_type(symbol_info.symbol_type)
                     value = ads_connection.read_by_name(variable_name, expected_type)
@@ -1995,7 +2013,7 @@ def read_all_variables_for_lgv(lgv, ams_net_id, tc_type, processed_variables, re
 @reentry_guard
 def rw_read_variable(event=None):
     """Read variable(s)"""
-    global read_write_in_progress, periodic_reading_active
+    global read_write_in_progress
 
     if read_write_in_progress :
         print("Read/Write operation already in progress!")
@@ -2008,11 +2026,7 @@ def rw_read_variable(event=None):
         print("Variable name missing!")
         log_message("Variable name missing!", "error")
 
-         # --- STOP LIVE READ if active ---
-        if periodic_reading_active:
-            stop_periodic_reading()
-            live_read_button.config(text=START_ICON)
-            tooltip_text.set("Start Live Read")
+        toggle_periodic_reading()
         
         read_write_in_progress = False
         return
@@ -2024,11 +2038,7 @@ def rw_read_variable(event=None):
         print("No valid variable names found!")
         log_message("No valid variable names found!", "warning")
 
-         # --- STOP LIVE READ if active ---
-        if periodic_reading_active:
-            stop_periodic_reading()
-            live_read_button.config(text=START_ICON)
-            tooltip_text.set("Start Live Read")
+        toggle_periodic_reading()
         
         read_write_in_progress = False
         return
@@ -2040,11 +2050,7 @@ def rw_read_variable(event=None):
     lgv_data = validate_and_link_lgv()
     if lgv_data is None:
 
-         # --- STOP LIVE READ if active ---
-        if periodic_reading_active:
-            stop_periodic_reading()
-            live_read_button.config(text=START_ICON)
-            tooltip_text.set("Start Live Read")
+        toggle_periodic_reading()
         
         read_write_in_progress = False
 
@@ -2052,7 +2058,8 @@ def rw_read_variable(event=None):
     
 
     # Prepare result table
-    prepare_status_table(lgv_data, list(processed_variables.values()))
+    if should_prepare_table(lgv_data, list(processed_variables.values())):
+        prepare_status_table(lgv_data, list(processed_variables.values()))
 
     # Result queue and thread tracking
     result_queue = Queue()
@@ -2119,8 +2126,8 @@ def periodic_read_loop():
             rw_read_variable()
 
         # Wait for read to complete
-        while read_write_in_progress:
-            time.sleep(0.05)
+        # while read_write_in_progress:
+        #     time.sleep(0.005)
         
         time.sleep(LIVE_READ_INTERVAL)
 
@@ -2221,18 +2228,28 @@ def prepare_status_table(lgv_data, variables):
 
 
 def update_status_table(lgv, variable, value):
-    """Update the table for a specific LGV and variable."""
+    """Update the table for a specific LGV and variable, only if the value has changed"""
     row_id = f"LGV{lgv:02d}"
     try:
         item = status_table.item(row_id)
         values = list(item["values"])
 
-        if variable in status_table["columns"]:
-            col_index = status_table["columns"].index(variable)
-            values[col_index] = value
+        columns = status_table["columns"]
 
-            tag = "" if value in ["Timeout", "Error"] else ""
-            status_table.item(row_id, values=values, tags=(tag,))
+        if variable in columns:
+            col_index = columns.index(variable)
+
+            # Ensure values list is long enough
+            if len(values) < len(columns):
+                values += [""] * (len(columns) - len(values))
+
+            current_value = values[col_index]
+            if str(current_value) != str(value): # Only update if changed
+                values[col_index] = value
+
+                tag = "" if value in ["Timeout", "Error"] else ""
+                status_table.item(row_id, values=values, tags=(tag,))
+
     except Exception as e:
         print(f"Failed to update status for {row_id}, variable {variable}: {e}")
 

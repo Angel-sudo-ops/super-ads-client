@@ -106,5 +106,12 @@
     "TiltMov.tiltEncoder.staticSampleWeight",
     "CoreGVL.AutoReboot.silencePlease",
     "CoreGVL.ADS_Stop;CoreGVL.ADS_Reset",
-    "InfoMovements.Mov.tilt.curPosition"
+    ".CanInt.WCharger.IN.Slave1Current;.CanInt.WCharger.IN.Slave2Current;.CanInt.WCharger.IN.MainCurrent",
+    ".Battery_Status",
+    ".CanInt.WCharger.IN.Slave1Current;.CanInt.WCharger.IN.Slave2Current;.CanInt.WCharger.IN.MainCurrent;.Battery_Status",
+    ".Sys_Navigator_Info.AGV_Pos.x",
+    ".Sys_Navigator_Info.AGV_Pos.x;.Sys_Navigator_Info.AGV_Pos.y",
+    "LibraryInterfaces.LGV.guid.info.pos.x;LibraryInterfaces.LGV.guid.info.pos.y",
+    ".Sys_Flex_Status",
+    ".Sys_Aut_Run"
 ]
