@@ -1973,7 +1973,7 @@ def read_all_variables_for_lgv(lgv, ams_net_id, tc_type, processed_variables, re
     ip = '.'.join(ams_net_id.split('.')[:4])
 
     # Check if reachable before attempting connection
-    if not is_host_reachable(ip):
+    if not is_host_reachable(ip) and False:
         print(f"[READ] LGV {lgv} unreachable at {ip}, skipping")
 
         timeout_counters[lgv] = timeout_counters.get(lgv, 0) + 1
@@ -1991,22 +1991,34 @@ def read_all_variables_for_lgv(lgv, ams_net_id, tc_type, processed_variables, re
         with pyads.Connection(ams_net_id, port) as ads_connection:
             print(f"Connected to LGV {lgv} ({ams_net_id})")
 
+            ads_connection.set_timeout(800)
+
+            # Cache symbol types once
+            symbol_types = {}
+            for var_name in processed_variables:
+                try:
+                    symbol_info = ads_connection.get_symbol(var_name)
+                    symbol_types[var_name] = get_pyads_type(symbol_info.symbol_type)
+                except Exception as e:
+                    print(f"Failed to get type for {var_name}: {e}")
+                    for display_name in processed_variables.values():
+                        result_queue.put((lgv, display_name, e))
+                    return
+
             for variable_name, display_name in processed_variables.items():
                 try:
-                    ads_connection.set_timeout(800)
-
-                    symbol_info = ads_connection.get_symbol(variable_name)
-                    expected_type = get_pyads_type(symbol_info.symbol_type)
 
                     start = time.time()
-                    value = ads_connection.read_by_name(variable_name, expected_type)
+                    value = ads_connection.read_by_name(variable_name, symbol_types[var_name])
                     print(f"Read {variable_name} took {time.time() - start:.3f}s")
 
                     result_queue.put((lgv, display_name, value))
                     timeout_counters[lgv]=0 # Reset timeout counter on success
                 except Exception as e:
                     result_queue.put((lgv, display_name, e))
+
         print(f"Total ADS session took {time.time() - start_total_connection:.3f}s")
+
     except Exception as e:
         timeout_counters[lgv] = timeout_counters.get(lgv, 0) + 1
         if timeout_counters[lgv] >= 5:
