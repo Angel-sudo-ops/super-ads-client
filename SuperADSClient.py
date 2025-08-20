@@ -376,6 +376,68 @@ def delete_selected_record(event):
             treeview.delete(item)
 
 
+
+def show_tooltip_on_copy(root, text, x, y, duration=1000):
+    """Show a small tooltip near (x, y) for a short time."""
+    tooltip = tk.Toplevel(root)
+    tooltip.wm_overrideredirect(True)  # Remove window decorations
+    tooltip.wm_geometry(f"+{x+15}+{y+15}")  # Offset a bit from cursor
+
+    label = tk.Label(
+        tooltip,
+        text=text,
+        background="white",
+        relief="solid",
+        borderwidth=1,
+        font=("helvetica", "9", "normal"),
+        padx=5,
+        pady=2
+    )
+    label.pack()
+
+    # Destroy after duration (ms)
+    root.after(duration, tooltip.destroy)
+
+
+def on_double_click_copy_cell(event, treeview, root):
+    # Only care if you clicked on a data cell or the tree text area
+    region = treeview.identify("region", event.x, event.y)
+    if region not in ("cell", "tree"):
+        return
+
+    row_id = treeview.identify_row(event.y)
+    col_id = treeview.identify_column(event.x)  # e.g. '#0', '#1', '#2', ...
+
+    if not row_id or not col_id:
+        return
+
+    # Figure out the clicked cell’s text
+    if col_id == "#0":
+        # Tree (text) column
+        cell_value = treeview.item(row_id, "text")
+    else:
+        # Headings/values columns
+        col_index = int(col_id[1:]) - 1  # '#1' -> 0
+        values = treeview.item(row_id, "values")
+        if 0 <= col_index < len(values):
+            cell_value = values[col_index]
+        else:
+            return
+
+    # Copy to clipboard
+    s = "" if cell_value is None else str(cell_value)
+    treeview.selection_set(row_id)  # (optional) show selection
+    treeview.focus(row_id)
+    root.clipboard_clear()
+    root.clipboard_append(s)
+    root.update()  # keep clipboard after app closes
+
+    # Show tooltip at mouse position
+    show_tooltip_on_copy(root, f"Copied {s}", event.x_root, event.y_root)
+
+    print(f"Copied: {s}")
+
+
 ####################################################################################################################################################################
 ################################################################# ADS connection setup #############################################################################
 ####################################################################################################################################################################
@@ -2940,6 +3002,7 @@ treeview.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
 treeview.bind("<<TreeviewSelect>>", on_treeview_select)
 treeview.bind('<Delete>', delete_selected_record)
+treeview.bind('<Double-1>', lambda e: on_double_click_copy_cell(e, treeview, root))
 
 # bind_treeview_focus_action(treeview, focus_shortcuts=['<Control-t>', '<Control-T>'])
 
