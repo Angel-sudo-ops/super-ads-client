@@ -1968,12 +1968,16 @@ def read_variable_for_lgv(lgv, ams_net_id, tc_type, variable_name, display_name,
         # Add error result to queue
         result_queue.put((lgv, display_name, e))
 
+
+# Cache for (lgv, frozenset(variable names)) → {var_name: pyads_type}
+variable_type_cache = {}
+
 def read_all_variables_for_lgv(lgv, ams_net_id, tc_type, processed_variables, result_queue):
     # Extract IP from ams net id
     ip = '.'.join(ams_net_id.split('.')[:4])
 
     # Check if reachable before attempting connection
-    if not is_host_reachable(ip) and False:
+    if not is_host_reachable(ip):
         print(f"[READ] LGV {lgv} unreachable at {ip}, skipping")
 
         timeout_counters[lgv] = timeout_counters.get(lgv, 0) + 1
@@ -1986,30 +1990,42 @@ def read_all_variables_for_lgv(lgv, ams_net_id, tc_type, processed_variables, re
         return
     
     try:
-        start_total_connection = time.time()
         port = 851 if tc_type == "TC3" else 801
-        with pyads.Connection(ams_net_id, port) as ads_connection:
+        session_start = time.time()
+        ads_connection = pyads.Connection(ams_net_id, port)
+        ads_connection.set_timeout(800)
+
+        with ads_connection:
             print(f"Connected to LGV {lgv} ({ams_net_id})")
 
-            ads_connection.set_timeout(800)
+            # Normalize key (frozenset of variable names to ignore order)
+            var_key = frozenset(processed_variables.keys())
+            cache_key = (lgv, var_key)
 
-            # Cache symbol types once
-            symbol_types = {}
-            for var_name in processed_variables:
-                try:
-                    symbol_info = ads_connection.get_symbol(var_name)
-                    symbol_types[var_name] = get_pyads_type(symbol_info.symbol_type)
-                except Exception as e:
-                    print(f"Failed to get type for {var_name}: {e}")
-                    for display_name in processed_variables.values():
-                        result_queue.put((lgv, display_name, e))
-                    return
+             # Reuse cached types if available
+            if cache_key in variable_type_cache:
+                symbol_types = variable_type_cache[cache_key]
+                print(f"Reusing cached types for LGV {lgv}")
+            else:
+                print(f"Building new symbol type cache for LGV {lgv}")
+                symbol_types = {}
+                for var_name in processed_variables:
+                    try:
+                        symbol_info = ads_connection.get_symbol(var_name)
+                        symbol_types[var_name] = get_pyads_type(symbol_info.symbol_type)
+                    except Exception as e:
+                        print(f"Failed to get type for {var_name}: {e}")
+                        for display_name in processed_variables.values():
+                            result_queue.put((lgv, display_name, e))
+                        return
+                # Store in cache
+                variable_type_cache[cache_key] = symbol_types
 
             for variable_name, display_name in processed_variables.items():
                 try:
 
                     start = time.time()
-                    value = ads_connection.read_by_name(variable_name, symbol_types[var_name])
+                    value = ads_connection.read_by_name(variable_name, symbol_types[variable_name])
                     print(f"Read {variable_name} took {time.time() - start:.3f}s")
 
                     result_queue.put((lgv, display_name, value))
@@ -2017,7 +2033,7 @@ def read_all_variables_for_lgv(lgv, ams_net_id, tc_type, processed_variables, re
                 except Exception as e:
                     result_queue.put((lgv, display_name, e))
 
-        print(f"Total ADS session took {time.time() - start_total_connection:.3f}s")
+        print(f"Total ADS session took {time.time() - session_start:.3f}s")
 
     except Exception as e:
         timeout_counters[lgv] = timeout_counters.get(lgv, 0) + 1
@@ -2134,7 +2150,7 @@ def stop_periodic_reading():
 
 
 #################################### Periodic Read Loop ###################################
-LIVE_READ_INTERVAL = 1.0
+LIVE_READ_INTERVAL = 0.4
 
 def periodic_read_loop():
     while periodic_reading_active:
