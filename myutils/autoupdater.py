@@ -23,9 +23,22 @@ def check_for_updates_async(root, current_version, version_url, download_url, ap
     threading.Thread(target=worker, daemon=True).start()
 
 
+def fetch_with_retries(url, retries=3, delay=1, stream=False):
+    for attempt in range(retries):
+        try:
+            response = requests.get(url, timeout=TIMEOUT, stream=stream)
+            response.raise_for_status()
+            return response
+        except Exception as e:
+            action = "download" if stream else "fetch version"
+            print(f"[Updater] Failed to {action} (attempt {attempt + 1} of {retries}): {e}")
+            if attempt < retries - 1:
+                time.sleep(delay)
+            else:
+                raise
+            
 def fetch_latest_version(version_url):
-    response = requests.get(version_url, timeout=TIMEOUT)
-    response.raise_for_status()
+    response = fetch_with_retries(version_url)
     return response.text.strip()
 
 
@@ -62,8 +75,8 @@ def download_and_prepare_batch(current_version, latest_version, download_url, ap
         new_exe_path = os.path.join(current_dir, new_exe_name)
 
         print(f"[Updater] Downloading update to {new_exe_path}...")
-        response = requests.get(download_url, timeout=TIMEOUT, stream=True)
-        response.raise_for_status()
+
+        response = fetch_with_retries(download_url, stream=True)
 
         total_size = int(response.headers.get("content-length", 0))
         downloaded = 0
