@@ -3178,21 +3178,21 @@ def on_closing():
 # Bind the window close event to custom close function
 root.protocol("WM_DELETE_WINDOW", on_closing)
 
+################################################################### Main loop ##########################################################################
+
+root.mainloop()
 
 ################################################################# Version check ######################################################################
 
 if getattr(sys, 'frozen', False) and not updated:  # Only in PyInstaller .exe
-    check_for_updates_async(
+    root.after(200, lambda: check_for_updates_async(
         root=root,
         current_version=VERSION,
         version_url="https://github.com/Angel-sudo-ops/super-ads-client/releases/latest/download/version.txt",
         download_url="https://github.com/Angel-sudo-ops/super-ads-client/releases/latest/download/SuperADSClient.exe",
         app_name="SuperADSClient"
-    )
+    ))
 
-################################################################### Main loop ##########################################################################
-
-root.mainloop()
 
 # root.focus_set()
 
