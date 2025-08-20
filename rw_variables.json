@@ -113,5 +113,6 @@
     ".Sys_Navigator_Info.AGV_Pos.x;.Sys_Navigator_Info.AGV_Pos.y",
     "LibraryInterfaces.LGV.guid.info.pos.x;LibraryInterfaces.LGV.guid.info.pos.y",
     ".Sys_Flex_Status",
-    ".Sys_Aut_Run"
+    ".Sys_Aut_Run",
+    "LibraryInterfaces.LGV.guid.info.pos.x;LibraryInterfaces.LGV.guid.info.pos.y;.Sys_Navigator_Info.AGV_Pos.x;.Sys_Navigator_Info.AGV_Pos.y"
 ]

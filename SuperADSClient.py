@@ -55,7 +55,7 @@ if "--updated" in sys.argv:
 if getattr(sys, 'frozen', False):  # Only in PyInstaller .exe
     check_for_updates(
         current_version=VERSION,
-        version_url="https://raw.githubusercontent.com/Angel-sudo-ops/super-ads-client/autoupdate_implementation/version.txt?now=1",
+        version_url="https://github.com/Angel-sudo-ops/super-ads-client/releases/latest/download/version.txt",
         download_url="https://github.com/Angel-sudo-ops/super-ads-client/releases/latest/download/SuperADSClient.exe",
         app_name="SuperADSClient"
     )
@@ -2009,21 +2009,20 @@ def read_all_variables_for_lgv(lgv, ams_net_id, tc_type, processed_variables, re
             else:
                 print(f"Building new symbol type cache for LGV {lgv}")
                 symbol_types = {}
-                for var_name in processed_variables:
+                for var_name, display_name in processed_variables.items():
                     try:
                         symbol_info = ads_connection.get_symbol(var_name)
                         symbol_types[var_name] = get_pyads_type(symbol_info.symbol_type)
                     except Exception as e:
                         print(f"Failed to get type for {var_name}: {e}")
-                        for display_name in processed_variables.values():
-                            result_queue.put((lgv, display_name, e))
-                        return
+                        result_queue.put((lgv, display_name, e))
                 # Store in cache
                 variable_type_cache[cache_key] = symbol_types
 
             for variable_name, display_name in processed_variables.items():
+                if variable_name not in symbol_types:
+                    continue 
                 try:
-
                     start = time.time()
                     value = ads_connection.read_by_name(variable_name, symbol_types[variable_name])
                     print(f"Read {variable_name} took {time.time() - start:.3f}s")
@@ -2033,7 +2032,7 @@ def read_all_variables_for_lgv(lgv, ams_net_id, tc_type, processed_variables, re
                 except Exception as e:
                     result_queue.put((lgv, display_name, e))
 
-        print(f"Total ADS session took {time.time() - session_start:.3f}s")
+        print(f"Total ADS session for LGV{lgv:02d} took {time.time() - session_start:.3f}s")
 
     except Exception as e:
         timeout_counters[lgv] = timeout_counters.get(lgv, 0) + 1
