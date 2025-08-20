@@ -16,7 +16,7 @@ import subprocess
 import platform
 import functools
 
-from myutils.autoupdater import check_for_updates, get_app_version
+from myutils.autoupdater import check_for_updates_async, get_app_version
 # from ctypes import sizeof
 
 try:
@@ -51,14 +51,6 @@ if "--updated" in sys.argv:
     sys.argv.remove("--updated")  # Optional: clean it up
     print("[Updater] App launched after update.")
     # You could show a message or log something if needed
-
-if getattr(sys, 'frozen', False):  # Only in PyInstaller .exe
-    check_for_updates(
-        current_version=VERSION,
-        version_url="https://github.com/Angel-sudo-ops/super-ads-client/releases/latest/download/version.txt",
-        download_url="https://github.com/Angel-sudo-ops/super-ads-client/releases/latest/download/SuperADSClient.exe",
-        app_name="SuperADSClient"
-    )
 
 ############################################################# Helper logic methods #################################################################################
 
@@ -3184,6 +3176,19 @@ def on_closing():
 # Bind the window close event to custom close function
 root.protocol("WM_DELETE_WINDOW", on_closing)
 
+
+################################################################# Version check ######################################################################
+
+if getattr(sys, 'frozen', False):  # Only in PyInstaller .exe
+    check_for_updates_async(
+        root=root,
+        current_version=VERSION,
+        version_url="https://github.com/Angel-sudo-ops/super-ads-client/releases/latest/download/version.txt",
+        download_url="https://github.com/Angel-sudo-ops/super-ads-client/releases/latest/download/SuperADSClient.exe",
+        app_name="SuperADSClient"
+    )
+
+################################################################### Main loop ##########################################################################
 
 root.mainloop()
 
