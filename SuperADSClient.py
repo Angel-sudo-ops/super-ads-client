@@ -44,11 +44,13 @@ current_ads_connection = None
 connection_active = False
 
 ################################################################# Version check #####################################################################
+updated = False
 
 VERSION = get_app_version()
 
 if "--updated" in sys.argv:
     sys.argv.remove("--updated")  # Optional: clean it up
+    updated = True
     print("[Updater] App launched after update.")
     # You could show a message or log something if needed
 
@@ -3179,7 +3181,7 @@ root.protocol("WM_DELETE_WINDOW", on_closing)
 
 ################################################################# Version check ######################################################################
 
-if getattr(sys, 'frozen', False):  # Only in PyInstaller .exe
+if getattr(sys, 'frozen', False) and not updated:  # Only in PyInstaller .exe
     check_for_updates_async(
         root=root,
         current_version=VERSION,
