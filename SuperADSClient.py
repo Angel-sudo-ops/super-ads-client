@@ -14,6 +14,9 @@ from queue import Queue, Empty
 import copy
 import subprocess
 import platform
+import functools
+
+from myutils.autoupdater import check_for_updates_async, get_app_version
 # from ctypes import sizeof
 
 try:
@@ -28,7 +31,7 @@ if not pyads_available:
     # messagebox.showerror("Attention", "No pyads available")
     print("No pyads available")
 
-__version__ = '2.5.1.5'
+# __version__ = '2.5.2.1'
 __icon__ = "./plc.ico"
 
 TAB_NAME = ['Control', 'RW Panel']
@@ -39,6 +42,33 @@ LGV_DATA = "lgv_data.xml"
 current_ads_connection = None
 
 connection_active = False
+
+################################################################# Version check #####################################################################
+updated = False
+
+VERSION = get_app_version()
+
+if "--updated" in sys.argv:
+    sys.argv.remove("--updated")  # Optional: clean it up
+    updated = True
+    print("[Updater] App launched after update.")
+    # You could show a message or log something if needed
+
+############################################################# Helper logic methods #################################################################################
+
+def reentry_guard(func):
+    """Prevents the function from being entered again while it's already running."""
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        if getattr(func, "_is_running", False):
+            print(f"[Guarded] {func.__name__} is already running.")
+            return
+        func._is_running = True
+        try:
+            return func(*args, **kwargs)
+        finally:
+            func._is_running = False
+    return wrapper
 
 ####################################################################################################################################################################
 ########################################################## Initial data reading from xml file ######################################################################
@@ -1682,7 +1712,31 @@ def safe_read_all_variables_for_lgv(*args):
         read_all_variables_for_lgv(*args)
 
 
+# Global cache to avoid unnecessary redraws
+last_prepared_lgvs = None
+last_prepared_variables = None
+
+def should_prepare_table(lgv_data, variables):
+    """Check if we need to recreate the status table."""
+    global last_prepared_lgvs, last_prepared_variables
+
+    current_lgvs = sorted(lgv for lgv, _, _ in lgv_data)
+    current_vars = sorted(variables)
+
+    if current_lgvs != last_prepared_lgvs or current_vars != last_prepared_variables:
+        last_prepared_lgvs = current_lgvs
+        last_prepared_variables = current_vars
+        return True
+    return False
+
+
 read_write_in_progress = False
+
+periodic_reading_active = False
+
+# LGV Retry Tracking
+timeout_counters = {}  # {lgv: count}
+skip_until = {}        # {lgv: timestamp}
 
 
 
@@ -1774,9 +1828,14 @@ def convert_to_number(user_input):
             return None  # Not a number, possibly a string
 
 
+@reentry_guard
 def rw_write_variable(event=None):
     """Write variable"""
     global read_write_in_progress
+
+    if read_write_in_progress :
+        print("Read/Write operation already in progress!")
+        return
 
     variable_names = variable_menu.get().strip()  # Directly get the variable name
 
@@ -1803,9 +1862,6 @@ def rw_write_variable(event=None):
         # messagebox.showerror("Error", "LGV range is empty")
         return  # Exit if validation failed
     
-    if read_write_in_progress :
-        print("Read/Write operation already in progress!")
-        return
 
     # Prepare result table
     prepare_status_table(lgv_data, list(processed_variables.values()))
@@ -1906,6 +1962,10 @@ def read_variable_for_lgv(lgv, ams_net_id, tc_type, variable_name, display_name,
         # Add error result to queue
         result_queue.put((lgv, display_name, e))
 
+
+# Cache for (lgv, frozenset(variable names)) → {var_name: pyads_type}
+variable_type_cache = {}
+
 def read_all_variables_for_lgv(lgv, ams_net_id, tc_type, processed_variables, result_queue):
     # Extract IP from ams net id
     ip = '.'.join(ams_net_id.split('.')[:4])
@@ -1913,33 +1973,77 @@ def read_all_variables_for_lgv(lgv, ams_net_id, tc_type, processed_variables, re
     # Check if reachable before attempting connection
     if not is_host_reachable(ip):
         print(f"[READ] LGV {lgv} unreachable at {ip}, skipping")
+
+        timeout_counters[lgv] = timeout_counters.get(lgv, 0) + 1
+        if timeout_counters[lgv] >= 5:
+            skip_until[lgv] = time.time() + 10  # Skip for 10 seconds
+            print(f"[Skip] {lgv} will be skipped for 10 seconds due to consecutive failures")
+
         for display_name in processed_variables.values():
             result_queue.put((lgv, display_name, "Timeout"))
         return
     
     try:
         port = 851 if tc_type == "TC3" else 801
-        with pyads.Connection(ams_net_id, port) as ads_connection:
+        session_start = time.time()
+        ads_connection = pyads.Connection(ams_net_id, port)
+        ads_connection.set_timeout(800)
+
+        with ads_connection:
             print(f"Connected to LGV {lgv} ({ams_net_id})")
 
-            ads_connection.set_timeout(700)
+            # Normalize key (frozenset of variable names to ignore order)
+            var_key = frozenset(processed_variables.keys())
+            cache_key = (lgv, var_key)
+
+             # Reuse cached types if available
+            if cache_key in variable_type_cache:
+                symbol_types = variable_type_cache[cache_key]
+                print(f"Reusing cached types for LGV {lgv}")
+            else:
+                print(f"Building new symbol type cache for LGV {lgv}")
+                symbol_types = {}
+                for var_name, display_name in processed_variables.items():
+                    try:
+                        symbol_info = ads_connection.get_symbol(var_name)
+                        symbol_types[var_name] = get_pyads_type(symbol_info.symbol_type)
+                    except Exception as e:
+                        print(f"Failed to get type for {var_name}: {e}")
+                        result_queue.put((lgv, display_name, e))
+                # Store in cache
+                variable_type_cache[cache_key] = symbol_types
 
             for variable_name, display_name in processed_variables.items():
+                if variable_name not in symbol_types:
+                    continue 
                 try:
-                    symbol_info = ads_connection.get_symbol(variable_name)
-                    expected_type = get_pyads_type(symbol_info.symbol_type)
-                    value = ads_connection.read_by_name(variable_name, expected_type)
-                    print(f"Read {value} from {variable_name} for LGV {lgv}")
+                    start = time.time()
+                    value = ads_connection.read_by_name(variable_name, symbol_types[variable_name])
+                    print(f"Read {variable_name} took {time.time() - start:.3f}s")
+
                     result_queue.put((lgv, display_name, value))
+                    timeout_counters[lgv]=0 # Reset timeout counter on success
                 except Exception as e:
                     result_queue.put((lgv, display_name, e))
+
+        print(f"Total ADS session for LGV{lgv:02d} took {time.time() - session_start:.3f}s")
+
     except Exception as e:
+        timeout_counters[lgv] = timeout_counters.get(lgv, 0) + 1
+        if timeout_counters[lgv] >= 5:
+            skip_until[lgv] = time.time() + 10  # Skip for 10 seconds
+            print(f"[Skip] {lgv} will be skipped for 10 seconds due to consecutive failures")
         for display_name in processed_variables.values():
             result_queue.put((lgv, display_name, e))
 
+@reentry_guard
 def rw_read_variable(event=None):
     """Read variable(s)"""
     global read_write_in_progress
+
+    if read_write_in_progress :
+        print("Read/Write operation already in progress!")
+        return
 
     variable_names = variable_menu.get().strip()  # Get the variable name directly
 
@@ -1947,6 +2051,10 @@ def rw_read_variable(event=None):
         # messagebox.showerror("Error", "Variable name missing!")
         print("Variable name missing!")
         log_message("Variable name missing!", "error")
+
+        toggle_periodic_reading()
+        
+        read_write_in_progress = False
         return
 
     # Split the input by commas and strip each variable name
@@ -1955,6 +2063,10 @@ def rw_read_variable(event=None):
     if not variables:
         print("No valid variable names found!")
         log_message("No valid variable names found!", "warning")
+
+        toggle_periodic_reading()
+        
+        read_write_in_progress = False
         return
 
     # Preprocess variable names for unique representation
@@ -1963,14 +2075,17 @@ def rw_read_variable(event=None):
     # Get the validated LGV data
     lgv_data = validate_and_link_lgv()
     if lgv_data is None:
+
+        toggle_periodic_reading()
+        
+        read_write_in_progress = False
+
         return  # Exit if validation failed
     
-    if read_write_in_progress :
-        print("Read/Write operation already in progress!")
-        return
 
     # Prepare result table
-    prepare_status_table(lgv_data, list(processed_variables.values()))
+    if should_prepare_table(lgv_data, list(processed_variables.values())):
+        prepare_status_table(lgv_data, list(processed_variables.values()))
 
     # Result queue and thread tracking
     result_queue = Queue()
@@ -1978,6 +2093,11 @@ def rw_read_variable(event=None):
 
     # Start a thread for each LGV to perform the read operation
     for lgv, ams_net_id, tc_type in lgv_data:
+
+        if lgv in skip_until and time.time() < skip_until[lgv]:
+            print(f"[Skip] Skipping {lgv} due to consecutive timeouts")
+            continue
+
         thread = threading.Thread(
             target=safe_read_all_variables_for_lgv,
             args=(lgv, ams_net_id, tc_type, processed_variables, result_queue)
@@ -1995,6 +2115,49 @@ def rw_read_variable(event=None):
 
     read_write_in_progress = True
 
+
+#################################### Live Read Control ####################################
+START_ICON = "▶"   # Start Live Read
+STOP_ICON = "◼"    # Stop Live Read
+
+def toggle_periodic_reading(event=None):
+    global periodic_reading_active
+
+    if not periodic_reading_active:
+        start_periodic_reading()
+        live_read_button.config(text=STOP_ICON)
+        tooltip_text.set("Stop Live Read")
+    else:
+        stop_periodic_reading()
+        live_read_button.config(text=START_ICON)
+        tooltip_text.set("Start Live Read")
+
+def start_periodic_reading():
+    global periodic_reading_active
+    periodic_reading_active = True
+    threading.Thread(target=periodic_read_loop, daemon=True).start()
+
+def stop_periodic_reading():
+    global periodic_reading_active
+    periodic_reading_active = False
+
+
+#################################### Periodic Read Loop ###################################
+LIVE_READ_INTERVAL = 0.4
+
+def periodic_read_loop():
+    while periodic_reading_active:
+        
+        if not read_write_in_progress:
+            rw_read_variable()
+
+        # Wait for read to complete
+        # while read_write_in_progress:
+        #     time.sleep(0.005)
+        
+        time.sleep(LIVE_READ_INTERVAL)
+
+
 def process_results_in_background(threads, result_queue, lgv_data):
     """Monitor threads and update UI as results arrive."""
 
@@ -2002,11 +2165,16 @@ def process_results_in_background(threads, result_queue, lgv_data):
     results = {}
     responded_lgvs = set()  # Track which LGVs responded
 
+    # Determine LGVs actively read in this cycle (skipped LGVs won't be in here)
+    active_lgvs = {lgv for lgv, _, _ in lgv_data if lgv not in skip_until or time.time() >= skip_until[lgv]}
+
     # Handle LGVs that didn't respond
-    all_lgvs = {lgv for lgv, _, _ in lgv_data}
+    # all_lgvs = {lgv for lgv, _, _ in lgv_data}
     variables = status_table["columns"][1:]
 
     def check_and_update():
+        nonlocal results, responded_lgvs
+
         # Process new items in the result queue
         while not result_queue.empty():
             lgv, variable, value = result_queue.get()
@@ -2023,7 +2191,7 @@ def process_results_in_background(threads, result_queue, lgv_data):
         
         # If all threads are done, handle timeouts and stop scheduling
         if all(not t.is_alive() for t in threads):
-            missing_lgvs = all_lgvs - responded_lgvs
+            missing_lgvs = active_lgvs - responded_lgvs
 
             for lgv in missing_lgvs:
                 for variable in variables:
@@ -2032,10 +2200,9 @@ def process_results_in_background(threads, result_queue, lgv_data):
             # Handle variables that weren't updated for responding LGVs
             for lgv in responded_lgvs:
                 for variable in variables:
-                    if variable not in results[lgv]:
+                    if lgv not in results or variable not in results[lgv]:
                         update_status_table(lgv, variable, "Timeout")
             
-            # Reset the flag after all threads are done
             global read_write_in_progress
             read_write_in_progress = False
 
@@ -2047,11 +2214,15 @@ def process_results_in_background(threads, result_queue, lgv_data):
     root.after(200, check_and_update)
 
 
+################################################ Adjust results table ####################################
 def prepare_status_table(lgv_data, variables):
     """Pre-populate the table with LGVs and empty variable columns."""
     status_table.delete(*status_table.get_children())  # Clear the table
 
-    lgv_overlay.delete(*lgv_overlay.get_children())
+    try:
+        lgv_overlay.delete(*lgv_overlay.get_children())
+    except tk.TclError as e:
+        print(f"[Warning] Tried to clear lgv_overlay but got: {e}")
 
     print("Preparing table with variables:", variables)
     print("Current children:", status_table.get_children())
@@ -2083,18 +2254,28 @@ def prepare_status_table(lgv_data, variables):
 
 
 def update_status_table(lgv, variable, value):
-    """Update the table for a specific LGV and variable."""
+    """Update the table for a specific LGV and variable, only if the value has changed"""
     row_id = f"LGV{lgv:02d}"
     try:
         item = status_table.item(row_id)
         values = list(item["values"])
 
-        if variable in status_table["columns"]:
-            col_index = status_table["columns"].index(variable)
-            values[col_index] = value
+        columns = status_table["columns"]
 
-            tag = "" if value in ["Timeout", "Error"] else ""
-            status_table.item(row_id, values=values, tags=(tag,))
+        if variable in columns:
+            col_index = columns.index(variable)
+
+            # Ensure values list is long enough
+            if len(values) < len(columns):
+                values += [""] * (len(columns) - len(values))
+
+            current_value = values[col_index]
+            if str(current_value) != str(value): # Only update if changed
+                values[col_index] = value
+
+                tag = "" if value in ["Timeout", "Error"] else ""
+                status_table.item(row_id, values=values, tags=(tag,))
+
     except Exception as e:
         print(f"Failed to update status for {row_id}, variable {variable}: {e}")
 
@@ -2548,6 +2729,41 @@ def select_previous_tab(event=None):
     print("previous tab")
     return "break"
 
+def on_user_intervention(*args):
+    global periodic_reading_active
+    if periodic_reading_active:
+        stop_periodic_reading()
+        live_read_button.config(text=START_ICON)
+        tooltip_text.set("Start Live Read")
+
+# Tooltip Logic
+def create_tooltip(widget, text_var):
+    tooltip = tk.Label(root, text="", bg="white", relief="solid", bd=1, font=("helvetica", "8", "normal"), padx=1, pady=1)
+    tooltip.place_forget()
+
+    def on_enter(event):
+        tooltip.config(text=text_var.get())
+        # Place it in the global reference
+        # tooltip.place(x=400, y=160)
+
+        widget = event.widget
+
+        # Use widget-relative placement inside the same parent
+        tooltip.place(
+            in_=widget,  # Anchor to the button
+            relx=0.5,    # Centered horizontally
+            rely=0.0,    # Just above the button
+            x=0,
+            y=0,       # Shift up
+            anchor="s"   # Anchor the bottom center of tooltip to relx/rel...
+        )
+
+    def on_leave(event):
+        tooltip.place_forget()
+
+    widget.bind("<Enter>", on_enter)
+    widget.bind("<Leave>", on_leave)
+
 
 ############################# Set GUI icon ##########################
 def set_icon(window):
@@ -2563,7 +2779,7 @@ def set_icon(window):
 
 # Create the root window
 root = tk.Tk()
-root.title(f"Super ADS Client {__version__}")
+root.title(f"Super ADS Client {VERSION}")
 # root.geometry("600x400")  # Adjust the window size
 
 # Let the table_frame grow inside root
@@ -2796,11 +3012,14 @@ variable_frame = ttk.LabelFrame(read_write_tab, text="Variables")
 variable_frame.grid(row=0, column=0, padx=10, pady=5, sticky="nsew")
 
 # ttk.Label(variable_frame, text="Select or Add Variable:").grid(row=0, column=0, padx=5, pady=5)
-variable_menu = ttk.Combobox(variable_frame)
+variable_entry_var = tk.StringVar()
+variable_menu = ttk.Combobox(variable_frame, textvariable=variable_entry_var)
 variable_menu.grid(row=0, column=0, padx=5, pady=5, sticky='ew')
 variable_menu.bind('<ButtonPress>', update_variable_menu)
 # Bind the filter function to update on key release
 variable_menu.bind('<Tab>', filter_combobox)
+
+variable_entry_var.trace_add('write', on_user_intervention)
 
 # variable_menu.configure(postcommand=lambda:filter_combobox(None))
 
@@ -2844,17 +3063,28 @@ lgv_frame.grid(row=2, column=0, padx=10, pady=5, sticky="ew")
 input_frame = ttk.Frame(lgv_frame)
 input_frame.grid(row=0, column=0, padx=5, pady=5)
 ttk.Label(input_frame, text="LGV:").grid(row=0, column=0, padx=5, pady=5)
-lgv_range_entry = ttk.Entry(input_frame)
+
+lgv_entry_var = tk.StringVar()
+lgv_range_entry = ttk.Entry(input_frame, textvariable=lgv_entry_var)
 lgv_range_entry.grid(row=0, column=1, padx=5, pady=5)
+
+lgv_entry_var.trace_add('write', on_user_intervention)
 
 # Buttons Frame
 button_frame = ttk.Frame(lgv_frame)
-button_frame.grid(row=0, column=2, columnspan=2, pady=10, padx=30, sticky='e')
+button_frame.grid(row=0, column=2, columnspan=2, pady=10, padx=(20,10), sticky='e')
 
 read_button = ttk.Button(button_frame, text="Read", command=rw_read_variable)
 read_button.grid(row=0, column=0, padx=10, ipadx=2, ipady=2)
 write_button = ttk.Button(button_frame, text="Write", command=rw_write_variable)
 write_button.grid(row=0, column=1, padx=10, ipadx=2, ipady=2)
+
+# Live Read Icon Button
+tooltip_text = tk.StringVar(value="Start Live Read")
+live_read_button = ttk.Button(button_frame, text=START_ICON, width=3, command=toggle_periodic_reading)
+live_read_button.grid(row=0, column=2, padx=(5,5), ipadx=2, ipady=2)
+
+create_tooltip(live_read_button, tooltip_text)
 
 
 # Status table frame
@@ -2948,6 +3178,19 @@ def on_closing():
 # Bind the window close event to custom close function
 root.protocol("WM_DELETE_WINDOW", on_closing)
 
+
+################################################################# Version check ######################################################################
+
+if getattr(sys, 'frozen', False) and not updated:  # Only in PyInstaller .exe
+    check_for_updates_async(
+        root=root,
+        current_version=VERSION,
+        version_url="https://github.com/Angel-sudo-ops/super-ads-client/releases/latest/download/version.txt",
+        download_url="https://github.com/Angel-sudo-ops/super-ads-client/releases/latest/download/SuperADSClient.exe",
+        app_name="SuperADSClient"
+    )
+
+################################################################### Main loop ##########################################################################
 
 root.mainloop()
 

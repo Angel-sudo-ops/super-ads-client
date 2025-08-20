@@ -5,7 +5,10 @@ a = Analysis(
     ['SuperADSClient.py'],
     pathex=[],
     binaries=[],
-    datas=[('plc.ico', '.')],
+    datas=[
+        ('plc.ico', '.'), 
+        ('version.txt', '.')
+    ],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

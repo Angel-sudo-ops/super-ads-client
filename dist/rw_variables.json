@@ -35,8 +35,6 @@
     "Devices.Pressure.tilt.weight,Main.StartupOk",
     "Devices.Pressure.tilt.weight,Main.StartupOk; SpareVariables.boolSpare[0]",
     "InfoMovements.Mov.opCl4.curGroupsInterax[1];InfoMovements.Mov.opCl4.curGroupsInterax[2];InfoMovements.Mov.shift.curPosition;InfoMovements.Mov.tilt.curPosition;InfoMovements.Mov.lift.curPosition; LibraryInterfaces.LGV.Guid.Rout.remDistToPreOP; LibraryInterfaces.LGV.Guid.Rout.remDistToOP; Devices.Pressure.tilt.weight; Devices.Pressure.lift.weight; FlexSegPhaseHandler.preOpDistFromTheEnd; FlexSegPhaseHandler.segDistAvailable",
-    "CoreGVL.ADS_Stop,CoreGVL.ADS_Reset",
-    "CoreGVL.ADS_Stop, CoreGVL.ADS_Reset",
     "Operation.current.name;LibraryInterfaces.LGV.Guid.Rout.remDistToPreOP;LibraryInterfaces.LGV.Guid.Rout.remDistToOP",
     "Operation.current.name;InfoMovements.Mov.lift.curPosition;LibraryInterfaces.LGV.Guid.Rout.remDistToPreOP;LibraryInterfaces.LGV.Guid.Rout.remDistToOP",
     "LiftMov.level_LookUp_Table[4,1]; LiftMov.H_Infork_Pallet_by_Host",
@@ -104,5 +102,17 @@
     "LibraryInterfaces.OpInfo.loadUnitLenght",
     "LibraryInterfaces.FileManagement.saveRequest[1]",
     "LibraryInterfaces.FileManagement.saveRequest[5]",
-    "AGV_Ctrl.AutoReboot.autoRebootDone"
+    "AGV_Ctrl.AutoReboot.autoRebootDone",
+    "TiltMov.tiltEncoder.staticSampleWeight",
+    "CoreGVL.AutoReboot.silencePlease",
+    "CoreGVL.ADS_Stop;CoreGVL.ADS_Reset",
+    ".CanInt.WCharger.IN.Slave1Current;.CanInt.WCharger.IN.Slave2Current;.CanInt.WCharger.IN.MainCurrent",
+    ".Battery_Status",
+    ".CanInt.WCharger.IN.Slave1Current;.CanInt.WCharger.IN.Slave2Current;.CanInt.WCharger.IN.MainCurrent;.Battery_Status",
+    ".Sys_Navigator_Info.AGV_Pos.x",
+    ".Sys_Navigator_Info.AGV_Pos.x;.Sys_Navigator_Info.AGV_Pos.y",
+    "LibraryInterfaces.LGV.guid.info.pos.x;LibraryInterfaces.LGV.guid.info.pos.y",
+    ".Sys_Flex_Status",
+    ".Sys_Aut_Run",
+    "LibraryInterfaces.LGV.guid.info.pos.x;LibraryInterfaces.LGV.guid.info.pos.y;.Sys_Navigator_Info.AGV_Pos.x;.Sys_Navigator_Info.AGV_Pos.y"
 ]
