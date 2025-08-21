@@ -15,6 +15,9 @@ import copy
 import subprocess
 import platform
 import functools
+import csv
+import openpyxl
+from openpyxl.utils import get_column_letter
 
 from myutils.autoupdater import check_for_updates_async, get_app_version
 # from ctypes import sizeof
@@ -2344,6 +2347,8 @@ def update_status_table(lgv, variable, value):
     # Adjust column widths
     adjust_column_width()
 
+    update_export_menu_state(export_menu, export_idx_map, status_table)
+
 
 def adjust_column_width():
     """Dynamically adjust the width of each column based on content."""
@@ -2442,6 +2447,201 @@ def clear_status():
     # Widget to show results when reading (enable only with reading)
 
     # Read and write will be multi thread
+
+##################################################### Export status_table to .csv, .xlsx or copy to clipboard #################################################
+
+def is_treeview_empty(tree):
+    return len(tree.get_children()) == 0
+
+def _all_columns(tree):
+    """Always use the full column list as defined in tree['columns']."""
+    return list(tree["columns"])
+
+def _headers_from_headings(tree, cols):
+    """Use heading text if set; fall back to column id."""
+    headers = []
+    for col in cols:
+        text = tree.heading(col, "text")
+        headers.append(text if text else col)
+    return headers
+
+def get_treeview_matrix_all_columns(tree):
+    """
+    Returns (headers, rows) for ALL columns in tree['columns'] order.
+    """
+    cols = _all_columns(tree)
+    headers = _headers_from_headings(tree, cols)
+
+    rows = []
+    for item in tree.get_children():
+        values = tree.item(item, "values") or ()
+        # Ensure safe indexing if some rows have fewer values
+        row = [("" if i >= len(values) else ("" if values[i] is None else str(values[i])))
+               for i in range(len(cols))]
+        rows.append(row)
+
+    return headers, rows
+
+def export_to_excel(tree, parent):
+    if is_treeview_empty(tree):
+        messagebox.showinfo("Export", "Nothing to export.")
+        return
+
+    headers, rows = get_treeview_matrix_all_columns(tree)
+
+    try:
+        file_path = filedialog.asksaveasfilename(
+            parent=parent,
+            defaultextension=".xlsx",
+            filetypes=[("Excel Workbook", "*.xlsx"), ("All files", "*.*")]
+        )
+        if not file_path:
+            return
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "LGV Data"
+
+        ws.append(headers)
+        for r in rows:
+            ws.append(r)
+
+        ws.freeze_panes = "A2"  # freeze header
+
+        # Basic auto-width
+        for col_idx in range(1, len(headers) + 1):
+            col_letter = get_column_letter(col_idx)
+            max_len = max(
+                [len(str(headers[col_idx - 1]))] + [len(str(row[col_idx - 1])) for row in rows]
+            )
+            ws.column_dimensions[col_letter].width = min(max(10, max_len + 2), 60)
+
+        wb.save(file_path)
+        messagebox.showinfo("Export", f"Exported to:\n{file_path}")
+
+    except ImportError:
+        if messagebox.askyesno(
+            "openpyxl not available",
+            "Excel export requires 'openpyxl'. Export as CSV instead?"
+        ):
+            export_to_csv(tree, parent)
+
+def export_to_csv(tree, parent):
+    if is_treeview_empty(tree):
+        messagebox.showinfo("Export", "Nothing to export.")
+        return
+
+    headers, rows = get_treeview_matrix_all_columns(tree)
+
+    file_path = filedialog.asksaveasfilename(
+        parent=parent,
+        defaultextension=".csv",
+        filetypes=[("CSV (Comma delimited)", "*.csv"), ("All files", "*.*")]
+    )
+    if not file_path:
+        return
+
+    with open(file_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(headers)
+        writer.writerows(rows)
+
+    messagebox.showinfo("Export", f"Exported to:\n{file_path}")
+
+
+def copy_treeview_to_clipboard(tree, parent):
+    if is_treeview_empty(tree):
+        messagebox.showinfo("Copy", "Nothing to copy.")
+        return
+
+    headers, rows = get_treeview_matrix_all_columns(tree)
+    lines = ["\t".join(headers)]
+    lines += ["\t".join("" if v is None else str(v) for v in r) for r in rows]
+    data = "\n".join(lines)
+
+    parent.clipboard_clear()
+    parent.clipboard_append(data)
+    parent.update()
+    messagebox.showinfo("Copy", "Full table copied to clipboard (TSV).")
+
+
+def build_export_menu(root, treeview):
+    menubar = root.nametowidget(root["menu"]) if root["menu"] else tk.Menu(root)
+    if not root["menu"]:
+        root.config(menu=menubar)
+
+    export_menu = tk.Menu(menubar, tearoff=False)
+    menubar.add_cascade(label="Export", menu=export_menu)
+
+    export_menu.add_command(label="CSV (.csv)",
+                            command=lambda: export_to_csv(treeview, root))
+    csv_idx = export_menu.index("end")
+
+    export_menu.add_command(label="Excel (.xlsx)",
+                            command=lambda: export_to_excel(treeview, root))
+    xlsx_idx = export_menu.index("end")
+
+    export_menu.add_command(label="Copy to Clipboard",
+                            command=lambda: copy_treeview_to_clipboard(treeview, root))
+    copy_idx = export_menu.index("end")
+
+    return export_menu, {"csv": csv_idx, "xlsx": xlsx_idx, "copy": copy_idx}
+
+
+def update_export_menu_state(export_menu, idx_map, treeview):
+    state = tk.NORMAL if not is_treeview_empty(treeview) else tk.DISABLED
+    for key in idx_map:
+        export_menu.entryconfig(idx_map[key], state=state)
+
+
+def _find_menu_index_by_label(menu: tk.Menu, label: str):
+    """Return the index of the first cascade in 'menu' with the given label, else None."""
+    end = menu.index("end")
+    if end is None:
+        return None
+    for i in range(end + 1):
+        if menu.type(i) == "cascade" and menu.entrycget(i, "label") == label:
+            return i
+    return None
+
+def ensure_export_menu_present(menubar: tk.Menu, export_menu: tk.Menu, label: str = "Export"):
+    """Add the Export cascade to the menubar if it isn't already there."""
+    idx = _find_menu_index_by_label(menubar, label)
+    if idx is None:
+        menubar.add_cascade(label=label, menu=export_menu)
+
+def remove_export_menu(menubar: tk.Menu, label: str = "Export"):
+    """Remove the Export cascade from the menubar if present."""
+    idx = _find_menu_index_by_label(menubar, label)
+    if idx is not None:
+        menubar.delete(idx)
+
+
+def setup_export_menu_visibility(notebook, rw_tab_frame, menubar, export_menu,
+                                 export_idx_map, treeview):
+    """
+    Show the Export menu only when RW tab is selected.
+    - notebook: ttk.Notebook
+    - rw_tab_frame: the Frame used as the RW Panel tab content
+    - menubar: the root's Menu (root['menu'])
+    - export_menu: the submenu returned by build_export_menu(...)
+    - export_idx_map: index map returned by build_export_menu(...)
+    - treeview: your status_table
+    """
+    def refresh_menu_visibility():
+        is_rw = notebook.select() == str(rw_tab_frame)
+        if is_rw:
+            ensure_export_menu_present(menubar, export_menu, label="Export")
+            # Keep items enabled/disabled based on table content
+            update_export_menu_state(export_menu, export_idx_map, treeview)
+        else:
+            remove_export_menu(menubar, label="Export")
+
+    # React to tab switches
+    notebook.bind("<<NotebookTabChanged>>", lambda e: refresh_menu_visibility())
+    # Set initial state
+    refresh_menu_visibility()
+
 
 ###################################################################### Helper methods #########################################################################
 
@@ -3229,6 +3429,25 @@ notebook.bind("<<NotebookTabChanged>>", on_tab_changed)
 
 
 tab_shortcut_actions = create_tab_shortcut_actions()
+
+
+# Build the Export submenu (do this once)
+export_menu, export_idx_map = build_export_menu(root, status_table)
+
+# Get the real menubar (created inside build_export_menu if not present)
+menubar = root.nametowidget(root["menu"])
+
+# Only show Export when RW tab is active
+setup_export_menu_visibility(
+    notebook=notebook,
+    rw_tab_frame=read_write_tab,   # <-- your RW Panel frame
+    menubar=menubar,
+    export_menu=export_menu,
+    export_idx_map=export_idx_map,
+    treeview=status_table,
+)
+
+
 
 def on_closing():
     close_current_connection()  # Close connection before exiting
