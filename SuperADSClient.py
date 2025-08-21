@@ -3469,12 +3469,11 @@ root.protocol("WM_DELETE_WINDOW", on_closing)
 ################################################################# Version check ######################################################################
 
 if getattr(sys, 'frozen', False) and not updated:  # Only in PyInstaller .exe
-    root.after(1000, lambda: check_for_updates_async(
+    root.after(1500, lambda: check_for_updates_async(
             root=root,
             current_version=VERSION,
             version_url="https://github.com/Angel-sudo-ops/super-ads-client/releases/latest/download/version.txt",
             download_url="https://github.com/Angel-sudo-ops/super-ads-client/releases/latest/download/SuperADSClient.exe"
-            # app_name="SuperADSClient"
         ))
 
 ################################################################### Main loop ##########################################################################
