@@ -17,6 +17,9 @@ def check_for_updates_async(root, current_version, version_url, download_url, ap
             if version.parse(latest_version) > version.parse(current_version):
                 # Messagebox must run in the main thread
                 root.after(0, lambda: ask_and_update(root, current_version, latest_version, download_url, display_name))
+            else:
+                print(f"[Updater] Already at latest version ({latest_version})")
+                return
         except Exception as e:
             print(f"[Updater] Update check failed: {e}")
 
@@ -105,29 +108,66 @@ def download_and_prepare_batch(current_version, latest_version, download_url, ap
             batch.write("echo ==============================\n")
             batch.write(f"echo Updating {app_name}\n")
             batch.write("echo ==============================\n\n")
+            batch.write("echo.\n")
 
-            # Show swap progress
+            # Wait until the original app has fully closed
+            batch.write(f"echo Waiting for {current_exe_name} to close...\n")
+            batch.write(":waitloop1\n")
+            batch.write(f'tasklist /FI "IMAGENAME eq {current_exe_name}" | find /I "{current_exe_name}" >nul\n')
+            batch.write("if not errorlevel 1 (\n")
+            batch.write("    timeout /t 1 >nul\n")
+            batch.write("    goto waitloop1\n")
+            batch.write(")\n\n")
+
+            # Swap applications
             batch.write("echo Swapping applications...\n")
-            batch.write("timeout /t 1 >nul\n")
-            batch.write(f"rename \"{current_exe_name}\" \"{old_version_name}\"\n")
-            batch.write(f"move \"{new_exe_name}\" \"{current_exe_name}\"\n")
+            batch.write(f'rename "{current_exe_name}" "{old_version_name}" >nul 2>&1\n')
+            batch.write(f'move /Y "{new_exe_name}" "{current_exe_name}" >nul\n')
 
-            # Start new exe
-            batch.write("echo Launching new version...\n")
-            batch.write(f"start \"\" \"{current_exe_name}\" --updated\n")
+            # # Wait until the file is unlocked and fully ready
+            # batch.write(":: Wait until new EXE is fully available (avoid Python DLL load error)\n")
+            # batch.write(":waitloop2\n")
+            # batch.write(f'copy /b "{current_exe_name}" nul >nul 2>&1\n')
+            # batch.write("if errorlevel 1 (\n")
+            # batch.write("    timeout /t 1 >nul\n")
+            # batch.write("    goto waitloop2\n")
+            # batch.write(")\n\n")
 
-            # Clean up
-            batch.write("timeout /t 1 >nul\n")
-            batch.write("echo Cleaning old files...\n")
-            batch.write(f"del \"{old_version_name}\" >nul 2>&1\n")
+            # batch.write("echo Launching new version...\n")
+            # batch.write("timeout /t 10 >nul\n")
+            # batch.write("pushd \"%~dp0\"\n")
+            # batch.write(f'start "" ".\\{current_exe_name}" --updated\n')
+            # batch.write("popd\n")
 
-            # Done message with auto-close
-            batch.write("echo Update complete!\n")
-            batch.write("echo This window will close automatically in 3 seconds...\n")
+            # Optional cleanup
             batch.write("timeout /t 3 >nul\n")
+            batch.write("echo Cleaning old files...\n")
+            batch.write(f'del "{old_version_name}" >nul 2>&1\n')
+
+            # Define the message box width
+            box_width = 60
+            exe_line = f"{current_exe_name} v{latest_version}"
+            padding = (box_width - 4 - len(exe_line)) // 2  # 4 accounts for 'echo = ' and ' ='
+            exe_display = f"{' ' * padding}{exe_line}{' ' * (box_width - 4 - len(exe_line) - padding)}"
+
+            # batch.write("color 0A\n")
+            batch.write("echo.\n")
+            batch.write("echo " + "=" * box_width + "\n")
+            batch.write("echo ={:^{width}}=\n".format("UPDATE COMPLETE!", width=box_width - 2))
+            batch.write("echo " + "=" * box_width + "\n")
+            batch.write("echo ={:^{width}}=\n".format("You can now run the new version:", width=box_width - 2))
+            batch.write(f"echo = {exe_display} =\n")
+            batch.write("echo " + "=" * box_width + "\n")
+            batch.write("echo.\n")
+            
+            batch.write("echo Press any key to exit... \n")
+            batch.write("pause >nul\n")
+            # batch.write("echo This window will close automatically in 10 seconds...\n")
+            # batch.write("timeout /t 10 >nul\n")
 
             # Self-delete
-            batch.write("del \"%~f0\" >nul 2>&1\n")
+            batch.write('del "%~f0" >nul 2>&1\n')
+            
 
         print("[Updater] Running updater batch...")
 
