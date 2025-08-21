@@ -2492,6 +2492,8 @@ def export_to_excel(tree, parent):
     try:
         file_path = filedialog.asksaveasfilename(
             parent=parent,
+            initialdir=os.path.join(os.path.expanduser("~"), "Documents"),
+            initialfile="LGV_Variables_Data",
             defaultextension=".xlsx",
             filetypes=[("Excel Workbook", "*.xlsx"), ("All files", "*.*")]
         )
@@ -2507,6 +2509,7 @@ def export_to_excel(tree, parent):
             ws.append(r)
 
         ws.freeze_panes = "A2"  # freeze header
+        ws.freeze_panes = "B2"
 
         # Basic auto-width
         for col_idx in range(1, len(headers) + 1):
@@ -2535,6 +2538,8 @@ def export_to_csv(tree, parent):
 
     file_path = filedialog.asksaveasfilename(
         parent=parent,
+        initialdir=os.path.join(os.path.expanduser("~"), "Documents"),
+        initialfile="LGV_Variables_Data",
         defaultextension=".csv",
         filetypes=[("CSV (Comma delimited)", "*.csv"), ("All files", "*.*")]
     )
