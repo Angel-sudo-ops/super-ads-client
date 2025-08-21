@@ -108,6 +108,7 @@ def download_and_prepare_batch(current_version, latest_version, download_url, ap
             batch.write("echo ==============================\n")
             batch.write(f"echo Updating {app_name}\n")
             batch.write("echo ==============================\n\n")
+            batch.write("echo.\n")
 
             # Wait until the original app has fully closed
             batch.write(f"echo Waiting for {current_exe_name} to close...\n")
@@ -143,15 +144,20 @@ def download_and_prepare_batch(current_version, latest_version, download_url, ap
             batch.write("echo Cleaning old files...\n")
             batch.write(f'del "{old_version_name}" >nul 2>&1\n')
 
-            # Highlighted done message
-            # batch.write("color 0A\n")  # Green text on black background
+            # Define the message box width
+            box_width = 60
+            exe_line = f"{current_exe_name} v{latest_version}"
+            padding = (box_width - 4 - len(exe_line)) // 2  # 4 accounts for 'echo = ' and ' ='
+            exe_display = f"{' ' * padding}{exe_line}{' ' * (box_width - 4 - len(exe_line) - padding)}"
+
+            # batch.write("color 0A\n")
             batch.write("echo.\n")
-            batch.write("echo ============================================\n")
-            batch.write("echo =           UPDATE COMPLETE!              =\n")
-            batch.write("echo ============================================\n")
-            batch.write(f'echo =  You can now run the new version:       =\n')
-            batch.write(f'echo =     {current_exe_name} v{latest_version}{" " * (20 - len(latest_version))}= \n')
-            batch.write("echo ============================================\n")
+            batch.write("echo " + "=" * box_width + "\n")
+            batch.write("echo ={:^{width}}=\n".format("UPDATE COMPLETE!", width=box_width - 2))
+            batch.write("echo " + "=" * box_width + "\n")
+            batch.write("echo ={:^{width}}=\n".format("You can now run the new version:", width=box_width - 2))
+            batch.write(f"echo = {exe_display} =\n")
+            batch.write("echo " + "=" * box_width + "\n")
             batch.write("echo.\n")
             
             batch.write("echo Press any key to exit... \n")
