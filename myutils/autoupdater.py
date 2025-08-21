@@ -143,18 +143,24 @@ def download_and_prepare_batch(current_version, latest_version, download_url, ap
             batch.write("echo Cleaning old files...\n")
             batch.write(f'del "{old_version_name}" >nul 2>&1\n')
 
-            # Done message
-            batch.write("echo Update complete!\n")
-            batch.write(f"echo You can run new version {latest_version} of {current_exe_name} now!\n")
-
-            # Self-delete
-            batch.write('del "%~f0" >nul 2>&1\n')
+            # Highlighted done message
+            # batch.write("color 0A\n")  # Green text on black background
+            batch.write("echo.\n")
+            batch.write("echo ============================================\n")
+            batch.write("echo =           UPDATE COMPLETE!              =\n")
+            batch.write("echo ============================================\n")
+            batch.write(f'echo =  You can now run the new version:       =\n')
+            batch.write(f'echo =     {current_exe_name} v{latest_version}{" " * (20 - len(latest_version))}= \n')
+            batch.write("echo ============================================\n")
+            batch.write("echo.\n")
             
             batch.write("echo Press any key to exit... \n")
             batch.write("pause >nul\n")
             # batch.write("echo This window will close automatically in 10 seconds...\n")
             # batch.write("timeout /t 10 >nul\n")
 
+            # Self-delete
+            batch.write('del "%~f0" >nul 2>&1\n')
             
 
         print("[Updater] Running updater batch...")
