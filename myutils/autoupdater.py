@@ -106,28 +106,46 @@ def download_and_prepare_batch(current_version, latest_version, download_url, ap
             batch.write(f"echo Updating {app_name}\n")
             batch.write("echo ==============================\n\n")
 
-            # Show swap progress
+            # Wait until the original app has fully closed
+            batch.write(f"echo Waiting for {current_exe_name} to close...\n")
+            batch.write(":waitloop1\n")
+            batch.write(f'tasklist /FI "IMAGENAME eq {current_exe_name}" | find /I "{current_exe_name}" >nul\n')
+            batch.write("if not errorlevel 1 (\n")
+            batch.write("    timeout /t 1 >nul\n")
+            batch.write("    goto waitloop1\n")
+            batch.write(")\n\n")
+
+            # Swap applications
             batch.write("echo Swapping applications...\n")
-            batch.write("timeout /t 1 >nul\n")
-            batch.write(f"rename \"{current_exe_name}\" \"{old_version_name}\"\n")
-            batch.write(f"move \"{new_exe_name}\" \"{current_exe_name}\"\n")
+            batch.write(f'rename "{current_exe_name}" "{old_version_name}" >nul 2>&1\n')
+            batch.write(f'move /Y "{new_exe_name}" "{current_exe_name}" >nul\n')
 
-            # Start new exe
+            # Wait until the file is unlocked and fully ready
+            batch.write(":: Wait until new EXE is fully available (avoid Python DLL load error)\n")
+            batch.write(":waitloop2\n")
+            batch.write(f'copy /b "{current_exe_name}" nul >nul 2>&1\n')
+            batch.write("if errorlevel 1 (\n")
+            batch.write("    timeout /t 1 >nul\n")
+            batch.write("    goto waitloop2\n")
+            batch.write(")\n\n")
+
+            # Launch new version
             batch.write("echo Launching new version...\n")
-            batch.write(f"start \"\" \"{current_exe_name}\" --updated\n")
+            batch.write("timeout /t 5 >nul\n")
+            batch.write(f'start .\"{current_exe_name}" \n')
 
-            # Clean up
-            batch.write("timeout /t 1 >nul\n")
-            batch.write("echo Cleaning old files...\n")
-            batch.write(f"del \"{old_version_name}\" >nul 2>&1\n")
-
-            # Done message with auto-close
-            batch.write("echo Update complete!\n")
-            batch.write("echo This window will close automatically in 3 seconds...\n")
+            # Optional cleanup
             batch.write("timeout /t 3 >nul\n")
+            batch.write("echo Cleaning old files...\n")
+            batch.write(f'del "{old_version_name}" >nul 2>&1\n')
+
+            # Done message
+            batch.write("echo Update complete!\n")
+            batch.write("echo This window will close automatically in 10 seconds...\n")
+            batch.write("timeout /t 10 >nul\n")
 
             # Self-delete
-            batch.write("del \"%~f0\" >nul 2>&1\n")
+            # batch.write('del "%~f0" >nul 2>&1\n')
 
         print("[Updater] Running updater batch...")
 
