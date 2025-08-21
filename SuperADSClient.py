@@ -2500,7 +2500,7 @@ def export_to_excel(tree, parent):
 
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws.title = "LGV Data"
+        ws.title = "LGV Variables Data"
 
         ws.append(headers)
         for r in rows:
@@ -2562,7 +2562,7 @@ def copy_treeview_to_clipboard(tree, parent):
     parent.clipboard_clear()
     parent.clipboard_append(data)
     parent.update()
-    messagebox.showinfo("Copy", "Full table copied to clipboard (TSV).")
+    messagebox.showinfo("Copy", "Full table copied to clipboard.")
 
 
 def build_export_menu(root, treeview):
@@ -2628,6 +2628,7 @@ def setup_export_menu_visibility(notebook, rw_tab_frame, menubar, export_menu,
     - export_idx_map: index map returned by build_export_menu(...)
     - treeview: your status_table
     """
+
     def refresh_menu_visibility():
         is_rw = notebook.select() == str(rw_tab_frame)
         if is_rw:
@@ -2636,11 +2637,10 @@ def setup_export_menu_visibility(notebook, rw_tab_frame, menubar, export_menu,
             update_export_menu_state(export_menu, export_idx_map, treeview)
         else:
             remove_export_menu(menubar, label="Export")
+    
+    return refresh_menu_visibility
 
-    # React to tab switches
-    notebook.bind("<<NotebookTabChanged>>", lambda e: refresh_menu_visibility())
-    # Set initial state
-    refresh_menu_visibility()
+
 
 
 ###################################################################### Helper methods #########################################################################
@@ -2968,6 +2968,8 @@ def on_tab_changed(event):
 
     if shortcuts_window is not None and shortcuts_window.winfo_exists():
         refresh_shortcuts_window(tab_text)
+    
+    refresh_menu_visibility()
 
     # if tab_text == TAB_NAME[1]:
     #     root.after(10, lambda: variable_menu.focus_set())
@@ -3438,14 +3440,17 @@ export_menu, export_idx_map = build_export_menu(root, status_table)
 menubar = root.nametowidget(root["menu"])
 
 # Only show Export when RW tab is active
-setup_export_menu_visibility(
+refresh_menu_visibility = setup_export_menu_visibility(
     notebook=notebook,
-    rw_tab_frame=read_write_tab,   # <-- your RW Panel frame
+    rw_tab_frame=read_write_tab,
     menubar=menubar,
     export_menu=export_menu,
     export_idx_map=export_idx_map,
     treeview=status_table,
 )
+
+refresh_menu_visibility()
+
 
 
 
