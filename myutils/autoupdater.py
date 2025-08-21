@@ -17,6 +17,9 @@ def check_for_updates_async(root, current_version, version_url, download_url, ap
             if version.parse(latest_version) > version.parse(current_version):
                 # Messagebox must run in the main thread
                 root.after(0, lambda: ask_and_update(root, current_version, latest_version, download_url, display_name))
+            else:
+                print(f"[Updater] Already at latest version ({latest_version})")
+                return
         except Exception as e:
             print(f"[Updater] Update check failed: {e}")
 
@@ -120,19 +123,20 @@ def download_and_prepare_batch(current_version, latest_version, download_url, ap
             batch.write(f'rename "{current_exe_name}" "{old_version_name}" >nul 2>&1\n')
             batch.write(f'move /Y "{new_exe_name}" "{current_exe_name}" >nul\n')
 
-            # Wait until the file is unlocked and fully ready
-            batch.write(":: Wait until new EXE is fully available (avoid Python DLL load error)\n")
-            batch.write(":waitloop2\n")
-            batch.write(f'copy /b "{current_exe_name}" nul >nul 2>&1\n')
-            batch.write("if errorlevel 1 (\n")
-            batch.write("    timeout /t 1 >nul\n")
-            batch.write("    goto waitloop2\n")
-            batch.write(")\n\n")
+            # # Wait until the file is unlocked and fully ready
+            # batch.write(":: Wait until new EXE is fully available (avoid Python DLL load error)\n")
+            # batch.write(":waitloop2\n")
+            # batch.write(f'copy /b "{current_exe_name}" nul >nul 2>&1\n')
+            # batch.write("if errorlevel 1 (\n")
+            # batch.write("    timeout /t 1 >nul\n")
+            # batch.write("    goto waitloop2\n")
+            # batch.write(")\n\n")
 
-            # Launch new version
-            batch.write("echo Launching new version...\n")
-            batch.write("timeout /t 5 >nul\n")
-            batch.write(f'start .\"{current_exe_name}" \n')
+            # batch.write("echo Launching new version...\n")
+            # batch.write("timeout /t 10 >nul\n")
+            # batch.write("pushd \"%~dp0\"\n")
+            # batch.write(f'start "" ".\\{current_exe_name}" --updated\n')
+            # batch.write("popd\n")
 
             # Optional cleanup
             batch.write("timeout /t 3 >nul\n")
@@ -141,11 +145,17 @@ def download_and_prepare_batch(current_version, latest_version, download_url, ap
 
             # Done message
             batch.write("echo Update complete!\n")
-            batch.write("echo This window will close automatically in 10 seconds...\n")
-            batch.write("timeout /t 10 >nul\n")
+            batch.write(f"echo You can run new version {latest_version} of {current_exe_name} now!\n")
 
             # Self-delete
-            # batch.write('del "%~f0" >nul 2>&1\n')
+            batch.write('del "%~f0" >nul 2>&1\n')
+            
+            batch.write("echo Press any key to exit... \n")
+            batch.write("pause >nul\n")
+            # batch.write("echo This window will close automatically in 10 seconds...\n")
+            # batch.write("timeout /t 10 >nul\n")
+
+            
 
         print("[Updater] Running updater batch...")
 
