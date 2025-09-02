@@ -20,7 +20,8 @@ import openpyxl
 from openpyxl.utils import get_column_letter
 
 from myutils.autoupdater import check_for_updates_async, get_app_version
-# from ctypes import sizeof
+from myutils.connectivity import is_host_reachable
+
 
 try:
     import pyads
@@ -1601,7 +1602,7 @@ def validate_and_link_lgv():
 
         lgv_numbers = parse_lgv_range(lgv_range_entry.get())
 
-        semaphore_size = min(10, max(3, len(lgv_numbers) // 10 or 1))  # Ensure at least 1
+        semaphore_size = min(10, max(3, len(lgv_numbers) // 5 or 1))  # Ensure at least 1
         global semaphore
         semaphore = threading.Semaphore(semaphore_size)
         print(f"Detected {len(lgv_numbers)} LGVs — using semaphore size: {semaphore_size}")
@@ -2046,7 +2047,12 @@ def read_all_variables_for_lgv(lgv, ams_net_id, tc_type, processed_variables, re
 
         for display_name in processed_variables.values():
             result_queue.put((lgv, display_name, "Timeout"))
+            
         return
+
+    # if lgv in skip_until:
+    #     skip_until.pop(lgv)
+    #     timeout_counters[lgv] = 0
     
     try:
         port = 851 if tc_type == "TC3" else 801
@@ -2054,7 +2060,11 @@ def read_all_variables_for_lgv(lgv, ams_net_id, tc_type, processed_variables, re
         ads_connection = pyads.Connection(ams_net_id, port)
         ads_connection.set_timeout(800)
 
+        
         with ads_connection:
+
+            ads_connection.read_state() # Check plc state before even starting to read, if error exception is thrown earlier
+
             print(f"Connected to LGV {lgv} ({ams_net_id})")
 
             # Normalize key (frozenset of variable names to ignore order)
@@ -2076,7 +2086,8 @@ def read_all_variables_for_lgv(lgv, ams_net_id, tc_type, processed_variables, re
                         print(f"Failed to get type for {var_name}: {e}")
                         result_queue.put((lgv, display_name, e))
                 # Store in cache
-                variable_type_cache[cache_key] = symbol_types
+                if symbol_types:
+                    variable_type_cache[cache_key] = symbol_types
 
             for variable_name, display_name in processed_variables.items():
                 if variable_name not in symbol_types:
@@ -2084,13 +2095,13 @@ def read_all_variables_for_lgv(lgv, ams_net_id, tc_type, processed_variables, re
                 try:
                     start = time.time()
                     value = ads_connection.read_by_name(variable_name, symbol_types[variable_name])
-                    print(f"Read {variable_name} took {time.time() - start:.3f}s")
+                    print(f"Read {variable_name} for {lgv} took {time.time() - start:.3f}s")
 
                     result_queue.put((lgv, display_name, value))
-                    timeout_counters[lgv]=0 # Reset timeout counter on success
+
                 except Exception as e:
                     result_queue.put((lgv, display_name, e))
-
+        
         print(f"Total ADS session for LGV{lgv:02d} took {time.time() - session_start:.3f}s")
 
     except Exception as e:
@@ -2109,6 +2120,14 @@ def rw_read_variable(event=None):
     if read_write_in_progress :
         print("Read/Write operation already in progress!")
         return
+    
+    # Clear expired skip entries before launching threads
+    # now = time.time()
+    # for lgv in list(skip_until):
+    #     if now >= skip_until[lgv]:
+    #         print(f"[Recovery] Skip expired for {lgv}, re-adding to read cycle")
+    #         skip_until.pop(lgv)
+    #         timeout_counters[lgv] = 0
 
     variable_names = variable_menu.get().strip()  # Get the variable name directly
 
@@ -2206,7 +2225,6 @@ def stop_periodic_reading():
     global periodic_reading_active
     periodic_reading_active = False
 
-
 #################################### Periodic Read Loop ###################################
 LIVE_READ_INTERVAL = 0.4
 
@@ -2273,10 +2291,10 @@ def process_results_in_background(threads, result_queue, lgv_data):
 
         else:
             # Schedule next check
-            root.after(200, check_and_update)
+            root.after(50, check_and_update)
 
     # Start checking 
-    root.after(200, check_and_update)
+    root.after(50, check_and_update)
 
 
 ################################################ Adjust results table ####################################
@@ -2645,39 +2663,7 @@ def setup_export_menu_visibility(notebook, rw_tab_frame, menubar, export_menu,
     
     return refresh_menu_visibility
 
-
-
-
-###################################################################### Helper methods #########################################################################
-
-def is_host_reachable(host, timeout=1):
-    """Ping the host to check if it is reachable."""
-    # Define the ping command based on the OS
-    if platform.system().lower() == "windows":
-        ping_cmd = ["ping", "-n", "1", "-w", str(timeout * 1000), host]
-        creation_flags = subprocess.CREATE_NO_WINDOW
-    else:
-        ping_cmd = ["ping", "-c", "1", "-W", str(timeout), host]
-        creation_flags = 0
-
-    try:
-        subprocess.run(
-            ping_cmd, 
-            stdout=subprocess.DEVNULL, 
-            stderr=subprocess.DEVNULL, 
-            check=True, 
-            timeout=timeout + 1,
-            creationflags=creation_flags
-        )
-        return True
-    except subprocess.TimeoutExpired:
-        # print(f"Ping to {host} timed out.")
-        return False
-    except subprocess.CalledProcessError:
-        # print(f"Ping to {host} failed.")
-        return False
-    
-
+ 
 ####################################################################################################################################################################
 ################################################################### Shortcuts Window ###############################################################################
 ####################################################################################################################################################################

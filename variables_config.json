@@ -1,5 +1,8 @@
 {
     "man_auto": {
         "TC2": ".Sys_MCD_Mode"
+    },
+    "reset": {
+        "TC2": ".IN_Reset"
     }
 }
