@@ -12,8 +12,6 @@ import time
 import json
 from queue import Queue, Empty
 import copy
-import subprocess
-import platform
 import functools
 import csv
 import openpyxl
@@ -1648,28 +1646,36 @@ def validate_and_link_lgv():
 # Mapping of symbol type strings to pyads data types
 if pyads_available:
     SYMBOL_TYPE_MAP = {
-        'BOOL'      : pyads.PLCTYPE_BOOL,
-        'INT'       : pyads.PLCTYPE_INT,
-        'DINT'      : pyads.PLCTYPE_DINT,
-        'REAL'      : pyads.PLCTYPE_REAL,
-        'LREAL'     : pyads.PLCTYPE_LREAL,
-        'STRING'    : pyads.PLCTYPE_STRING,
-        'BYTE'      : pyads.PLCTYPE_BYTE,
-        'WORD'      : pyads.PLCTYPE_WORD,
-        'DWORD'     : pyads.PLCTYPE_DWORD,
-        # 'LWORD'     : pyads.PLCTYPE_LWORD,
-        'SINT'      : pyads.PLCTYPE_SINT,
-        'USINT'     : pyads.PLCTYPE_USINT,
-        'UINT'      : pyads.PLCTYPE_UINT,
-        'UDINT'     : pyads.PLCTYPE_UDINT,
-        'LINT'      : pyads.PLCTYPE_LINT,
-        'ULINT'     : pyads.PLCTYPE_ULINT,
-        'TIME'      : pyads.PLCTYPE_TIME,
-        # 'LTIME'     : pyads.PLCTYPE_LTIME,
-        'DATE'      : pyads.PLCTYPE_DATE,
-        'TOD'       : pyads.PLCTYPE_TOD,  # Time of Day
-        'DT'        : pyads.PLCTYPE_DT,    # Date and Time
-        'WSTRING'   : pyads.PLCTYPE_WSTRING,
+        'BOOL'    : pyads.PLCTYPE_BOOL,
+
+        'BYTE'    : pyads.PLCTYPE_BYTE,
+
+        'SINT'    : pyads.PLCTYPE_SINT,    'INT8'   : pyads.PLCTYPE_SINT,
+        'USINT'   : pyads.PLCTYPE_USINT,   'UINT8'  : pyads.PLCTYPE_USINT, 
+        
+        'INT'     : pyads.PLCTYPE_INT,     'INT16'  : pyads.PLCTYPE_INT,
+        'UINT'    : pyads.PLCTYPE_UINT,    'UINT16' : pyads.PLCTYPE_UINT,  
+
+        'DINT'    : pyads.PLCTYPE_DINT,    'INT32'  : pyads.PLCTYPE_DINT,
+        'UDINT'   : pyads.PLCTYPE_UDINT,   'UINT32' : pyads.PLCTYPE_UDINT, 
+
+        'LINT'    : pyads.PLCTYPE_LINT,    'INT64'  : pyads.PLCTYPE_LINT,
+        'ULINT'   : pyads.PLCTYPE_ULINT,   'UINT64' : pyads.PLCTYPE_ULINT, 
+
+        'WORD'    : pyads.PLCTYPE_WORD,
+        'DWORD'   : pyads.PLCTYPE_DWORD,
+        # 'LWORD'   : pyads.PLCTYPE_ULINT,
+
+        'REAL'    : pyads.PLCTYPE_REAL,
+        'LREAL'   : pyads.PLCTYPE_LREAL,
+        'STRING'  : pyads.PLCTYPE_STRING,
+        'WSTRING' : pyads.PLCTYPE_WSTRING,
+
+        'TIME'    : pyads.PLCTYPE_TIME,
+        'LTIME'   : getattr(pyads, "PLCTYPE_LTIME", pyads.PLCTYPE_TIME),  # fallback if missing
+        'DATE'    : pyads.PLCTYPE_DATE,
+        'TOD'     : pyads.PLCTYPE_TOD,
+        'DT'      : pyads.PLCTYPE_DT,
     }
 else:
     # Use strings or None so the app loads without crashing
@@ -1696,33 +1702,43 @@ else:
         'WSTRING'   : 'WSTRING',
     }
 
-def get_pyads_type(symbol_type_str):
+def norm(s):
+    return s.replace("_", "").replace(" ", "").upper()
+
+def size_fallback(n):
+    size_map = {
+        1: pyads.PLCTYPE_SINT,
+        2: pyads.PLCTYPE_INT,
+        4: pyads.PLCTYPE_DINT,
+        8: pyads.PLCTYPE_LINT
+        }
+    return size_map.get(n) or (pyads.PLCTYPE_BYTE * n)
+
+def get_pyads_type(symbol_info):
     """
-    Map the symbol type string to a pyads type, handling arrays and other variations.
+    Return appropriate pyads type based on symbol info.
     """
+    raw_type = symbol_info.symbol_type
+    size = symbol_info.array_size
+    t = norm(raw_type)
+
+    if t in SYMBOL_TYPE_MAP:
+        return SYMBOL_TYPE_MAP[t]
+    
+    if t.startswith("STRING"):
+        return pyads.PLCTYPE_STRING
+    if t.startswith("WSTRING"):
+        return pyads.PLCTYPE_WSTRING
+    
     # Normalize the type string: Remove array and dimensions, strip whitespace
-    array_match = re.search(r'ARRAY\s*\[.*?\]\s*OF\s*(\w+)', symbol_type_str.strip(), re.IGNORECASE)
+    array_match = re.search(r'ARRAY\s*\[.*?\]\s*OF\s*(\w+)', t)
 
     if array_match:
         # Extract the base type from the array declaration
-        base_type = array_match.group(1).strip()
-        if base_type in SYMBOL_TYPE_MAP:
-            return SYMBOL_TYPE_MAP[base_type]
-        else:
-            print(f"Unknown array type detected: {symbol_type_str}. Defaulting to BYTE.")
-            return pyads.PLCTYPE_BYTE  # Default for unknown array types
+        base_type = norm(array_match.group(1))
+        return SYMBOL_TYPE_MAP.get(base_type) or (pyads.PLCTYPE_BYTE * size)
 
-    # Remove any other dimensions or custom suffixes (e.g., STRING(80))
-    normalized_type = re.sub(r'\(.*?\)', '', symbol_type_str.strip())
-
-    # Map to a known type
-    standard_type = SYMBOL_TYPE_MAP.get(normalized_type)
-    if standard_type:
-        return standard_type
-
-    # Handle unknown or custom types
-    print(f"Unknown type detected: {symbol_type_str}. Defaulting to BYTE.")
-    return pyads.PLCTYPE_BYTE  # Default for unknown types
+    return size_fallback(size)
 
 
 def check_type(value):
@@ -1833,8 +1849,8 @@ def write_variable_for_lgv(lgv, ams_net_id, tc_type, variable_name, display_name
 
             # Get symbol info and determine the appropriate pyads type
             symbol_info = ads_connection.get_symbol(variable_name)
-            symbol_type_str = symbol_info.symbol_type
-            expected_type = get_pyads_type(symbol_type_str)
+            # symbol_type_str = symbol_info.symbol_type
+            expected_type = get_pyads_type(symbol_info)
 
             print(f"Handle ID: {handle_id}, Type: {type(handle_id)}")  # Verify the type
 
@@ -2011,8 +2027,8 @@ def read_variable_for_lgv(lgv, ams_net_id, tc_type, variable_name, display_name,
 
             # Get symbol info to validate type and existence
             symbol_info = ads_connection.get_symbol(variable_name)
-            symbol_type_str = symbol_info.symbol_type
-            expected_type = get_pyads_type(symbol_type_str)
+            # symbol_type_str = symbol_info.symbol_type
+            expected_type = get_pyads_type(symbol_info)
 
             # Read the value from the PLC
             value = ads_connection.read_by_name(variable_name, expected_type)
@@ -2071,7 +2087,7 @@ def read_all_variables_for_lgv(lgv, ams_net_id, tc_type, processed_variables, re
             var_key = frozenset(processed_variables.keys())
             cache_key = (lgv, var_key)
 
-             # Reuse cached types if available
+            # Reuse cached types if available
             if cache_key in variable_type_cache:
                 symbol_types = variable_type_cache[cache_key]
                 print(f"Reusing cached types for LGV {lgv}")
@@ -2081,7 +2097,7 @@ def read_all_variables_for_lgv(lgv, ams_net_id, tc_type, processed_variables, re
                 for var_name, display_name in processed_variables.items():
                     try:
                         symbol_info = ads_connection.get_symbol(var_name)
-                        symbol_types[var_name] = get_pyads_type(symbol_info.symbol_type)
+                        symbol_types[var_name] = get_pyads_type(symbol_info)
                     except Exception as e:
                         print(f"Failed to get type for {var_name}: {e}")
                         result_queue.put((lgv, display_name, e))

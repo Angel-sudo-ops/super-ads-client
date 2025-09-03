@@ -102,7 +102,6 @@
     "LibraryInterfaces.OpInfo.loadUnitLenght",
     "LibraryInterfaces.FileManagement.saveRequest[1]",
     "LibraryInterfaces.FileManagement.saveRequest[5]",
-    "AGV_Ctrl.AutoReboot.autoRebootDone",
     "TiltMov.tiltEncoder.staticSampleWeight",
     "CoreGVL.AutoReboot.silencePlease",
     "CoreGVL.ADS_Stop;CoreGVL.ADS_Reset",
@@ -114,5 +113,6 @@
     "LibraryInterfaces.LGV.guid.info.pos.x;LibraryInterfaces.LGV.guid.info.pos.y",
     ".Sys_Flex_Status",
     ".Sys_Aut_Run",
-    "LibraryInterfaces.LGV.guid.info.pos.x;LibraryInterfaces.LGV.guid.info.pos.y;.Sys_Navigator_Info.AGV_Pos.x;.Sys_Navigator_Info.AGV_Pos.y"
+    "LibraryInterfaces.LGV.guid.info.pos.x;LibraryInterfaces.LGV.guid.info.pos.y;.Sys_Navigator_Info.AGV_Pos.x;.Sys_Navigator_Info.AGV_Pos.y",
+    ".toHost_operationQuota"
 ]
