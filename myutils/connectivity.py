@@ -58,14 +58,27 @@ def ping_to_host(host, timeout=1):
         creation_flags = 0
 
     try:
-        subprocess.run(
+        result = subprocess.run(
             cmd,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             timeout=timeout + 1,
-            check=True,
-            creationflags=creation_flags
+            # check=True,
+            creationflags=creation_flags,
+            text=True
         )
+
+        output = result.stdout.lower()
+
+        # Check for common unreachable indicators
+        if (
+            "unreachable" in output or
+            "timed out" in output or
+            "could not find host" in output or
+            r"100% loss" in output
+        ):
+            return False
+
         return True
     except subprocess.TimeoutExpired:
         # print(f"Ping to {host} timed out.")
