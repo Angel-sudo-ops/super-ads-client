@@ -39,6 +39,14 @@ def is_tc_port_open(host):
 def is_ssh_port_open(host):
     return is_port_open(host, 20022)
 
+def is_http_port_open(host):
+    return is_port_open(host, 80)
+
+def is_https_port_open(host):
+    return is_port_open(host, 443)
+
+
+
 def ping_to_host(host, timeout=1):
     
     system = platform.system().lower()
@@ -78,9 +86,11 @@ def is_host_reachable(host):
     """
 
     checks = {
-        "ping": lambda: ping_to_host(host),
-        "ads": lambda: is_tc_port_open(host),
-        "ssh": lambda: is_ssh_port_open(host),
+        "ping":  lambda: ping_to_host(host),
+        # "ads": lambda: is_tc_port_open(host),
+        # "ssh": lambda: is_ssh_port_open(host),
+        "http":  lambda: is_http_port_open(host),
+        "https": lambda: is_https_port_open(host),
     }
 
     result = {"reachable": False, "method": None}

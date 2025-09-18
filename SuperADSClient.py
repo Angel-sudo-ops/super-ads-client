@@ -2079,6 +2079,7 @@ def read_all_variables_for_lgv(lgv, ams_net_id, tc_type, processed_variables, re
         
         with ads_connection:
 
+            # It looks like in TC3 it triggers TC connection to be lost :(
             ads_connection.read_state() # Check plc state before even starting to read, if error exception is thrown earlier
 
             print(f"Connected to LGV {lgv} ({ams_net_id})")

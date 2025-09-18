@@ -97,7 +97,6 @@
     "LibraryInterfaces.LGV.Status.Aut_Run",
     "Devices.Muting.front.out1;Devices.Muting.front.feedback",
     "LibraryInterfaces.OpInfo.reelDiameter",
-    "AGV_Ctrl.AutoReboot.startRequest",
     "InfoMovements.Mov.opCl4.forksInfo[1].curPosition;InfoMovements.Mov.opCl4.forksInfo[2].curPosition;InfoMovements.Mov.opCl4.forksInfo[3].curPosition;InfoMovements.Mov.opCl4.forksInfo[4].curPosition;InfoMovements.Mov.opCl4.curGroupsPosition[1];InfoMovements.Mov.opCl4.curGroupsPosition[2];InfoMovements.Mov.opCl4.curGroupsInterax[1];InfoMovements.Mov.opCl4.curGroupsInterax[2];",
     "LibraryInterfaces.OpInfo.loadUnitLenght",
     "LibraryInterfaces.FileManagement.saveRequest[1]",
@@ -114,5 +113,10 @@
     ".Sys_Flex_Status",
     ".Sys_Aut_Run",
     "LibraryInterfaces.LGV.guid.info.pos.x;LibraryInterfaces.LGV.guid.info.pos.y;.Sys_Navigator_Info.AGV_Pos.x;.Sys_Navigator_Info.AGV_Pos.y",
-    ".toHost_operationQuota"
+    ".toHost_operationQuota",
+    "devices.pressure.lift.weight;devices.pressure.loadcellleft.weight;devices.pressure.loadcellright.weight",
+    "LibraryInterfaces.LGV.Mech.max_LoadWeight",
+    "LibraryInterfaces.LGV.Status.Loaded;devices.pressure.lift.weight;devices.pressure.loadcellleft.weight;devices.pressure.loadcellright.weight",
+    "Devices.Pressure.lift.logics.par_scalingWeight",
+    "Devices.Pressure.loadcellLeft.logics.par_scalingWeight;Devices.Pressure.loadcellRight.logics.par_scalingWeight"
 ]
