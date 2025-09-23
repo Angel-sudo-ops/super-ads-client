@@ -7,17 +7,14 @@ class ToolTip:
         self.tipwindow = None
 
     def showtip(self, text, x, y):
-        """Show tooltip with given text at screen coords (x,y)."""
         if self.tipwindow or not text:
             return
         self.tipwindow = tw = tk.Toplevel(self.widget)
         tw.wm_overrideredirect(True)
         tw.wm_geometry(f"+{x}+{y}")
         label = tk.Label(
-            tw, text=text, 
-            justify=tk.LEFT,
-            background="white", 
-            relief=tk.SOLID, borderwidth=1,
+            tw, text=text, justify=tk.LEFT,
+            background="#ffffe0", relief=tk.SOLID, borderwidth=1,
             font=("Segoe UI", 9)
         )
         label.pack(ipadx=1)
@@ -31,13 +28,12 @@ class ToolTip:
 def attach_conditional_tooltip(combobox):
     tooltip = ToolTip(combobox)
 
+    # ----- COMBOBOX SELECTED TEXT TOOLTIP -----
     def check_selected_truncation(event=None):
-        """Check truncation for combobox *selected* text."""
         text = combobox.get()
         if not text:
             combobox.tooltip_text = ""
             return
-
         f = font.Font(font=combobox.cget("font"))
         text_width = f.measure(text)
         widget_width = combobox.winfo_width() - 30
@@ -57,13 +53,15 @@ def attach_conditional_tooltip(combobox):
     combobox.bind("<KeyRelease>", check_selected_truncation)
     combobox.after(100, check_selected_truncation)
 
+    # ----- DROPDOWN LIST TOOLTIP -----
     def hook_listbox(event=None):
-        """Hook the listbox inside the dropdown after it is created."""
         try:
             popdown = combobox.tk.call("ttk::combobox::PopdownWindow", combobox)
             listbox = combobox.nametowidget(popdown + ".f.l")
         except Exception as e:
-            return  # dropdown not ready yet
+            print("❌ Popdown not ready, retrying in 50ms")
+            combobox.after(50, hook_listbox)
+            return  # popup not ready yet
 
         def on_listbox_motion(ev):
             idx = listbox.nearest(ev.y)
@@ -81,34 +79,38 @@ def attach_conditional_tooltip(combobox):
         def on_listbox_leave(ev):
             tooltip.hidetip()
 
-        # Bind once
+        def on_listbox_click(ev):
+            tooltip.hidetip()
+
+        # Attach once
         listbox.bind("<Motion>", on_listbox_motion, add="+")
         listbox.bind("<Leave>", on_listbox_leave, add="+")
-    
-    # Run hook when dropdown is first opened
-    combobox.bind("<Button-1>", hook_listbox, add="+")
-    combobox.bind("<Alt-Down>", hook_listbox, add="+")
+        # listbox.bind("<Button-1>", on_listbox_click, add="+")
+
+    def delayed_hook(event=None):
+        combobox.after(100, hook_listbox)
+
+    # Delay hooking the dropdown list until it's opened
+    combobox.bind("<Button-1>", delayed_hook, add="+")
+    combobox.bind("<Alt-Down>", delayed_hook, add="+")
 
 
-# Example usage
+# -------- Example Usage --------
 if __name__ == "__main__":
     root = tk.Tk()
-    root.geometry("400x250")
+    root.geometry("420x250")
 
     values = [
-        "LibraryInterfaces.LGV.guid.info.pos.x",
-        "InfoMovements.Mov.opCl4.curGroupsInterax[1].InfoMovements",
+        "Short",
         "LibraryInterfaces.LGV.Guid.Odom.Cur_Spd",
-        "CoreGVL.LoadHandling.ADS_Reset_Some_Very_Long_Variable_Name",
-        "ShortName"
+        "InfoMovements.Mov.opCl4.curGroupsInterax[1].InfoMovements",
+        "CoreGVL.LoadHandling.ADS_Reset_Some_Extra_Long_Variable_Name_With_Stuff",
+        "Tiny"
     ]
 
     combo = ttk.Combobox(root, values=values, width=25)
-    combo.grid(row=0, column=0, padx=5, pady=5, sticky='nsew')
-    combo.set(values[1])
-
-    combo.grid_columnconfigure(0, weight=1)
-    # combo.grid_rowconfigure(0, weight=1)
+    combo.pack(padx=20, pady=50)
+    combo.set(values[2])
 
     attach_conditional_tooltip(combo)
 
