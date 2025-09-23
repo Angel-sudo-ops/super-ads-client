@@ -14,8 +14,10 @@ class ToolTip:
         tw.wm_overrideredirect(True)
         tw.wm_geometry(f"+{x}+{y}")
         label = tk.Label(
-            tw, text=text, justify=tk.LEFT,
-            background="#ffffe0", relief=tk.SOLID, borderwidth=1,
+            tw, text=text, 
+            justify=tk.LEFT,
+            background="white", 
+            relief=tk.SOLID, borderwidth=1,
             font=("Segoe UI", 9)
         )
         label.pack(ipadx=1)
@@ -39,7 +41,6 @@ def attach_conditional_tooltip(combobox):
         f = font.Font(font=combobox.cget("font"))
         text_width = f.measure(text)
         widget_width = combobox.winfo_width() - 30
-
         combobox.tooltip_text = text if text_width > widget_width else ""
 
     def on_enter(event):
@@ -54,33 +55,39 @@ def attach_conditional_tooltip(combobox):
     combobox.bind("<Configure>", check_selected_truncation)
     combobox.bind("<<ComboboxSelected>>", check_selected_truncation)
     combobox.bind("<KeyRelease>", check_selected_truncation)
-
     combobox.after(100, check_selected_truncation)
 
-    # Grab the real listbox inside the dropdown
-    popdown = combobox.tk.call("ttk::combobox::PopdownWindow", combobox)
-    listbox = combobox.nametowidget(popdown + ".f.l")
+    def hook_listbox(event=None):
+        """Hook the listbox inside the dropdown after it is created."""
+        try:
+            popdown = combobox.tk.call("ttk::combobox::PopdownWindow", combobox)
+            listbox = combobox.nametowidget(popdown + ".f.l")
+        except Exception as e:
+            return  # dropdown not ready yet
 
-    def on_listbox_motion(event):
-        """Show tooltip for hovered item in dropdown listbox."""
-        idx = listbox.nearest(event.y)
-        if idx < 0:
+        def on_listbox_motion(ev):
+            idx = listbox.nearest(ev.y)
+            if idx < 0:
+                tooltip.hidetip()
+                return
+            text = listbox.get(idx)
+            f = font.Font(font=combobox.cget("font"))
+            if f.measure(text) > combobox.winfo_width() - 30:
+                tooltip.hidetip()
+                tooltip.showtip(text, ev.x_root + 20, ev.y_root + 20)
+            else:
+                tooltip.hidetip()
+
+        def on_listbox_leave(ev):
             tooltip.hidetip()
-            return
 
-        text = listbox.get(idx)
-        f = font.Font(font=combobox.cget("font"))
-        if f.measure(text) > combobox.winfo_width() - 30:
-            tooltip.hidetip()
-            tooltip.showtip(text, event.x_root + 20, event.y_root + 20)
-        else:
-            tooltip.hidetip()
-
-    def on_listbox_leave(event):
-        tooltip.hidetip()
-
-    listbox.bind("<Motion>", on_listbox_motion)
-    listbox.bind("<Leave>", on_listbox_leave)
+        # Bind once
+        listbox.bind("<Motion>", on_listbox_motion, add="+")
+        listbox.bind("<Leave>", on_listbox_leave, add="+")
+    
+    # Run hook when dropdown is first opened
+    combobox.bind("<Button-1>", hook_listbox, add="+")
+    combobox.bind("<Alt-Down>", hook_listbox, add="+")
 
 
 # Example usage
@@ -97,8 +104,11 @@ if __name__ == "__main__":
     ]
 
     combo = ttk.Combobox(root, values=values, width=25)
-    combo.pack(padx=20, pady=40)
+    combo.grid(row=0, column=0, padx=5, pady=5, sticky='nsew')
     combo.set(values[1])
+
+    combo.grid_columnconfigure(0, weight=1)
+    # combo.grid_rowconfigure(0, weight=1)
 
     attach_conditional_tooltip(combo)
 
