@@ -19,6 +19,7 @@ from openpyxl.utils import get_column_letter
 
 from myutils.autoupdater import check_for_updates_async, get_app_version
 from myutils.connectivity import is_host_reachable
+from myutils.ui import attach_tooltip_on_overflow
 
 
 try:
@@ -3293,6 +3294,8 @@ variable_menu.bind('<ButtonPress>', update_variable_menu)
 variable_menu.bind('<Tab>', filter_combobox)
 
 variable_entry_var.trace_add('write', on_user_intervention)
+
+attach_tooltip_on_overflow(variable_menu, variable_entry_var, separator=";")
 
 # variable_menu.configure(postcommand=lambda:filter_combobox(None))
 

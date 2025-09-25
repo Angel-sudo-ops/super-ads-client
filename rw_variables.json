@@ -32,7 +32,6 @@
     "LibraryInterfaces.LGV.Guid.Rout.remDistToOP",
     "LibraryInterfaces.LGV.Guid.Rout.remDistToPreOP",
     "LibraryInterfaces.LGV.Guid.Rout.remDistToPreOP; LibraryInterfaces.LGV.Guid.Rout.remDistToOP",
-    "Devices.Pressure.tilt.weight,Main.StartupOk",
     "Devices.Pressure.tilt.weight,Main.StartupOk; SpareVariables.boolSpare[0]",
     "InfoMovements.Mov.opCl4.curGroupsInterax[1];InfoMovements.Mov.opCl4.curGroupsInterax[2];InfoMovements.Mov.shift.curPosition;InfoMovements.Mov.tilt.curPosition;InfoMovements.Mov.lift.curPosition; LibraryInterfaces.LGV.Guid.Rout.remDistToPreOP; LibraryInterfaces.LGV.Guid.Rout.remDistToOP; Devices.Pressure.tilt.weight; Devices.Pressure.lift.weight; FlexSegPhaseHandler.preOpDistFromTheEnd; FlexSegPhaseHandler.segDistAvailable",
     "Operation.current.name;LibraryInterfaces.LGV.Guid.Rout.remDistToPreOP;LibraryInterfaces.LGV.Guid.Rout.remDistToOP",
@@ -116,5 +115,6 @@
     ".Sys_Aut_Run",
     "LibraryInterfaces.LGV.guid.info.pos.x;LibraryInterfaces.LGV.guid.info.pos.y;.Sys_Navigator_Info.AGV_Pos.x;.Sys_Navigator_Info.AGV_Pos.y",
     "Carrier_Control.Heading_Weight",
-    "devices.pressure.lift.weight;devices.pressure.loadcellleft.weight;devices.pressure.loadcellright.weight"
+    "devices.pressure.lift.weight;devices.pressure.loadcellleft.weight;devices.pressure.loadcellright.weight",
+    "Devices.Pressure.tilt.weight;Main.StartupOk"
 ]
