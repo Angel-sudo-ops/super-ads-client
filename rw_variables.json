@@ -116,5 +116,6 @@
     "LibraryInterfaces.LGV.guid.info.pos.x;LibraryInterfaces.LGV.guid.info.pos.y;.Sys_Navigator_Info.AGV_Pos.x;.Sys_Navigator_Info.AGV_Pos.y",
     "Carrier_Control.Heading_Weight",
     "devices.pressure.lift.weight;devices.pressure.loadcellleft.weight;devices.pressure.loadcellright.weight",
-    "Devices.Pressure.tilt.weight;Main.StartupOk"
+    "Devices.Pressure.tilt.weight;Main.StartupOk",
+    "Mov.lift.pos;Memo.lift.pos"
 ]

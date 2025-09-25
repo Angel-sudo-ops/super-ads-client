@@ -785,7 +785,7 @@ def load_variables():
 
     # Merge user-modified values into the defaults
     merge_vars = merge_dicts(copy.deepcopy(default_variable_write), user_variables)
-    print(f"Merged vars: {merge_vars}")
+    # print(f"Merged vars: {merge_vars}")
     return merge_vars
 
 
@@ -1990,32 +1990,45 @@ def rw_write_variable(event=None):
 
 def process_variable_names(variables):
     """
-    Process variable names to determine how many parts to include for uniqueness.
-    If the last parts are unique, keep only the last part.
-    If duplicates exist, include the second-to-last part for disambiguation.
+    Process variable names to generate the shortest unique suffixes for display.
+    Returns a dictionary mapping full variable names to their shortest unique display name.
     """
-    last_parts = {}
+    from collections import defaultdict
+
+    split_vars = {var: var.split('.') for var in variables}
     processed_variables = {}
+    collision = True
+    level = 1
 
-    # Collect occurrences of last parts
-    for variable in variables:
-        parts = variable.split('.')
-        last_part = parts[-1]
-        last_parts.setdefault(last_part, []).append(variable)
+    # Start by trying with just the last part
+    while collision:
+        temp_map = defaultdict(list)
+        collision = False
 
-    # Determine the display names for variables
-    for last_part, full_vars in last_parts.items():
-        if len(full_vars) > 1:  # Duplicate last parts found
-            # Include the second-to-last part for these variables
-            for var in full_vars:
-                parts = var.split('.')
-                processed_variables[var] = '.'.join(parts[-2:])  # Take last two parts
-        else:  # No duplicate, keep only the last part
-            var = full_vars[0]
-            parts = var.split('.')
-            processed_variables[var] = parts[-1]  # Keep only the last part
+        for var, parts in split_vars.items():
+            if len(parts) < level:
+                # If variable has fewer parts than current level, use full name
+                key = '.'.join(parts)
+            else:
+                key = '.'.join(parts[-level:])
+
+            temp_map[key].append(var)
+
+        # Check for collisions
+        for key, var_list in temp_map.items():
+            if len(var_list) > 1:
+                collision = True
+                break
+
+        level += 1
+
+    # Now we know that level-1 gives unique names
+    for var, parts in split_vars.items():
+        name = '.'.join(parts[-(level - 1):]) if len(parts) >= level - 1 else '.'.join(parts)
+        processed_variables[var] = name
 
     return processed_variables
+
 
 
 def read_variable_for_lgv(lgv, ams_net_id, tc_type, variable_name, display_name, result_queue):
@@ -2999,7 +3012,7 @@ def select_previous_tab(event=None):
     total = len(notebook.tabs())
     prev_index = (current - 1) % total
     notebook.select(prev_index)
-    print("previous tab")
+    print(f"previous tab {prev_index}")
     return "break"
 
 def on_user_intervention(*args):
