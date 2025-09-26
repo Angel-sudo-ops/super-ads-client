@@ -136,9 +136,9 @@ def populate_table_from_xml(path=None):
                 invalid_routes.append("Missing fields (Name, Address, NetId)")
                 continue  # Skip this route and move to the next
 
-            name = name.text
-            address = address.text
-            net_id = net_id.text
+            name = name.text.strip()
+            address = address.text.strip()
+            net_id = net_id.text.strip()
 
             # Extract the LGV name
             lgv_name = extract_lgv_name(name)
@@ -253,8 +253,8 @@ def populate_table_from_db3():
         #     messagebox.showwarning("Warning", "One or more routes are missing required fields (Name, Address, NetId).")
         #     continue  # Skip this route and move to the next
 
-            name = f"LGV{str(route['dbf_ID']).zfill(2)}"
-            address = route['dbf_IP']
+            name = f"LGV{str(route['dbf_ID']).strip().zfill(2)}"
+            address = str(route['dbf_IP']).strip()
             net_id = f"{address}.1.1"
 
             # if route['Dbf_Comm_Library']>20 or
