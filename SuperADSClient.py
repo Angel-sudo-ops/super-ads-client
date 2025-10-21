@@ -96,23 +96,38 @@ def populate_table_from_xml(path=None):
             filetypes=[("XML files", "*.xml")])
     else:
         file_path = path
+    
+    routes_data = parse_static_routes_xml(file_path)
 
-    if file_path and not os.path.exists(file_path):
-        print(f"The file {path} does not exist.")
+    if not routes_data:
         return
+    
+    display_data(routes_data)
+    check_and_save_lgv_data(routes_data)
+
+
+def parse_static_routes_xml(path):
+
+    if not path:
+        print("No file selected")
+        return None
+    
+    if not os.path.exists(path):
+        print(f"The file {path} does not exist.")
+        return None
 
     try:
-        tree = ET.parse(file_path)
+        tree = ET.parse(path)
         root = tree.getroot()
     except ET.ParseError:
         messagebox.showerror("Error", "The selected file is not a valid XML file.")
-        return
+        return None
 
     # Check for the expected root elements
     remote_connections = root.find('RemoteConnections')
     if remote_connections is None:
         messagebox.showerror("Error", "XML file does not contain the expected 'RemoteConnections' structure.")
-        return
+        return None
 
     # Initialize an empty list to hold the data
     routes_data = []
@@ -162,8 +177,8 @@ def populate_table_from_xml(path=None):
     
     routes_data.sort(key=lambda x: extract_numeric_part(x[0]))
 
-    display_data(routes_data)
-    save_lgv_data_if_changed(routes_data)
+    return routes_data
+
 
 
 def display_data(data_list):
@@ -266,7 +281,7 @@ def populate_table_from_db3():
     routes_data.sort(key=lambda x: extract_numeric_part(x[0]))
 
     display_data(routes_data)
-    save_lgv_data_if_changed(routes_data)
+    check_and_save_lgv_data(routes_data)
 
 
 def extract_numeric_part(name):
@@ -371,32 +386,98 @@ def load_lgv_data():
         return []
 
 
-def save_lgv_data_if_changed(data, prompt_if_changed=False):
+def check_and_save_lgv_data(data, prompt_if_changed=False):
     """
     Saves LGV data only if it's different from what's currently in LGV_DATA.xml.
     Optionally prompts the user before saving when changes are detected.
+
+    Returns True if data was saved, False otherwise.
     """
-    current_saved = load_lgv_data()
-    
     if not data:
-        return
-    
+        return False
+
+    current_saved = load_lgv_data()
     new_sorted = sorted(data, key=lambda x: extract_numeric_part(x[0]))
 
     if current_saved != new_sorted:
         if prompt_if_changed:
             confirm = messagebox.askyesno(
                 "Save Changes",
-                "Changes to the LGV data were detected.\nDo you want to save them before exiting?"
+                "Changes to the LGV data were detected.\nDo you want to save them?"
             )
             if not confirm:
                 print("User declined to save changes.")
-                return
-        save_lgv_data(data)
+                return False
+        save_lgv_data(new_sorted)
+        return True
+
+    print("No changes detected. Skipping save.")
+    return False
+
+
+def load_if_newer(new_data):
+    """
+    Checks if the provided new_data differs from what's saved in LGV_DATA.xml.
+    If different, asks the user if they want to overwrite the current LGV data,
+    unless there's no saved data, in which case it saves directly.
+
+    Returns True if the data was updated, False otherwise.
+    """
+    current_saved = load_lgv_data()
+    new_sorted = sorted(new_data, key=lambda x: extract_numeric_part(x[0]))
+
+    # If no LGV_DATA.xml exists or it's empty, save directly without asking
+    if not current_saved:
+        print("No existing saved LGV data. Saving default static routes.")
+        save_lgv_data(new_sorted)
+        return True
+
+    if current_saved == new_sorted:
+        print("Loaded static routes match current data. No update needed.")
+        return False
+
+    # Ask user if they want to update saved data
+    confirm = messagebox.askyesno(
+        "Update Saved LGV Data?",
+        "The saved LGV configuration differes from the current StaticRoutes.xml data.\nDo you want to update it?"
+    )
+
+    if confirm:
+        save_lgv_data(new_sorted)
+        return True
     else:
-        print("No changes detected. Skipping save.")
+        print("User chose not to update saved LGV data.")
+        return False
 
+    
+def update_lgv_data_from_default(static_routes_path):
+    """
+    Compares the static routes file to current saved LGV data and updates if different,
+    with a user prompt. Displays the correct data in the table based on user's choice.
+    """
+    static_data = parse_static_routes_xml(static_routes_path)
+    current_saved = load_lgv_data()
 
+    if static_data is None:
+        print("Could not load default static routes. Trying to default to current data")
+        if not current_saved:
+            print("Could not load default static routes or current data")
+            return False
+        
+        display_data(current_saved)
+        print("No StaticRoutes.xml file, defaulting to current data")
+        return False
+    
+    updated = load_if_newer(static_data)
+
+    if updated:
+        # User accepted or no saved data → show default static data
+        display_data(static_data)
+    else:
+        # User declined → show what's currently saved in LGV_DATA.xml
+        display_data(current_saved)
+
+    return updated
 
 
 # With DEL key
@@ -3509,17 +3590,16 @@ refresh_menu_visibility = setup_export_menu_visibility(
 refresh_menu_visibility()
 
 
-# Populate table the first time with current StaticRoutes.xml file
-# populate_table_from_xml(default_file_path)
+# Populate table the first time with current StaticRoutes.xml file if lgv data is different
+update_lgv_data_from_default(default_file_path)
 
 def on_closing():
     close_current_connection()  # Close connection before exiting
 
     # Extract data from Treeview
     routes_data = get_lgv_table_data()
-
     # Save only if changed
-    save_lgv_data_if_changed(routes_data, prompt_if_changed=True)
+    check_and_save_lgv_data(routes_data, prompt_if_changed=True)
 
     root.destroy()  # Close the application
 
