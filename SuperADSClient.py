@@ -561,53 +561,57 @@ def on_double_click_copy_cell(event, treeview, root):
 ################################################################# ADS connection setup #############################################################################
 ####################################################################################################################################################################
 
-monitor_timer = None
+monitor_thread = None
+monitoring_active = False
 failed_checks = 0
-MAX_FAILED_CHECKS = 5
+MAX_FAILED_CHECKS = 3
 
-def monitor_connection_status():
-    global current_ads_connection, monitor_timer
+def start_monitoring_connection():
+    global monitor_thread, monitoring_active
 
-    if current_ads_connection is None:
+    if monitor_thread and monitor_thread.is_alive():
         return
+    
+    monitoring_active = True
+    monitor_thread = threading.Thread(target=monitor_connection_loop, daemon=True)
+    monitor_thread.start()
 
-    try:
-        ip = current_ads_connection.ip_address
-        
-        if not is_host_reachable(ip):
-            failed_checks += 1
-            print(f"[WARN] Host {ip} unreachable ({failed_checks}/{MAX_FAILED_CHECKS})")
-        else:
+def monitor_connection_loop():
+    global current_ads_connection, failed_checks, monitoring_active
 
-            if not check_plc_status(current_ads_connection):
+    while current_ads_connection is not None and monitoring_active:
+        try:
+            ip = current_ads_connection.ip_address
+            
+            if not is_host_reachable(ip):
+                failed_checks += 1
+                print(f"[WARN] Host {ip} unreachable ({failed_checks}/{MAX_FAILED_CHECKS})")
+            elif not check_plc_status(current_ads_connection):
                 failed_checks += 1
                 print(f"[WARN] PLC not in valid state ({failed_checks}/{MAX_FAILED_CHECKS})")
             else:
+                if failed_checks > 0:
+                    print(f"[INFO] Connection recovered. Resetting failure counter.")
                 failed_checks = 0
                 update_status_in_queue("Connected", "green")
 
-        if failed_checks >= MAX_FAILED_CHECKS:
-            print(f"[ERROR] Lost connection to {ip}. Closing after {failed_checks} failed checks.")
+            if failed_checks >= MAX_FAILED_CHECKS:
+                print(f"[ERROR] Lost connection to {ip}. Closing after {failed_checks} failed checks.")
+                disable_control_buttons()
+                update_status_in_queue("Disconnected", "red")
+                close_current_connection()
+                failed_checks = 0
+                break
+
+        except Exception as e:
+            print(f"[ERROR] Exception in monitor : {e}")
             disable_control_buttons()
             update_status_in_queue("Disconnected", "red")
             close_current_connection()
             failed_checks = 0
-            return
+            break
 
-    except Exception as e:
-        print(f"[ERROR] Exception in monitor : {e}")
-        disable_control_buttons()
-        update_status_in_queue("Disconnected", "red")
-        close_current_connection()
-        failed_checks = 0
-        return
-
-    if monitor_timer:
-        monitor_timer.cancel()
-
-    monitor_timer = threading.Timer(1.0, monitor_connection_status)
-    monitor_timer.daemon = True
-    monitor_timer.start()
+        time.sleep(1)
 
 
 def check_plc_status(ads_connection):
@@ -618,10 +622,12 @@ def check_plc_status(ads_connection):
 
 # Close the current connection if it exists
 def close_current_connection():
-    global current_ads_connection, dis_horn_state, connection_in_progress, is_core, monitor_timer
+    global current_ads_connection, dis_horn_state, connection_in_progress, is_core
+    global monitor_thread, monitoring_active, failed_checks
 
     with connection_lock:
         connection_in_progress = False
+        monitoring_active = False
 
         if current_ads_connection:
             current_ads_connection.close()
@@ -634,9 +640,8 @@ def close_current_connection():
             # Stop the read thread
             stop_read_thread()  # Stop and join the thread
 
-        if monitor_timer:
-            monitor_timer.cancel()
-            monitor_timer = None
+        monitor_thread = None
+        failed_checks = 0
 
         update_status_in_queue("Disconnected", "red")
 
@@ -671,7 +676,7 @@ def background_connect(plc_data):
         if connection_active:
 
             # Start monitoring the connection after connecting
-            monitor_connection_status()
+            start_monitoring_connection()
 
             connection_in_progress = False
 
