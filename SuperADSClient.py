@@ -170,8 +170,11 @@ def parse_static_routes_xml(path):
 
     # Warn the user about invalid routes
     if invalid_routes:
-        messagebox.showwarning(
-            "Invalid Routes",
+        # messagebox.showwarning(
+        #     "Invalid Routes",
+        #     f"The following routes were skipped:\n" + "\n".join(invalid_routes)
+        # )
+        print(
             f"The following routes were skipped:\n" + "\n".join(invalid_routes)
         )
     
@@ -186,6 +189,9 @@ def display_data(data_list):
     for lgv_name, net_id, tc_type in data_list:
         treeview.insert("", "end", values=(lgv_name, net_id, tc_type))
     update_tabs()
+
+    root.after(100, lambda: root.focus_force())
+
 
 
 ####################################################################################################################################################################
@@ -344,7 +350,7 @@ def save_lgv_data(data=None, filename=LGV_DATA):
             f.write(pretty_xml)
 
         print(f"Data successfully saved to {filename}.")
-        messagebox.showinfo("Attention", f"LGV data successfully saved to {filename}.")
+        # messagebox.showinfo("Attention", f"LGV data successfully saved to {filename}.")
 
     except Exception as e:
         messagebox.showerror("Error", f"Failed to save LGV data:\n{e}")
