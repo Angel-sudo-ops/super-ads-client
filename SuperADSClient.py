@@ -562,6 +562,8 @@ def on_double_click_copy_cell(event, treeview, root):
 ####################################################################################################################################################################
 
 monitor_timer = None
+failed_checks = 0
+MAX_FAILED_CHECKS = 5
 
 def monitor_connection_status():
     global current_ads_connection, monitor_timer
@@ -570,16 +572,35 @@ def monitor_connection_status():
         return
 
     try:
-        if not check_plc_status(current_ads_connection):
-            raise Exception("PLC not in valid state")
+        ip = current_ads_connection.ip_address
+        
+        if not is_host_reachable(ip):
+            failed_checks += 1
+            print(f"[WARN] Host {ip} unreachable ({failed_checks}/{MAX_FAILED_CHECKS})")
+        else:
 
-        update_status_in_queue("Connected", "green")
+            if not check_plc_status(current_ads_connection):
+                failed_checks += 1
+                print(f"[WARN] PLC not in valid state ({failed_checks}/{MAX_FAILED_CHECKS})")
+            else:
+                failed_checks = 0
+                update_status_in_queue("Connected", "green")
+
+        if failed_checks >= MAX_FAILED_CHECKS:
+            print(f"[ERROR] Lost connection to {ip}. Closing after {failed_checks} failed checks.")
+            disable_control_buttons()
+            update_status_in_queue("Disconnected", "red")
+            close_current_connection()
+            failed_checks = 0
+            return
 
     except Exception as e:
-        # assume connection is lost if not status 5 is read
+        print(f"[ERROR] Exception in monitor : {e}")
         disable_control_buttons()
         update_status_in_queue("Disconnected", "red")
         close_current_connection()
+        failed_checks = 0
+        return
 
     if monitor_timer:
         monitor_timer.cancel()
