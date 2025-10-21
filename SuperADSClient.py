@@ -630,8 +630,15 @@ def background_connect(plc_data):
 
         lgv_name, ams_net_id, tc_type = plc_data
         port = 851 if tc_type == 'TC3' else 801
-        # ip_address = ".".join(str(ams_net_id).split(".")[:4])
+        ip_address = ".".join(str(ams_net_id).split(".")[:4])
         update_status_in_queue("Connecting...", "orange")
+
+        if not is_host_reachable(ip_address):
+            update_status_in_queue(f"Disconnected", "red")
+            messagebox.showwarning("Connection Warning", f"{lgv_name} is not reachable.")
+            with connection_lock:
+                connection_in_progress = False
+            return
 
         # Attempt to open a new connection
         current_ads_connection = pyads.Connection(ams_net_id, port)
@@ -1012,7 +1019,7 @@ def on_dis_horn_button_click(button):
     # Get initial state of disable_horn variable to toggle it
     dis_horn_state = read_variable('disable_horn')
 
-    lgv_data = get_lgv_data()
+    lgv_data = get_lgv_data_from_table()
 
     if lgv_data is None:
         return
@@ -1049,7 +1056,7 @@ def on_button_action(action, value, button, is_release=False):
     if  button_state != 'normal':
         return
 
-    lgv_data = get_lgv_data()
+    lgv_data = get_lgv_data_from_table()
 
     if lgv_data is None:
         # messagebox.showerror("Error", "No LGV selected or invalid data.")
@@ -1267,7 +1274,7 @@ def check_for_core_variable(core_variable):
 
 
 def read_variable(action):
-    lgv_data = get_lgv_data()
+    lgv_data = get_lgv_data_from_table()
     if not lgv_data:
         return
 
@@ -1392,7 +1399,7 @@ def stop_read_thread():
 ####################################################################################################################################################################
 
 # Read the tc_type from the current selection
-def get_lgv_data():
+def get_lgv_data_from_table():
     selected_item = treeview.selection()
     if not selected_item:
         # messagebox.showerror("Error", "No LGV selected")
