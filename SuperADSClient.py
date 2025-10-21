@@ -34,6 +34,8 @@ if not pyads_available:
     # messagebox.showerror("Attention", "No pyads available")
     print("No pyads available")
 
+default_file_path = os.path.join(r'C:\TwinCAT\3.1\Target', 'StaticRoutes.xml')
+
 # __version__ = '2.5.2.1'
 __icon__ = "./plc.ico"
 
@@ -176,6 +178,8 @@ def populate_table_from_xml(path=None):
     # Enable menu for Read/Write if table is updated
     update_tabs()
 
+
+
 ####################################################################################################################################################################
 ########################################################## Initial data reading from db3 file ######################################################################
 ####################################################################################################################################################################
@@ -288,7 +292,7 @@ def save_table_data_to_xml(tree, filename=LGV_DATA):
     # Check if there is any data in the Treeview
     if not tree.get_children():
         print("Treeview is empty. No data to save.")
-        return  # Exit the function if the Treeview is empty
+        return 
 
     # Create the current data structure from the Treeview
     current_data = []
@@ -349,27 +353,34 @@ def load_table_data_from_xml(tree, filename=LGV_DATA):
         tree_xml = ET.parse(filename)
         lgv_list = tree_xml.getroot()
 
-        # Check if there are any <LGV> elements
+        # If the XML exists but has no <LGV> entries, fall back to default
         if not lgv_list.findall("LGV"):
             print("The XML file has no LGV data, loading default table.")
-            # messagebox.showwarning("Warning", "The XML file contains no LGV data. Loading default table.")
-            messagebox.showinfo("Attention", "Default StaticRoutes.xml file loaded")
-            populate_table_from_xml("C:\\TwinCAT\\3.1\\Target\\StaticRoutes.xml")
-            return
+            if os.path.exists(default_file_path):
+                populate_table_from_xml(default_file_path)
+                messagebox.showinfo("Attention", "Default StaticRoutes.xml file loaded")
+            else:
+                messagebox.showerror("Attention", "Default StaticRoutes.xml file not found")
+        else:
+            # Load internal XML content
+            for lgv in lgv_list.findall("LGV"):
+                lgv_name = lgv.find("Name").text.strip()
+                ams_net_id = lgv.find("AMSNetId").text.strip()
+                tc_type = lgv.find("Type").text.strip()
+                tree.insert("", "end", values=(lgv_name, ams_net_id, tc_type))
 
-        for lgv in lgv_list.findall("LGV"):
-            lgv_name = lgv.find("Name").text
-            ams_net_id = lgv.find("AMSNetId").text
-            tc_type = lgv.find("Type").text
-            tree.insert("", "end", values=(lgv_name, ams_net_id, tc_type))
     else:
+        # No internal file at all — use default
         print("No saved XML data found, loading default table.")
-        if os.path.exists("C:\\TwinCAT\\3.1\\Target\\StaticRoutes.xml"):
-            # Populate table the first time with current StaticRoutes.xml file
-            populate_table_from_xml("C:\\TwinCAT\\3.1\\Target\\StaticRoutes.xml")
+        if os.path.exists(default_file_path):
+            populate_table_from_xml(default_file_path)
             messagebox.showinfo("Attention", "Default StaticRoutes.xml file loaded")
         else:
             messagebox.showerror("Attention", "Default StaticRoutes.xml file not found")
+
+    # Always refresh UI after loading
+    update_tabs()
+
 
 # With DEL key
 def delete_selected_record(event):
@@ -377,7 +388,7 @@ def delete_selected_record(event):
     for item in selected_items:
         if item:
             treeview.delete(item)
-
+    update_tabs()
 
 
 def show_tooltip_on_copy(root, text, x, y, duration=1000):
@@ -535,7 +546,7 @@ def background_connect(plc_data):
             enable_control_buttons()
 
             # Automatically detect core variable
-            check_for_core_variable("CoreGVL.ADS_Run")
+            check_for_core_variable("CoreGVL.ADS_Run") # NEEDS TO BE CHANGED
             # Call update_buttons once to start the loop
             # update_buttons()
             update_buttons_from_plc_thread()
@@ -764,7 +775,8 @@ def update_menu():
         options_menu.entryconfig("Reset to Defaults ", state="disabled")  # Disable if file doesn't exist
 
 def update_tabs():
-    if os.path.exists(LGV_DATA):
+    table_has_data = len(treeview.get_children()) > 0
+    if os.path.exists(LGV_DATA) and table_has_data:
         notebook.tab(read_write_tab, state="normal")  # Enable if file exists
     else:
         notebook.tab(read_write_tab, state="disabled")  # Disable if file doesn't exist
@@ -1155,6 +1167,7 @@ def read_variable(action):
         return
 
     if current_ads_connection is None:
+        update_buttons(force_update=True)
         print("ADS connection is closed. Skipping variable read")
         return None
 
@@ -1183,8 +1196,8 @@ def read_variable(action):
     return None
 
 
-def update_buttons():
-    if current_ads_connection is None:
+def update_buttons(force_update=False):
+    if current_ads_connection is None and not force_update:
         return
     # Read variables and update button colors for all actions
     actions = ['reset', 'run', 'stop', 'man_auto', 'disable_horn']
@@ -3169,8 +3182,6 @@ root.config(menu=menu_bar)
 # Update the menu based on whether the file exists
 update_menu()
 
-update_tabs()
-
 
 frame_connect = ttk.Frame(main_tab, width=100)
 # frame_connect.grid_propagate(False)
@@ -3236,7 +3247,11 @@ treeview.configure(yscroll=scrollbar.set)
 scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
 
+def periodic_tab_check():
+    update_tabs()
+    treeview.after(5000, periodic_tab_check)  # every 5 seconds
 
+periodic_tab_check()
 
 # Create a frame for the buttons
 button_frame = ttk.Frame(main_tab, width=170, height=350)
@@ -3284,7 +3299,7 @@ dis_horn_button.pack(pady=5, fill='x', expand=True, ipady=6)
 disable_control_buttons()
 # enable_control_buttons() #Uncomment for testing
 
-load_table_data_from_xml(treeview)
+# load_table_data_from_xml(treeview)
 
 variable_write = load_variables()
 
@@ -3476,7 +3491,8 @@ refresh_menu_visibility = setup_export_menu_visibility(
 refresh_menu_visibility()
 
 
-
+# Populate table the first time with current StaticRoutes.xml file
+populate_table_from_xml(default_file_path)
 
 def on_closing():
     close_current_connection()  # Close connection before exiting
