@@ -34,6 +34,8 @@ if not pyads_available:
     # messagebox.showerror("Attention", "No pyads available")
     print("No pyads available")
 
+default_file_path = os.path.join(r'C:\TwinCAT\3.1\Target', 'StaticRoutes.xml')
+
 # __version__ = '2.5.2.1'
 __icon__ = "./plc.ico"
 
@@ -84,97 +86,113 @@ def extract_lgv_name(input_name):
         return match.group(1)  # Return the matched 'LGVxx' or 'LGVxxx'
     return None
 
-def populate_table_from_xml_test():
-    print("Load StaticRoutes.xml file")
 
 def populate_table_from_xml(path=None):
     if not path:
         # Ask the user to select an XML file
-        file_path = filedialog.askopenfilename(title="Select StaticRoutes file",
-                                            initialdir="C:\\TwinCAT\\3.1\\Target",
-                                            filetypes=[("XML files", "*.xml")])
+        file_path = filedialog.askopenfilename(
+            title="Select StaticRoutes file",
+            initialdir="C:\\TwinCAT\\3.1\\Target",
+            filetypes=[("XML files", "*.xml")])
     else:
         file_path = path
+    
+    routes_data = parse_static_routes_xml(file_path)
 
-    if file_path and not os.path.exists(file_path):
-        print(f"The file {path} does not exist.")
+    if not routes_data:
         return
+    
+    display_data(routes_data)
+    check_and_save_lgv_data(routes_data)
 
-    if file_path:
-        try:
-            tree = ET.parse(file_path)
-            root = tree.getroot()
-        except ET.ParseError:
-            messagebox.showerror("Error", "The selected file is not a valid XML file.")
-            return
 
-        # Check for the expected root elements
-        remote_connections = root.find('RemoteConnections')
-        if remote_connections is None:
-            messagebox.showerror("Error", "XML file does not contain the expected 'RemoteConnections' structure.")
-            return
+def parse_static_routes_xml(path):
 
-        data = treeview.get_children()
-        # Clear the existing table data
-        if data is not None:
-            for i in data:
-                treeview.delete(i)
+    if not path:
+        print("No file selected")
+        return None
+    
+    if not os.path.exists(path):
+        print(f"The file {path} does not exist.")
+        return None
 
-        # Initialize an empty list to hold the data
-        routes_data = []
-        seen_lgv_names = set()
-        invalid_routes = []
+    try:
+        tree = ET.parse(path)
+        root = tree.getroot()
+    except ET.ParseError:
+        messagebox.showerror("Error", "The selected file is not a valid XML file.")
+        return None
 
-        # Iterate through each <Route> element in the XML
-        for route in remote_connections.findall('Route'):
-            name = route.find('Name')
-            address = route.find('Address')
-            net_id = route.find('NetId')
+    # Check for the expected root elements
+    remote_connections = root.find('RemoteConnections')
+    if remote_connections is None:
+        messagebox.showerror("Error", "XML file does not contain the expected 'RemoteConnections' structure.")
+        return None
 
-            if None in (name, address, net_id):
-                messagebox.showwarning("Warning", "One or more routes are missing required fields (Name, Address, NetId).")
-                invalid_routes.append("Missing fields (Name, Address, NetId)")
-                continue  # Skip this route and move to the next
+    # Initialize an empty list to hold the data
+    routes_data = []
+    seen_lgv_names = set()
+    invalid_routes = []
 
-            name = name.text.strip()
-            address = address.text.strip()
-            net_id = net_id.text.strip()
+    # Iterate through each <Route> element in the XML
+    for route in remote_connections.findall('Route'):
+        name = route.find('Name')
+        address = route.find('Address')
+        net_id = route.find('NetId')
 
-            # Extract the LGV name
-            lgv_name = extract_lgv_name(name)
-            if not lgv_name:
-                invalid_routes.append(f"Invalid name format: {name}")
-                continue
+        if None in (name, address, net_id):
+            messagebox.showwarning("Warning", "One or more routes are missing required fields (Name, Address, NetId).")
+            invalid_routes.append("Missing fields (Name, Address, NetId)")
+            continue  # Skip this route and move to the next
 
-            # Check for duplicate LGV names
-            if lgv_name in seen_lgv_names:
-                messagebox.showerror("Duplicate Entry", f"Duplicate LGV name found: {lgv_name}. File cannot be loaded.")
-                return None  # Abort loading the file
+        name = name.text.strip()
+        address = address.text.strip()
+        net_id = net_id.text.strip()
 
-            # Mark the LGV name as seen
-            seen_lgv_names.add(lgv_name)
+        # Extract the LGV name
+        lgv_name = extract_lgv_name(name)
+        if not lgv_name:
+            invalid_routes.append(f"Invalid name format: {name}")
+            continue
 
-            type_tc = "TC3" if route.find('Flags') is not None else "TC2"
+        # Check for duplicate LGV names
+        if lgv_name in seen_lgv_names:
+            messagebox.showerror("Duplicate Entry", f"Duplicate LGV name found: {lgv_name}. File cannot be loaded.")
+            return None  # Abort loading the file
 
-            # Append the tuple to the list
-            routes_data.append((lgv_name, net_id, type_tc))
+        # Mark the LGV name as seen
+        seen_lgv_names.add(lgv_name)
 
-        # Warn the user about invalid routes
-        if invalid_routes:
-            messagebox.showwarning(
-                "Invalid Routes",
-                f"The following routes were skipped:\n" + "\n".join(invalid_routes)
-            )
+        type_tc = "TC3" if route.find('Flags') is not None else "TC2"
 
-        # Populate the Treeview with the data
-        for item in routes_data:
-            treeview.insert("", "end", values=item)
-        # messagebox.showinfo("Success", "Data loaded successfully from the XML file.")
+        # Append the tuple to the list
+        routes_data.append((lgv_name, net_id, type_tc))
 
-    save_table_data_to_xml(treeview)
+    # Warn the user about invalid routes
+    if invalid_routes:
+        # messagebox.showwarning(
+        #     "Invalid Routes",
+        #     f"The following routes were skipped:\n" + "\n".join(invalid_routes)
+        # )
+        print(
+            f"The following routes were skipped:\n" + "\n".join(invalid_routes)
+        )
+    
+    routes_data.sort(key=lambda x: extract_numeric_part(x[0]))
 
-    # Enable menu for Read/Write if table is updated
+    return routes_data
+
+
+
+def display_data(data_list):
+    treeview.delete(*treeview.get_children())
+    for lgv_name, net_id, tc_type in data_list:
+        treeview.insert("", "end", values=(lgv_name, net_id, tc_type))
     update_tabs()
+
+    root.after(100, lambda: root.focus_force())
+
+
 
 ####################################################################################################################################################################
 ########################################################## Initial data reading from db3 file ######################################################################
@@ -216,9 +234,11 @@ def read_db3_file(db3_file_path, table_name):
 
 
 def populate_table_from_db3():
-    db3_path = filedialog.askopenfilename(title="Select config.db3 file",
-                                          initialdir="C:\\Program Files (x86)\\Elettric80",
-                                          filetypes=[("DB3 files", "*.db3")])
+    db3_path = filedialog.askopenfilename(
+        title="Select config.db3 file",
+        initialdir="C:\\Program Files (x86)\\Elettric80",
+        filetypes=[("DB3 files", "*.db3")])
+    
     if not db3_path:
         return
 
@@ -233,10 +253,6 @@ def populate_table_from_db3():
         return
 
     # # print(columns, rows)
-
-    # Clear the existing table data
-    for i in treeview.get_children():
-        treeview.delete(i)
 
     # Default type_tc based on the transfer mode
     default_type_tc = "TC2"  # Assume TC2 unless specified otherwise
@@ -268,108 +284,207 @@ def populate_table_from_db3():
             # Append the tuple to the list
             routes_data.append((name, net_id, type_tc))
 
-    # Populate the Treeview with the data
-    for item in routes_data:
-        treeview.insert("", "end", values=item)
+    routes_data.sort(key=lambda x: extract_numeric_part(x[0]))
 
-    save_table_data_to_xml(treeview)
+    display_data(routes_data)
+    check_and_save_lgv_data(routes_data)
 
-    # Enable menu for Read/Write if table is updated
-    update_tabs()
 
 def extract_numeric_part(name):
     match = re.search(r'\d+', name) #Extract numeric part
     return int(match.group()) if match else float('inf') # Convert to int for correct sorting
 
 
+def get_lgv_table_data():
+    """
+    Extracts LGV data from the Treeview and returns it as a sorted list of tuples:
+    (lgv_name, net_id, type_tc)
+    Sorting is done by the numeric part of the LGV name (e.g., LGV2 before LGV10).
+    """
+    data = []
+
+    for item in treeview.get_children():
+        values = treeview.item(item)["values"]
+
+        if len(values) >= 3:
+            lgv_name = str(values[0]).strip()
+            net_id = str(values[1]).strip()
+            tc_type = str(values[2]).strip()
+            data.append((lgv_name, net_id, tc_type))
+
+    return sorted(data, key=lambda x: extract_numeric_part(x[0]))
+
+
 # Save data to XML
-def save_table_data_to_xml(tree, filename=LGV_DATA):
+def save_lgv_data(data=None, filename=LGV_DATA):
+    """
+    Saves LGV table data to an XML file in <LGVData> format.
+    Uses minidom for pretty formatting.
+    Sorts entries by numeric part of the LGV name.
+    If data is not provided, reads from the Treeview.
+    """
+    if data is None:
+        data = get_lgv_table_data()
 
-    # Check if there is any data in the Treeview
-    if not tree.get_children():
-        print("Treeview is empty. No data to save.")
-        return  # Exit the function if the Treeview is empty
+    if not data:
+        print("No data to save.")
+        return
 
-    # Create the current data structure from the Treeview
-    current_data = []
-    for row in tree.get_children():
-        lgv_data = tree.item(row)["values"]
-        current_data.append({
-            "Name": lgv_data[0],
-            "AMSNetId": lgv_data[1],
-            "Type": lgv_data[2]
-        })
+    # Sort using numeric part of LGV name
+    sorted_data = sorted(data, key=lambda x: extract_numeric_part(x[0]))
 
-    # Sort the current data to ensure consistent ordering
-    current_data.sort(key=lambda x: extract_numeric_part(x["Name"]))
+    root = ET.Element("LGVData")
+
+    for name, net_id, tc_type in sorted_data:
+        lgv = ET.SubElement(root, "LGV")
+        ET.SubElement(lgv, "Name").text = name
+        ET.SubElement(lgv, "AMSNetId").text = net_id
+        ET.SubElement(lgv, "Type").text = tc_type
+
+    # Pretty-print with minidom
+    try:
+        xml_bytes = ET.tostring(root, encoding="utf-8")
+        pretty_xml = minidom.parseString(xml_bytes).toprettyxml(indent="    ")
+
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write(pretty_xml)
+
+        print(f"Data successfully saved to {filename}.")
+        # messagebox.showinfo("Attention", f"LGV data successfully saved to {filename}.")
+
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to save LGV data:\n{e}")
 
 
-    # If the file exists, compare it with the current data
-    if os.path.exists(filename):
-        tree_xml = ET.parse(filename)
-        lgv_list = tree_xml.getroot()
+def load_lgv_data():
+    """
+    Loads LGV data from LGV_DATA.xml (internal format).
+    Returns a sorted list of (LGV name, AMS Net ID, Type) tuples.
+    If the file doesn't exist or contains no LGVs, returns an empty list.
+    """
+    if not os.path.exists(LGV_DATA):
+        print("No LGV_DATA.xml found.")
+        return []
 
-        # Extract the existing data from the XML file
-        existing_data = []
-        for lgv in lgv_list.findall("LGV"):
-            existing_data.append({
-                "Name": lgv.find("Name").text,
-                "AMSNetId": lgv.find("AMSNetId").text,
-                "Type": lgv.find("Type").text
-            })
+    try:
+        tree = ET.parse(LGV_DATA)
+        root = tree.getroot()
+        data = []
 
-        # Sort the existing data to ensure consistent ordering
-        existing_data.sort(key=lambda x: extract_numeric_part(x["Name"]))
+        for lgv in root.findall("LGV"):
+            name = lgv.find("Name")
+            net_id = lgv.find("AMSNetId")
+            tc_type = lgv.find("Type")
 
-        # Compare existing data with current data
-        if existing_data == current_data:
-            print("No changes detected. Data not saved.")
-            return  # Exit if there are no changes
+            if name is None or net_id is None or tc_type is None:
+                continue
 
-    lgv_list = ET.Element("LGVData")
-    for lgv in current_data:
-        lgv_element = ET.SubElement(lgv_list, "LGV")
-        ET.SubElement(lgv_element, "Name").text = lgv["Name"]
-        ET.SubElement(lgv_element, "AMSNetId").text = lgv["AMSNetId"]
-        ET.SubElement(lgv_element, "Type").text = lgv["Type"]
+            lgv_name = name.text.strip()
+            ams_net_id = net_id.text.strip()
+            type_tc = tc_type.text.strip()
 
-    # Convert to a pretty XML string
-    xmlstr = minidom.parseString(ET.tostring(lgv_list, 'utf-8')).toprettyxml(indent="    ")
+            data.append((lgv_name, ams_net_id, type_tc))
 
-    # Write to a file
-    with open(filename, "w", encoding='utf-8') as f:
-        f.write(xmlstr)
+        return sorted(data, key=lambda x: extract_numeric_part(x[0]))
 
-    print(f"Data successfully saved to {filename}.")
-    messagebox.showinfo("Attention", f"LGV data successfully saved to {filename}.")
+    except Exception as e:
+        print(f"Error loading LGV_DATA.xml: {e}")
+        return []
 
-# Load data from XML
-def load_table_data_from_xml(tree, filename=LGV_DATA):
-    if os.path.exists(filename):
-        tree_xml = ET.parse(filename)
-        lgv_list = tree_xml.getroot()
 
-        # Check if there are any <LGV> elements
-        if not lgv_list.findall("LGV"):
-            print("The XML file has no LGV data, loading default table.")
-            # messagebox.showwarning("Warning", "The XML file contains no LGV data. Loading default table.")
-            messagebox.showinfo("Attention", "Default StaticRoutes.xml file loaded")
-            populate_table_from_xml("C:\\TwinCAT\\3.1\\Target\\StaticRoutes.xml")
-            return
+def check_and_save_lgv_data(data, prompt_if_changed=False):
+    """
+    Saves LGV data only if it's different from what's currently in LGV_DATA.xml.
+    Optionally prompts the user before saving when changes are detected.
 
-        for lgv in lgv_list.findall("LGV"):
-            lgv_name = lgv.find("Name").text
-            ams_net_id = lgv.find("AMSNetId").text
-            tc_type = lgv.find("Type").text
-            tree.insert("", "end", values=(lgv_name, ams_net_id, tc_type))
+    Returns True if data was saved, False otherwise.
+    """
+    if not data:
+        return False
+
+    current_saved = load_lgv_data()
+    new_sorted = sorted(data, key=lambda x: extract_numeric_part(x[0]))
+
+    if current_saved != new_sorted:
+        if prompt_if_changed:
+            confirm = messagebox.askyesno(
+                "Save Changes",
+                "Changes to the LGV data were detected.\nDo you want to save them?"
+            )
+            if not confirm:
+                print("User declined to save changes.")
+                return False
+        save_lgv_data(new_sorted)
+        return True
+
+    print("No changes detected. Skipping save.")
+    return False
+
+
+def load_if_newer(new_data):
+    """
+    Checks if the provided new_data differs from what's saved in LGV_DATA.xml.
+    If different, asks the user if they want to overwrite the current LGV data,
+    unless there's no saved data, in which case it saves directly.
+
+    Returns True if the data was updated, False otherwise.
+    """
+    current_saved = load_lgv_data()
+    new_sorted = sorted(new_data, key=lambda x: extract_numeric_part(x[0]))
+
+    # If no LGV_DATA.xml exists or it's empty, save directly without asking
+    if not current_saved:
+        print("No existing saved LGV data. Saving default static routes.")
+        save_lgv_data(new_sorted)
+        return True
+
+    if current_saved == new_sorted:
+        print("Loaded static routes match current data. No update needed.")
+        return False
+
+    # Ask user if they want to update saved data
+    confirm = messagebox.askyesno(
+        "Update Saved LGV Data?",
+        "The saved LGV configuration differes from the current StaticRoutes.xml data.\nDo you want to update it?"
+    )
+
+    if confirm:
+        save_lgv_data(new_sorted)
+        return True
     else:
-        print("No saved XML data found, loading default table.")
-        if os.path.exists("C:\\TwinCAT\\3.1\\Target\\StaticRoutes.xml"):
-            # Populate table the first time with current StaticRoutes.xml file
-            populate_table_from_xml("C:\\TwinCAT\\3.1\\Target\\StaticRoutes.xml")
-            messagebox.showinfo("Attention", "Default StaticRoutes.xml file loaded")
-        else:
-            messagebox.showerror("Attention", "Default StaticRoutes.xml file not found")
+        print("User chose not to update saved LGV data.")
+        return False
+
+    
+def update_lgv_data_from_default(static_routes_path):
+    """
+    Compares the static routes file to current saved LGV data and updates if different,
+    with a user prompt. Displays the correct data in the table based on user's choice.
+    """
+    static_data = parse_static_routes_xml(static_routes_path)
+    current_saved = load_lgv_data()
+
+    if static_data is None:
+        print("Could not load default static routes. Trying to default to current data")
+        if not current_saved:
+            print("Could not load default static routes or current data")
+            return False
+        
+        display_data(current_saved)
+        print("No StaticRoutes.xml file, defaulting to current data")
+        return False
+    
+    updated = load_if_newer(static_data)
+
+    if updated:
+        # User accepted or no saved data → show default static data
+        display_data(static_data)
+    else:
+        # User declined → show what's currently saved in LGV_DATA.xml
+        display_data(current_saved)
+
+    return updated
+
 
 # With DEL key
 def delete_selected_record(event):
@@ -377,8 +492,9 @@ def delete_selected_record(event):
     for item in selected_items:
         if item:
             treeview.delete(item)
+    update_tabs()
 
-
+########################################## Tooltip #####################################################
 
 def show_tooltip_on_copy(root, text, x, y, duration=1000):
     """Show a small tooltip near (x, y) for a short time."""
@@ -535,7 +651,7 @@ def background_connect(plc_data):
             enable_control_buttons()
 
             # Automatically detect core variable
-            check_for_core_variable("CoreGVL.ADS_Run")
+            check_for_core_variable("CoreGVL.ADS_Run") # NEEDS TO BE CHANGED
             # Call update_buttons once to start the loop
             # update_buttons()
             update_buttons_from_plc_thread()
@@ -764,7 +880,8 @@ def update_menu():
         options_menu.entryconfig("Reset to Defaults ", state="disabled")  # Disable if file doesn't exist
 
 def update_tabs():
-    if os.path.exists(LGV_DATA):
+    table_has_data = len(treeview.get_children()) > 0
+    if os.path.exists(LGV_DATA) and table_has_data:
         notebook.tab(read_write_tab, state="normal")  # Enable if file exists
     else:
         notebook.tab(read_write_tab, state="disabled")  # Disable if file doesn't exist
@@ -1155,6 +1272,7 @@ def read_variable(action):
         return
 
     if current_ads_connection is None:
+        update_buttons(force_update=True)
         print("ADS connection is closed. Skipping variable read")
         return None
 
@@ -1183,8 +1301,8 @@ def read_variable(action):
     return None
 
 
-def update_buttons():
-    if current_ads_connection is None:
+def update_buttons(force_update=False):
+    if current_ads_connection is None and not force_update:
         return
     # Read variables and update button colors for all actions
     actions = ['reset', 'run', 'stop', 'man_auto', 'disable_horn']
@@ -3169,8 +3287,6 @@ root.config(menu=menu_bar)
 # Update the menu based on whether the file exists
 update_menu()
 
-update_tabs()
-
 
 frame_connect = ttk.Frame(main_tab, width=100)
 # frame_connect.grid_propagate(False)
@@ -3236,7 +3352,11 @@ treeview.configure(yscroll=scrollbar.set)
 scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
 
+def periodic_tab_check():
+    update_tabs()
+    treeview.after(5000, periodic_tab_check)  # every 5 seconds
 
+periodic_tab_check()
 
 # Create a frame for the buttons
 button_frame = ttk.Frame(main_tab, width=170, height=350)
@@ -3284,7 +3404,7 @@ dis_horn_button.pack(pady=5, fill='x', expand=True, ipady=6)
 disable_control_buttons()
 # enable_control_buttons() #Uncomment for testing
 
-load_table_data_from_xml(treeview)
+# load_table_data_from_xml(treeview)
 
 variable_write = load_variables()
 
@@ -3476,13 +3596,16 @@ refresh_menu_visibility = setup_export_menu_visibility(
 refresh_menu_visibility()
 
 
-
+# Populate table the first time with current StaticRoutes.xml file if lgv data is different
+update_lgv_data_from_default(default_file_path)
 
 def on_closing():
     close_current_connection()  # Close connection before exiting
 
-    # Save data to custom xml to avoid reloading .db3 or .xml everytime app is open
-    save_table_data_to_xml(treeview)
+    # Extract data from Treeview
+    routes_data = get_lgv_table_data()
+    # Save only if changed
+    check_and_save_lgv_data(routes_data, prompt_if_changed=True)
 
     root.destroy()  # Close the application
 

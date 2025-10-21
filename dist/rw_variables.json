@@ -123,5 +123,15 @@
     ".OpenClose4_Exist",
     ".OpenClose4_In_Position",
     ".OpenClose4_In_Position_Counter",
-    ".Frk_Target[1];.Fork_Pos[1,1];.OpenClose4_Dyn_Tol[1];.Frk_In_Position[1];.Frk_Target[2];.Fork_Pos[2,1];.OpenClose4_Dyn_Tol[2];.Frk_In_Position[2];.Frk_Target[3];.Fork_Pos[3,1];.OpenClose4_Dyn_Tol[3];.Frk_In_Position[3];.Frk_Target[4];.Fork_Pos[4,1];.OpenClose4_Dyn_Tol[4];.Frk_In_Position[4]"
+    ".Frk_Target[1];.Fork_Pos[1,1];.OpenClose4_Dyn_Tol[1];.Frk_In_Position[1];.Frk_Target[2];.Fork_Pos[2,1];.OpenClose4_Dyn_Tol[2];.Frk_In_Position[2];.Frk_Target[3];.Fork_Pos[3,1];.OpenClose4_Dyn_Tol[3];.Frk_In_Position[3];.Frk_Target[4];.Fork_Pos[4,1];.OpenClose4_Dyn_Tol[4];.Frk_In_Position[4]",
+    "PLSLatRightHoriz.Test_Case_Number",
+    "PLSLatRightHoriz.Test_Case",
+    "File_Management.File_Type_xml",
+    ".Xml_Load",
+    ".Hmi.Lgc.Backup.Others.FileTypeSelected",
+    ".Hmi.Lgc.Backup.Temp.FileTypeSelected",
+    ".Xml_Save",
+    ".Sys_Heading_Error;.Sys_Distance_Error",
+    "AutoReboot.startRequest",
+    "AutoReboot.DEBUG_test_condition"
 ]
