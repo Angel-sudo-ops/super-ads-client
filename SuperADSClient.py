@@ -569,6 +569,8 @@ MAX_FAILED_CHECKS = 3
 def start_monitoring_connection():
     global monitor_thread, monitoring_active
 
+    print("[DEBUG] start_monitoring_connection() called")
+    print("[DEBUG] monitor_thread =", monitor_thread)
     if monitor_thread and monitor_thread.is_alive():
         return
     
@@ -579,11 +581,28 @@ def start_monitoring_connection():
 def monitor_connection_loop():
     global current_ads_connection, failed_checks, monitoring_active
 
-    while current_ads_connection is not None and monitoring_active:
+    print(f"[Debug] current ads connection= {current_ads_connection}, monitoring = {monitoring_active}")
+
+    while True:
+        print("[DEBUG] Loop tick - current_ads_connection =", current_ads_connection)
+
+        if not current_ads_connection:
+            print("[EXIT] current_ads_connection is None")
+            raise Exception
+
+        if not monitoring_active:
+            print("[EXIT] monitoring_active is False")
+            raise Exception
+
         try:
             ip = current_ads_connection.ip_address
+
+            print(f"[DEBUG] Monitoring connection for IP : {ip}...")
+
+            result = is_host_reachable(ip)
+            print(f"[DEBUG] Reachability: {result}")
             
-            if not is_host_reachable(ip):
+            if not result.reachable:
                 failed_checks += 1
                 print(f"[WARN] Host {ip} unreachable ({failed_checks}/{MAX_FAILED_CHECKS})")
 
@@ -605,11 +624,14 @@ def monitor_connection_loop():
                 break
 
         except Exception as e:
+            import traceback
             print(f"[ERROR] Exception in monitor : {e}")
+            traceback.print_exc()
             set_ui_state("disconnected")
             close_current_connection()
             failed_checks = 0
             break
+
 
         time.sleep(1)
 
@@ -626,11 +648,14 @@ def close_current_connection():
     global current_ads_connection, dis_horn_state, connection_in_progress, is_core
     global monitor_thread, monitoring_active, failed_checks
 
+    print("[DEBUG] close_current_connection() called")
+
     with connection_lock:
         connection_in_progress = False
         monitoring_active = False
 
         if current_ads_connection:
+            print(f"[DEBUG] Closing connection to: {current_ads_connection.ip_address}")
             current_ads_connection.close()
             current_ads_connection = None
 
@@ -3679,6 +3704,8 @@ if getattr(sys, 'frozen', False) and not updated:  # Only in PyInstaller .exe
 ################################################################### Main loop ##########################################################################
 
 root.mainloop()
+
+
 
 
 # root.focus_set()
