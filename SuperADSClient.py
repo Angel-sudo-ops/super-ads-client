@@ -581,40 +581,33 @@ def start_monitoring_connection():
 def monitor_connection_loop():
     global current_ads_connection, failed_checks, monitoring_active
 
-    print(f"[Debug] current ads connection= {current_ads_connection}, monitoring = {monitoring_active}")
+    if not current_ads_connection:
+        print("[EXIT] No active connection at start.")
+        return
 
-    while True:
-        print("[DEBUG] Loop tick - current_ads_connection =", current_ads_connection)
+    ip = current_ads_connection.ip_address
+    print(f"[START] Monitoring connection for IP: {ip}")
 
-        if not current_ads_connection:
-            print("[EXIT] current_ads_connection is None")
-            raise Exception
-
-        if not monitoring_active:
-            print("[EXIT] monitoring_active is False")
-            raise Exception
+    while monitoring_active:
+        print(f"[TICK] Monitoring active: {monitoring_active}")
 
         try:
-            ip = current_ads_connection.ip_address
-
-            print(f"[DEBUG] Monitoring connection for IP : {ip}...")
-
             result = is_host_reachable(ip)
-            print(f"[DEBUG] Reachability: {result}")
+
+            plc_ok = check_plc_status(current_ads_connection)
             
             if not result.reachable:
                 failed_checks += 1
                 print(f"[WARN] Host {ip} unreachable ({failed_checks}/{MAX_FAILED_CHECKS})")
 
-            elif not check_plc_status(current_ads_connection):
+            elif not plc_ok:
                 failed_checks += 1
                 print(f"[WARN] PLC not in valid state ({failed_checks}/{MAX_FAILED_CHECKS})")
 
             else:
                 if failed_checks > 0:
-                    print(f"[INFO] Connection recovered. Resetting failure counter.")
+                    print(f"[INFO] Connection recovered via {result.method}. Resetting failure counter.")
                 failed_checks = 0
-                set_ui_state("connected")
 
             if failed_checks >= MAX_FAILED_CHECKS:
                 print(f"[ERROR] Lost connection to {ip}. Closing after {failed_checks} failed checks.")
@@ -624,23 +617,22 @@ def monitor_connection_loop():
                 break
 
         except Exception as e:
-            import traceback
             print(f"[ERROR] Exception in monitor : {e}")
-            traceback.print_exc()
             set_ui_state("disconnected")
             close_current_connection()
             failed_checks = 0
             break
 
-
         time.sleep(1)
 
 
 def check_plc_status(ads_connection):
-    status = ads_connection.read_state()[0]
-    if status == 5:
-        return True
-    return False
+    try:
+        status = ads_connection.read_state()[0]
+        return status == 5
+    except Exception as e:
+        print(f"[ERROR] Failed to read PLC status: {e}")
+        return False
 
 
 def close_current_connection():
@@ -834,11 +826,13 @@ def on_treeview_select(event):
 
         disable_control_buttons()
         close_current_connection()
+    
+    set_ui_state("disconnected")
 
     with connection_lock:
         connection_in_progress = False
+    
 
-    update_status_in_queue("Disconnected", "red")
 
 # Enable control buttons after a successful connection
 def enable_control_buttons():
