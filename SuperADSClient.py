@@ -561,69 +561,75 @@ def on_double_click_copy_cell(event, treeview, root):
 ################################################################# ADS connection setup #############################################################################
 ####################################################################################################################################################################
 
-monitor_thread = None
 monitoring_active = False
 failed_checks = 0
 MAX_FAILED_CHECKS = 3
 
 def start_monitoring_connection():
-    global monitor_thread, monitoring_active
-
-    print("[DEBUG] start_monitoring_connection() called")
-    print("[DEBUG] monitor_thread =", monitor_thread)
-    if monitor_thread and monitor_thread.is_alive():
-        return
-    
-    monitoring_active = True
-    monitor_thread = threading.Thread(target=monitor_connection_loop, daemon=True)
-    monitor_thread.start()
-
-def monitor_connection_loop():
-    global current_ads_connection, failed_checks, monitoring_active
+    global monitoring_active, failed_checks
 
     if not current_ads_connection:
-        print("[EXIT] No active connection at start.")
+        print("[WARN] No connection to monitor.")
+        return
+
+    if monitoring_active:
+        print("[INFO] Monitor already running.")
+        return
+
+    monitoring_active = True
+    failed_checks = 0
+    monitor_connection_status()
+
+
+def monitor_connection_status():
+    global current_ads_connection, failed_checks, monitoring_active
+
+    if not monitoring_active or not current_ads_connection:
+        print("[INFO] Monitoring stopped or no active connection.")
         return
 
     ip = current_ads_connection.ip_address
-    print(f"[START] Monitoring connection for IP: {ip}")
+    print(f"[DEBUG] Checking connection status for {ip}...")
 
-    while monitoring_active:
-        print(f"[TICK] Monitoring active: {monitoring_active}")
+    try:
+        result = is_host_reachable(ip)
+        plc_ok = check_plc_status(current_ads_connection)
 
-        try:
-            result = is_host_reachable(ip)
+        if not result.reachable:
+            failed_checks += 1
+            print(f"[WARN] Host {ip} unreachable ({failed_checks}/{MAX_FAILED_CHECKS})")
 
-            plc_ok = check_plc_status(current_ads_connection)
-            
-            if not result.reachable:
-                failed_checks += 1
-                print(f"[WARN] Host {ip} unreachable ({failed_checks}/{MAX_FAILED_CHECKS})")
+        elif not plc_ok:
+            failed_checks += 1
+            print(f"[WARN] PLC not in valid state ({failed_checks}/{MAX_FAILED_CHECKS})")
 
-            elif not plc_ok:
-                failed_checks += 1
-                print(f"[WARN] PLC not in valid state ({failed_checks}/{MAX_FAILED_CHECKS})")
+        else:
+            if failed_checks > 0:
+                print(f"[INFO] Connection to {ip} recovered. Resetting failure counter.")
+            failed_checks = 0
 
-            else:
-                if failed_checks > 0:
-                    print(f"[INFO] Connection recovered via {result.method}. Resetting failure counter.")
-                failed_checks = 0
-
-            if failed_checks >= MAX_FAILED_CHECKS:
-                print(f"[ERROR] Lost connection to {ip}. Closing after {failed_checks} failed checks.")
-                set_ui_state("disconnected")
-                close_current_connection()
-                failed_checks = 0
-                break
-
-        except Exception as e:
-            print(f"[ERROR] Exception in monitor : {e}")
+        if failed_checks >= MAX_FAILED_CHECKS:
+            print(f"[ERROR] Lost connection to {ip}. Closing after {failed_checks} failed checks.")
             set_ui_state("disconnected")
             close_current_connection()
             failed_checks = 0
-            break
+            return
 
-        time.sleep(1)
+    except Exception as e:
+        print(f"[ERROR] Exception in monitor_connection_status: {e}")
+        set_ui_state("disconnected")
+        close_current_connection()
+        failed_checks = 0
+        return
+
+    # Schedule the next check
+    root.after(1000, monitor_connection_status)
+
+
+def stop_monitoring_connection():
+    global monitoring_active
+    monitoring_active = False
+
 
 
 def check_plc_status(ads_connection):
@@ -638,14 +644,14 @@ def check_plc_status(ads_connection):
 def close_current_connection():
     """ Close the current connection if it exists """
     global current_ads_connection, dis_horn_state, connection_in_progress, is_core
-    global monitor_thread, monitoring_active, failed_checks
+    global monitor_thread, failed_checks
 
     print("[DEBUG] close_current_connection() called")
 
     with connection_lock:
         connection_in_progress = False
-        monitoring_active = False
-
+        stop_monitoring_connection()
+        
         if current_ads_connection:
             print(f"[DEBUG] Closing connection to: {current_ads_connection.ip_address}")
             current_ads_connection.close()
