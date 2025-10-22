@@ -586,27 +586,27 @@ def monitor_connection_loop():
             if not is_host_reachable(ip):
                 failed_checks += 1
                 print(f"[WARN] Host {ip} unreachable ({failed_checks}/{MAX_FAILED_CHECKS})")
+
             elif not check_plc_status(current_ads_connection):
                 failed_checks += 1
                 print(f"[WARN] PLC not in valid state ({failed_checks}/{MAX_FAILED_CHECKS})")
+
             else:
                 if failed_checks > 0:
                     print(f"[INFO] Connection recovered. Resetting failure counter.")
                 failed_checks = 0
-                update_status_in_queue("Connected", "green")
+                set_ui_state("connected")
 
             if failed_checks >= MAX_FAILED_CHECKS:
                 print(f"[ERROR] Lost connection to {ip}. Closing after {failed_checks} failed checks.")
-                disable_control_buttons()
-                update_status_in_queue("Disconnected", "red")
+                set_ui_state("disconnected")
                 close_current_connection()
                 failed_checks = 0
                 break
 
         except Exception as e:
             print(f"[ERROR] Exception in monitor : {e}")
-            disable_control_buttons()
-            update_status_in_queue("Disconnected", "red")
+            set_ui_state("disconnected")
             close_current_connection()
             failed_checks = 0
             break
@@ -620,8 +620,9 @@ def check_plc_status(ads_connection):
         return True
     return False
 
-# Close the current connection if it exists
+
 def close_current_connection():
+    """ Close the current connection if it exists """
     global current_ads_connection, dis_horn_state, connection_in_progress, is_core
     global monitor_thread, monitoring_active, failed_checks
 
@@ -635,18 +636,18 @@ def close_current_connection():
 
             dis_horn_state = False #reset horn state
             is_core = False
-            core_status_label.config(text="No Core Lib")
-
+            
             # Stop the read thread
             stop_read_thread()  # Stop and join the thread
 
         monitor_thread = None
         failed_checks = 0
 
-        update_status_in_queue("Disconnected", "red")
+        set_ui_state("disconnected")
 
-# Background connection handler (runs in a separate thread)
+
 def background_connect(plc_data):
+    """ Background connection handler (runs in a separate thread) """
     global current_ads_connection, connection_in_progress, connection_active
 
     try:
@@ -657,10 +658,11 @@ def background_connect(plc_data):
         lgv_name, ams_net_id, tc_type = plc_data
         port = 851 if tc_type == 'TC3' else 801
         ip_address = ".".join(str(ams_net_id).split(".")[:4])
-        update_status_in_queue("Connecting...", "orange")
+
+        set_ui_state("connecting")
 
         if not is_host_reachable(ip_address):
-            update_status_in_queue(f"Disconnected", "red")
+            set_ui_state("disconnected")
             messagebox.showwarning("Connection Warning", f"{lgv_name} is not reachable.")
             with connection_lock:
                 connection_in_progress = False
@@ -680,24 +682,18 @@ def background_connect(plc_data):
 
             connection_in_progress = False
 
-            update_status_in_queue("Connected", "green")
-            enable_control_buttons()
-
             # Automatically detect core variable
             check_for_core_variable("CoreGVL.ADS_Run") # NEEDS TO BE CHANGED
             # Call update_buttons once to start the loop
-            # update_buttons()
-            update_buttons_from_plc_thread()
-
-
+            
+            set_ui_state("connected")
 
         else:
             raise Exception("PLC not in a valid state")
 
     except Exception as e:
         current_ads_connection = None
-        disable_control_buttons()
-        update_status_in_queue("Disconnected", "red")
+        set_ui_state("disconnected")
         messagebox.showerror("Connection Error", f"Failed to connect to {lgv_name}: {str(e)}")
         treeview.selection_remove(treeview.selection())
 
@@ -762,6 +758,8 @@ def connect_to_plc(event=None):
         lgv_data = treeview.item(selected_item)["values"]
 
         connection_in_progress = True
+    
+    set_ui_state("connecting")
 
     # Start the connection in a new thread
     connection_thread = threading.Thread(target=background_connect, args=(lgv_data,))
@@ -837,6 +835,28 @@ def on_core_check():
         print("Core library present")
     else:
         print("Normal library")
+
+
+def set_ui_state(state):
+    """
+    Unified UI updater for connection states.
+    States: 'connected', 'connecting', 'disconnected'
+    """
+    if state == "connected":
+        update_status_in_queue("Connected", "green")
+        enable_control_buttons()
+        update_buttons_from_plc_thread()
+        core_status_label.config(text="Core Detected" if is_core else "No Core Lib")
+
+    elif state == "connecting":
+        update_status_in_queue("Connecting...", "orange")
+        disable_control_buttons()
+
+    elif state == "disconnected":
+        update_status_in_queue("Disconnected", "red")
+        disable_control_buttons()
+        core_status_label.config(text="No Core Lib")
+
 
 
 ####################################################################################################################################################################
@@ -1305,7 +1325,7 @@ def read_variable(action):
         return
 
     if current_ads_connection is None:
-        update_buttons(force_update=True)
+        update_buttons()
         print("ADS connection is closed. Skipping variable read")
         return None
 
@@ -1334,8 +1354,8 @@ def read_variable(action):
     return None
 
 
-def update_buttons(force_update=False):
-    if current_ads_connection is None and not force_update:
+def update_buttons():
+    if current_ads_connection is None:
         return
     # Read variables and update button colors for all actions
     actions = ['reset', 'run', 'stop', 'man_auto', 'disable_horn']
@@ -1355,7 +1375,7 @@ def update_buttons(force_update=False):
         update_button_color(action, button, read_value)
 
     # Schedule the function to run again after 2s
-    root.after(50, update_buttons)
+    root.after(200, update_buttons)
 
 def update_button_color(action, button, read_value):
     if read_value is None:
