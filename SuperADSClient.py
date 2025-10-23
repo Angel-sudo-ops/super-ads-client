@@ -644,7 +644,6 @@ def check_plc_status(ads_connection):
 def close_current_connection():
     """ Close the current connection if it exists """
     global current_ads_connection, dis_horn_state, connection_in_progress, is_core
-    global monitor_thread, failed_checks
 
     print("[DEBUG] close_current_connection() called")
 
@@ -661,10 +660,7 @@ def close_current_connection():
             is_core = False
             
             # Stop the read thread
-            stop_read_thread()  # Stop and join the thread
-
-        monitor_thread = None
-        failed_checks = 0
+            # stop_read_thread()  # Stop and join the thread
 
         set_ui_state("disconnected")
 
@@ -828,10 +824,8 @@ def on_treeview_select(event):
             messagebox.showwarning("Attention", f"Horn in {old_lgv_name} is disabled!")
 
         print("Stopping read thread and closing current connection.")
-        stop_read_thread()  # Ensure the read thread is stopped
-
-        disable_control_buttons()
         close_current_connection()
+        disable_control_buttons()
     
     set_ui_state("disconnected")
 
@@ -871,6 +865,7 @@ def set_ui_state(state):
         update_status_in_queue("Connected", "green")
         enable_control_buttons()
         update_buttons_from_plc_thread()
+        # start_read_thread()
         core_status_label.config(text="Core Detected" if is_core else "No Core Lib")
 
     elif state == "connecting":
@@ -1350,7 +1345,6 @@ def read_variable(action):
         return
 
     if current_ads_connection is None:
-        update_buttons()
         print("ADS connection is closed. Skipping variable read")
         return None
 
@@ -1456,6 +1450,8 @@ def start_read_thread():
 
 def stop_read_thread():
     global read_thread
+
+    print(f"Stopping read thread - Read thread is alive : {read_thread.is_alive()}")
 
     if read_thread is not None and read_thread.is_alive():
         print("Stopping read thread.")
