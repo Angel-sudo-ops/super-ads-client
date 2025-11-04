@@ -445,7 +445,7 @@ def load_if_newer(new_data):
     # Ask user if they want to update saved data
     confirm = messagebox.askyesno(
         "Update Saved LGV Data?",
-        "The saved LGV configuration differes from the current StaticRoutes.xml data.\nDo you want to update it?"
+        "The saved LGV configuration differs from the current StaticRoutes.xml data.\nDo you want to update it?"
     )
 
     if confirm:
