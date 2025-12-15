@@ -589,7 +589,7 @@ def monitor_connection_status():
         return
 
     ip = current_ads_connection.ip_address
-    print(f"[DEBUG] Checking connection status for {ip}...")
+    # print(f"[DEBUG] Checking connection status for {ip}...")
 
     try:
         result = is_host_reachable(ip)
@@ -921,6 +921,7 @@ default_variable_write = {
     }
 }
 
+
 def reset_to_defaults():
     global variable_write, read_thread
 
@@ -977,6 +978,40 @@ def load_variables():
     merge_vars = merge_dicts(copy.deepcopy(default_variable_write), user_variables)
     # print(f"Merged vars: {merge_vars}")
     return merge_vars
+
+def load_user_input(plc_type, is_core):
+    """
+    Returns a dictionary of variables to pre-fill the Set Variables window fields.
+    It checks user-defined values in the JSON file; if not found, it returns defaults.
+    """
+    # Load current merged variables (defaults + user overrides)
+    global variable_write  
+    variables = variable_write  
+
+    result = {}
+
+    # Determine the key to read (TC2, TC3/core, TC3/no_core)
+    if plc_type == "TC2":
+        type_key = "TC2"
+    else:
+        type_key = ("TC3", "core") if is_core else ("TC3", "no_core")
+
+    # Iterate through all variable groups (reset, run, stop, etc.)
+    for var_name, var_dict in variables.items():
+
+        if plc_type == "TC2":
+            # Use TC2 → default or user override
+            value = var_dict.get("TC2", "")
+        
+        else:
+            # Use TC3 core/no_core → default or user override
+            tc3_block = var_dict.get("TC3", {})
+            core_key = "core" if is_core else "no_core"
+            value = tc3_block.get(core_key, "")
+
+        result[var_name] = value
+
+    return result
 
 
 def save_user_input(plc_type, is_core, variables):
@@ -1311,11 +1346,14 @@ variable_read = {
         ('TC3', True): "LibraryInterfaces.LGV.Status.MCD_Mode"
     },
     'disable_horn': {
-        'TC2': ".ADS_DisableHorn",
+        'TC2': [".ADS_DisableHorn", "IOLINK_Interface_Output.Dis_Horn"],
         ('TC3', False): "Output.DisableHorn",
         ('TC3', True): "Output.disableHorn"
     }
 }
+
+# Variables run and disable_horn are the only ones read. So we can mix up variable_read variable with the input from the user, wll only for the horn.
+
 
 # Variable to store core status
 is_core = False
@@ -1547,19 +1585,15 @@ def open_variable_window():
     variable_window.geometry(f"{window_width}x{window_lenght}")
     variable_window.minsize(window_width, window_lenght)
 
-    # variable_window.resizable(False,False)
-
-    def clear_entries():
-        for entry in entries.values():
-            entry.delete(0, tk.END)
+    variable_window.resizable(False,False)
 
     def radio_button_changed(*args):
         print(f"Radio button selected: {plc_type.get()}")
-        clear_entries()
+        prefill_data()
 
     def checkbox_changed(*args):
         print(f"Checkbox selected: {is_core.get()}")
-        clear_entries()
+        prefill_data()
 
     # Radio buttons for TC2 and TC3
     plc_type = tk.StringVar(value="TC2") # Default is TC2
@@ -1572,6 +1606,15 @@ def open_variable_window():
         else:
             core_checkbox.config(state="disabled")
             is_core.set(False)  # Reset core to False when TC2 is selected
+    
+    def prefill_data():
+        prefill = load_user_input(plc_type.get(), is_core.get())
+
+        for var_name, entry_widget in entries.items():
+            entry_widget.delete(0, tk.END)
+            var_key = "_".join(str(var_name).split(" ")).lower()
+            entry_widget.insert(0, prefill[var_key])
+
 
     frame_tc_type = tk.Frame(variable_window)
     frame_tc_type.grid(row=0, column=0, columnspan=3, padx=5, pady=5)
@@ -1597,6 +1640,7 @@ def open_variable_window():
         entry.grid(row=i, column=1, padx=10, pady=10)
         entries[label_text] = entry
 
+    prefill_data()
 
     # Save button to capture and save the inputs
     def save():
@@ -3729,3 +3773,6 @@ root.mainloop()
 # Usar coma para separar varias variables y leerlas al mismo tiempo, para escribir solo una
 
 # TO DO
+
+
+# When saving or deleting vars, avoid messagebox, use a disappearing label instead, less intrusive

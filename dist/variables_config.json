@@ -1,0 +1,11 @@
+{
+    "stop": {
+        "TC2": ".IN_Button_Stop"
+    },
+    "reset": {
+        "TC2": ".IN_Button_Reset"
+    },
+    "run": {
+        "TC2": ".IN_Button_Run"
+    }
+}
