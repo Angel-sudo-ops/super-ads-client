@@ -1,37 +1,17 @@
 {
-    "stop": {
-        "TC2": "Input.Button_Stop",
-        "TC3": {
-            "no_core": "Load_Handling.ADS_Stop",
-            "core": "CoreGVL.ADS_Stop"
-        }
-    },
-    "disable_horn": {
-        "TC2": "IOLINK_Interface_Output.Dis_Horn",
-        "TC3": {
-            "no_core": "Output.disableHorn",
-            "core": "Output.disableHorn"
-        }
+    "reset": {
+        "TC2": ".ADS_Reset"
     },
     "run": {
-        "TC2": "Input.Button_Run",
-        "TC3": {
-            "no_core": "Load_Handling.ADS_Run",
-            "core": "CoreGVL.ADS_Run"
-        }
+        "TC2": ".ADS_Run"
     },
-    "reset": {
-        "TC2": "Input.Button_Reset",
-        "TC3": {
-            "no_core": "Load_Handling.ADS_Reset",
-            "core": "CoreGVL.ADS_Reset"
-        }
+    "stop": {
+        "TC2": ".ADS_Stop"
     },
     "man_auto": {
-        "TC2": ".ADS_MCD_Mode",
-        "TC3": {
-            "no_core": "Load_Handling.ADS_MCD_Mode",
-            "core": "CoreGVL.ADS_MCD_Mode"
-        }
+        "TC2": ".ADS_MCD_Mode"
+    },
+    "disable_horn": {
+        "TC2": "IOLINK_Interface_Output.Dis_Horn"
     }
 }

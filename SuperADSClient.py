@@ -916,7 +916,7 @@ default_variable_write = {
         'TC2': ".ADS_DisableHorn",
         'TC3': {
             'core': "Output.disableHorn",
-            'no_core': "Output.DisableHorn"
+            'no_core': "Output.disableHorn"
         }
     }
 }
@@ -1352,9 +1352,6 @@ variable_read = {
     }
 }
 
-# Variables run and disable_horn are the only ones read. So we can mix up variable_read variable with the input from the user, wll only for the horn.
-
-
 # Variable to store core status
 is_core = False
 
@@ -1607,14 +1604,74 @@ def open_variable_window():
             core_checkbox.config(state="disabled")
             is_core.set(False)  # Reset core to False when TC2 is selected
     
+
+    # Maps entry widget → default_value
+    entry_default_map = {}
+
     def prefill_data():
         prefill = load_user_input(plc_type.get(), is_core.get())
 
-        for var_name, entry_widget in entries.items():
-            entry_widget.delete(0, tk.END)
-            var_key = "_".join(str(var_name).split(" ")).lower()
-            entry_widget.insert(0, prefill[var_key])
+        entry_default_map.clear()
 
+        for label_text, entry_widget in entries.items():
+        
+            var_key = label_text.lower().replace(" ", "_")
+            value = prefill[var_key]
+
+            # Get the pure DEFAULT value (without user overrides)
+            default_value = get_default_value(
+                var_name=var_key,
+                plc_type=plc_type.get(),
+                is_core=is_core.get()
+            )
+
+            entry_widget.delete(0, tk.END)
+            entry_widget.insert(0, value)
+
+            if value == default_value:
+                entry_widget.config(style="Default.TEntry")
+            else:
+                entry_widget.config(style="Normal.TEntry")
+
+            entry_default_map[entry_widget] = default_value
+
+            entry_widget.bind("<KeyRelease>", on_entry_change)
+
+
+    def get_default_value(var_name, plc_type, is_core):
+        global default_variable_write
+
+        if plc_type == "TC2":
+            return default_variable_write[var_name]["TC2"]
+
+        core_key = "core" if is_core else "no_core"
+        return default_variable_write[var_name]["TC3"][core_key]
+
+    
+    def on_entry_change(event):
+        entry = event.widget
+        current_value = entry.get()
+        default_value = entry_default_map.get(entry)
+
+        if current_value == default_value:
+            entry.config(style="Default.TEntry")
+        else:
+            entry.config(style="Normal.TEntry")
+
+
+    style = ttk.Style()
+
+    style.configure(
+        "Default.TEntry",
+        foreground="#888888",
+        font=("Segoe UI", 9, "italic")
+    )
+
+    style.configure(
+        "Normal.TEntry",
+        foreground="black",
+        font=("Segoe UI", 9, "normal")
+    )
 
     frame_tc_type = tk.Frame(variable_window)
     frame_tc_type.grid(row=0, column=0, columnspan=3, padx=5, pady=5)
@@ -3776,3 +3833,7 @@ root.mainloop()
 
 
 # When saving or deleting vars, avoid messagebox, use a disappearing label instead, less intrusive
+
+# Add variables to variable_read var when horn is different than the default
+# Variables run and disable_horn are the only ones read. So we can mix up variable_read variable with the input from the user, well only for the horn.
+# For example here [".ADS_DisableHorn", "IOLINK_Interface_Output.Dis_Horn"],
