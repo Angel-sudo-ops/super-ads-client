@@ -1625,10 +1625,13 @@ def open_variable_window():
                 is_core=is_core.get()
             )
 
+            default_value_lower = default_value.lower()
+            cur_value_lower = value.lower()
+
             entry_widget.delete(0, tk.END)
             entry_widget.insert(0, value)
 
-            if value == default_value:
+            if cur_value_lower == default_value_lower:
                 entry_widget.config(style="Default.TEntry")
             else:
                 entry_widget.config(style="Normal.TEntry")
@@ -1650,8 +1653,8 @@ def open_variable_window():
     
     def on_entry_change(event):
         entry = event.widget
-        current_value = entry.get()
-        default_value = entry_default_map.get(entry)
+        current_value = entry.get().lower()
+        default_value = entry_default_map.get(entry).lower()
 
         if current_value == default_value:
             entry.config(style="Default.TEntry")
