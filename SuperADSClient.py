@@ -946,12 +946,29 @@ def reset_to_defaults():
     # else:
         # messagebox.showinfo("Reset", "No saved configuration found.")
 
+
+def has_user_overrides():
+    if not os.path.exists("variables_config.json"):
+        return False
+
+    try:
+        with open("variables_config.json", "r") as f:
+            data = json.load(f)
+
+        if not data:
+            os.remove("variables_config.json")
+            return False
+        
+        return True
+    
+    except Exception:
+        return False
+
+
 # Function to update the menu item based on whether the JSON file exists
 def update_menu():
-    if os.path.exists("variables_config.json"):
-        options_menu.entryconfig("Reset to Defaults ", state="normal")  # Enable if file exists
-    else:
-        options_menu.entryconfig("Reset to Defaults ", state="disabled")  # Disable if file doesn't exist
+    state = "normal" if has_user_overrides() else "disabled"
+    options_menu.entryconfig("Reset to Defaults ", state=state)  # Disable if file doesn't exist
 
 def update_tabs():
     table_has_data = len(treeview.get_children()) > 0
@@ -1016,63 +1033,41 @@ def load_user_input(plc_type, is_core):
 
 def save_user_input(plc_type, is_core, variables):
     global variable_write
+
+    if not variables:
+        return
+
     # Load the existing variables from the JSON file if it exists
     existing_vars = {}
     if os.path.exists("variables_config.json"):
         with open("variables_config.json", "r") as json_file:
             existing_vars = json.load(json_file)
 
-    # merged_existing_vars = merge_dicts(default_variable_write, existing_vars)
+    # Apply overrides
+    for var_name, value in variables.items():
+        if plc_type == "TC2":
+            existing_vars.setdefault(var_name, {})["TC2"] = value
 
-    non_empty_found = False  # Track if the user has entered valid input
-    user_variables = {}  # Store only user-modified variables
+        elif plc_type == "TC3":
+            core_key = "core" if is_core else "no_core"
+            existing_vars.setdefault(var_name, {}).setdefault("TC3", {})[core_key] = value
 
-    # Iterate through user input and process based on selection
-    for key, value in variables.items():
-        if value.strip():  # Ignore empty values
-            if not value:
-                continue
+    # Cleanup empty branches (important for restore-to-default cases)
+    existing_vars = prune_defaults(existing_vars)
 
-            non_empty_found = True
+   # Save
+    with open("variables_config.json", "w") as f:
+        json.dump(existing_vars, f, indent=4)
 
-            default_value = get_default_value(key, plc_type, is_core)
+    messagebox.showinfo(
+        "Success",
+        f"Variables saved for {plc_type} "
+        f"{'' if plc_type == 'TC2' else 'with core' if is_core else 'with no core'}"
+    )
 
-            if default_value and value.strip().lower() == default_value.strip().lower():
-                continue
-
-            if plc_type == "TC2":
-                user_variables.setdefault(key, {})['TC2'] = value
-
-            elif plc_type == "TC3":
-                core_key = 'core' if is_core else 'no_core'
-                # Save only if the new value differs from the default one
-                user_variables.setdefault(key, {}).setdefault('TC3', {})[core_key] = value
-
-    # If no valid input was provided, do not save anything
-    if not non_empty_found:
-        print("No non-empty values found, skipping save.")
-        messagebox.showwarning("Attention", "Add a value to save.")
-        return
-
-   # Recursively merge existing variables with user-modified variables
-    merged_vars = merge_dicts(existing_vars, user_variables)
-    print(f"Merged vars input: {merged_vars}")
-
-    merged_vars = prune_defaults(merged_vars)
-
-    # Save only if there are new or modified variables
-    if user_variables:  # Save only user-modified content, no defaults
-        with open("variables_config.json", "w") as json_file:
-            json.dump(merged_vars, json_file, indent=4)  # Save the final state
-        print(f"Variables saved for {plc_type} {'' if plc_type == 'TC2' else 'with core' if is_core else 'with no core'}")
-        messagebox.showinfo("Success", f"Variables saved for {plc_type} {'' if plc_type == 'TC2' else 'with core' if is_core else 'with no core'}")
-    else:
-        print("No changes detected, nothing to save.")
-
-    # Reload variables after saving to reflect the latest state
+    # Reload merged runtime variables
     variable_write = load_variables()
-    print(f"Variable write: {variable_write}")
-    update_menu()  # Update the reset button state
+    update_menu()
 
 
 def prune_defaults(data):
@@ -1114,6 +1109,34 @@ def get_default_value(var_name, plc_type, is_core):
 
         core_key = "core" if is_core else "no_core"
         return default_variable_write[var_name]["TC3"][core_key]
+
+
+def remove_override(var_name, plc_type, is_core):
+    if not os.path.exists("variables_config.json"):
+        return
+
+    with open("variables_config.json", "r") as f:
+        data = json.load(f)
+
+    if var_name not in data:
+        return
+
+    if plc_type == "TC2":
+        data[var_name].pop("TC2", None)
+
+    elif plc_type == "TC3":
+        core_key = "core" if is_core else "no_core"
+        data[var_name].get("TC3", {}).pop(core_key, None)
+
+        if not data[var_name].get("TC3"):
+            data[var_name].pop("TC3", None)
+
+    # Remove variable if no overrides remain
+    if not data[var_name]:
+        data.pop(var_name)
+
+    with open("variables_config.json", "w") as f:
+        json.dump(data, f, indent=4)
 
 ###################################################################################################################################################################
 
@@ -1647,6 +1670,7 @@ def open_variable_window():
 
     # Maps entry widget → default_value
     entry_default_map = {}
+    entry_var_map   = {}
     # current_right_clicked_entry = None
 
     entry_context_menu = tk.Menu(variable_window, tearoff=0)
@@ -1688,13 +1712,26 @@ def open_variable_window():
 
         if default_value is None:
             return
+        
+        var_name = entry_var_map.get(entry)
+        if not var_name:
+            return
 
         entry.delete(0, tk.END)
         entry.insert(0, default_value)
 
-        # Switch to default style
         entry.config(style="Default.TEntry")
 
+        remove_override(
+            var_name,
+            plc_type.get(),
+            is_core.get()
+        )
+
+        global variable_write
+        variable_write = load_variables()
+
+        update_menu()
 
 
     def prefill_data():
@@ -1781,12 +1818,33 @@ def open_variable_window():
         entry.grid(row=i, column=1, padx=10, pady=10)
         entries[label_text] = entry
 
+        var_name = label_text.lower().replace(" ", "_")
+        entry_var_map[entry] = var_name
+
     prefill_data()
 
     # Save button to capture and save the inputs
     def save():
         # Gather variables using the entries dictionary
-        variables = {key.lower().replace(" ", "_"): entry.get() for key, entry in entries.items()}
+        variables = {}
+
+        for label, entry in entries.items():
+            var_name = label.lower().replace(" ", "_")
+            value = entry.get().strip()
+
+            if not value:
+                continue
+
+            default_value = get_default_value(
+                var_name,
+                plc_type.get(),
+                is_core.get()
+            )
+
+            if default_value and value.lower() == default_value.lower():
+                continue
+
+            variables[var_name] = value
 
         # Call the function to save user input
         save_user_input(plc_type.get(), is_core.get(), variables)
