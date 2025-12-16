@@ -1,0 +1,37 @@
+{
+    "reset": {
+        "TC2": ".ADS_Reset",
+        "TC3": {
+            "core": "CoreGVL.ADS_Reset",
+            "no_core": "Load_Handling.ADS_Reset"
+        }
+    },
+    "run": {
+        "TC2": ".ADS_Run",
+        "TC3": {
+            "core": "CoreGVL.ADS_Run",
+            "no_core": "Load_Handling.ADS_Run"
+        }
+    },
+    "stop": {
+        "TC2": ".ADS_Stop",
+        "TC3": {
+            "core": "CoreGVL.ADS_Stop",
+            "no_core": "Load_Handling.ADS_Stop"
+        }
+    },
+    "man_auto": {
+        "TC2": ".ADS_MCD_Mode",
+        "TC3": {
+            "core": "CoreGVL.ADS_MCD_Mode",
+            "no_core": "Load_Handling.ADS_MCD_Mode"
+        }
+    },
+    "disable_horn": {
+        "TC2": "IOLINK_Interface_Output.Dis_Horn",
+        "TC3": {
+            "core": "Output.disableHorn2",
+            "no_core": "Output.disableHorn"
+        }
+    }
+}

@@ -1022,24 +1022,31 @@ def save_user_input(plc_type, is_core, variables):
         with open("variables_config.json", "r") as json_file:
             existing_vars = json.load(json_file)
 
+    # merged_existing_vars = merge_dicts(default_variable_write, existing_vars)
+
     non_empty_found = False  # Track if the user has entered valid input
     user_variables = {}  # Store only user-modified variables
 
     # Iterate through user input and process based on selection
     for key, value in variables.items():
         if value.strip():  # Ignore empty values
+            if not value:
+                continue
+
             non_empty_found = True
 
+            default_value = get_default_value(key, plc_type, is_core)
+
+            if default_value and value.strip().lower() == default_value.strip().lower():
+                continue
+
             if plc_type == "TC2":
-                # Save only if the new value differs from the current one
-                if existing_vars.get(key, {}).get('TC2') != value:
-                    user_variables.setdefault(key, {})['TC2'] = value
+                user_variables.setdefault(key, {})['TC2'] = value
 
             elif plc_type == "TC3":
                 core_key = 'core' if is_core else 'no_core'
-                # Save only if the new value differs from the current one
-                if existing_vars.get(key, {}).get('TC3', {}).get(core_key) != value:
-                    user_variables.setdefault(key, {}).setdefault('TC3', {})[core_key] = value
+                # Save only if the new value differs from the default one
+                user_variables.setdefault(key, {}).setdefault('TC3', {})[core_key] = value
 
     # If no valid input was provided, do not save anything
     if not non_empty_found:
@@ -1050,6 +1057,8 @@ def save_user_input(plc_type, is_core, variables):
    # Recursively merge existing variables with user-modified variables
     merged_vars = merge_dicts(existing_vars, user_variables)
     print(f"Merged vars input: {merged_vars}")
+
+    merged_vars = prune_defaults(merged_vars)
 
     # Save only if there are new or modified variables
     if user_variables:  # Save only user-modified content, no defaults
@@ -1066,6 +1075,25 @@ def save_user_input(plc_type, is_core, variables):
     update_menu()  # Update the reset button state
 
 
+def prune_defaults(data):
+    cleaned = {}
+
+    for var, content in data.items():
+        if "TC2" in content:
+            cleaned.setdefault(var, {})["TC2"] = content["TC2"]
+
+        if "TC3" in content:
+            tc3 = {}
+            for k in ("core", "no_core"):
+                if k in content["TC3"]:
+                    tc3[k] = content["TC3"][k]
+
+            if tc3:
+                cleaned.setdefault(var, {})["TC3"] = tc3
+
+    return cleaned
+
+
 def merge_dicts(existing, new):
     """Recursively merge two dictionaries."""
     for key, value in new.items():
@@ -1076,6 +1104,18 @@ def merge_dicts(existing, new):
             # Update or add the new value
             existing[key] = value
     return existing
+
+
+def get_default_value(var_name, plc_type, is_core):
+        global default_variable_write
+
+        if plc_type == "TC2":
+            return default_variable_write[var_name]["TC2"]
+
+        core_key = "core" if is_core else "no_core"
+        return default_variable_write[var_name]["TC3"][core_key]
+
+###################################################################################################################################################################
 
 def write_variable(action, tc_type, is_core, value, button):
     global current_ads_connection
@@ -1607,6 +1647,55 @@ def open_variable_window():
 
     # Maps entry widget → default_value
     entry_default_map = {}
+    # current_right_clicked_entry = None
+
+    entry_context_menu = tk.Menu(variable_window, tearoff=0)
+
+    def on_entry_right_click(event):
+        # global current_right_clicked_entry
+        entry = event.widget
+
+        current_value = entry.get()
+        default_value = entry_default_map.get(entry, None)
+
+        # Rebuild menu fresh each time
+        entry_context_menu.delete(0, tk.END)
+
+        if default_value is None:
+            return
+
+        # Only add restore option if DIFFERENT from default
+        cv = current_value.strip().lower()
+        dv = default_value.strip().lower()
+
+        if cv != dv:
+            entry_context_menu.add_command(
+                label="Restore Default",
+                command=lambda e=entry: restore_single_default(e)
+            )
+
+        print(f"[CTX] current='{cv}' default='{dv}' equal={cv == dv}")
+
+        # If menu is empty, do NOT show anything
+        if entry_context_menu.index("end") is None:
+            return  
+
+        # Show the menu at cursor
+        entry_context_menu.tk_popup(event.x_root, event.y_root)
+    
+    def restore_single_default(entry):
+        default_value = entry_default_map.get(entry, "")
+
+        if default_value is None:
+            return
+
+        entry.delete(0, tk.END)
+        entry.insert(0, default_value)
+
+        # Switch to default style
+        entry.config(style="Default.TEntry")
+
+
 
     def prefill_data():
         prefill = load_user_input(plc_type.get(), is_core.get())
@@ -1639,16 +1728,8 @@ def open_variable_window():
             entry_default_map[entry_widget] = default_value
 
             entry_widget.bind("<KeyRelease>", on_entry_change)
-
-
-    def get_default_value(var_name, plc_type, is_core):
-        global default_variable_write
-
-        if plc_type == "TC2":
-            return default_variable_write[var_name]["TC2"]
-
-        core_key = "core" if is_core else "no_core"
-        return default_variable_write[var_name]["TC3"][core_key]
+            entry_widget.bind("<Button-3>", on_entry_right_click)
+            # entry_widget.bind("<Button-2>", on_entry_right_click)
 
     
     def on_entry_change(event):
