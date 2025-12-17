@@ -78,3 +78,49 @@ def attach_tooltip_on_overflow(widget, text_var, separator=","):
     text_var.trace_add("write", on_update)
 
     widget.after(100, check_overflow)
+
+
+
+def show_status_message(
+    root,
+    status_label,
+    message,
+    duration=3000,
+    fade_steps=10,
+    start_color="#00aa00",
+    end_color="#aaaaaa"
+):
+    """Show a temporary status message that fades from start_color to end_color before disappearing."""
+    status_label.config(text=message, foreground=start_color)
+
+    step_duration = duration // fade_steps
+
+    # Helper to convert hex to RGB tuple
+    def hex_to_rgb(hex_color):
+        hex_color = hex_color.lstrip("#")
+        return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+
+    # Helper to convert RGB tuple to hex
+    def rgb_to_hex(rgb_tuple):
+        return "#{:02x}{:02x}{:02x}".format(*rgb_tuple)
+
+    start_rgb = hex_to_rgb(start_color)
+    end_rgb = hex_to_rgb(end_color)
+
+    def fade(step=0):
+        if step >= fade_steps:
+            status_label.config(text="")
+            return
+
+        # Interpolate between start and end RGB values
+        current_rgb = tuple(
+            int(start + (end - start) * (step / fade_steps))
+            for start, end in zip(start_rgb, end_rgb)
+        )
+
+        faded_color = rgb_to_hex(current_rgb)
+        status_label.config(foreground=faded_color)
+
+        root.after(step_duration, lambda: fade(step + 1))
+
+    root.after(duration, fade)

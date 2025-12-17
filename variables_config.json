@@ -1,0 +1,25 @@
+{
+    "reset": {
+        "TC2": ".ADS_Reset2",
+        "TC3": {
+            "core": "CoreGVL.ADS_Reset2"
+        }
+    },
+    "man_auto": {
+        "TC3": {
+            "core": "CoreGVL.ADS_MCD_Mode2"
+        }
+    },
+    "stop": {
+        "TC2": ".ADS_Stop23",
+        "TC3": {
+            "core": "CoreGVL.ADS_Stop2"
+        }
+    },
+    "run": {
+        "TC2": ".ADS_Run3"
+    },
+    "disable_horn": {
+        "TC2": ".ADS_DisableHorn4"
+    }
+}

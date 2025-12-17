@@ -19,7 +19,7 @@ from openpyxl.utils import get_column_letter
 
 from myutils.autoupdater import check_for_updates_async, get_app_version
 from myutils.connectivity import is_host_reachable
-from myutils.ui import attach_tooltip_on_overflow
+from myutils.ui import attach_tooltip_on_overflow, show_status_message
 
 
 try:
@@ -1031,7 +1031,7 @@ def load_user_input(plc_type, is_core):
     return result
 
 
-def save_user_input(plc_type, is_core, variables):
+def save_user_input(root, label, plc_type, is_core, variables):
     global variable_write
 
     if not variables:
@@ -1059,11 +1059,21 @@ def save_user_input(plc_type, is_core, variables):
     with open("variables_config.json", "w") as f:
         json.dump(existing_vars, f, indent=4)
 
-    messagebox.showinfo(
-        "Success",
+    # messagebox.showinfo(
+    #     "Success",
+    #     f"Variables saved for {plc_type} "
+    #     f"{'' if plc_type == 'TC2' else 'with core' if is_core else 'with no core'}"
+    # )
+
+    show_status_message(
+        root, 
+        label, 
         f"Variables saved for {plc_type} "
-        f"{'' if plc_type == 'TC2' else 'with core' if is_core else 'with no core'}"
-    )
+        f"{'' if plc_type == 'TC2' else 'with core' if is_core else 'with no core'}",
+        duration=1000,
+        start_color="#4682B4",
+        fade_steps=10
+        )
 
     # Reload merged runtime variables
     variable_write = load_variables()
@@ -1645,7 +1655,7 @@ def open_variable_window():
     variable_window.geometry(f"{window_width}x{window_lenght}")
     variable_window.minsize(window_width, window_lenght)
 
-    variable_window.resizable(False,False)
+    # variable_window.resizable(False,False)
 
     def radio_button_changed(*args):
         print(f"Radio button selected: {plc_type.get()}")
@@ -1820,6 +1830,7 @@ def open_variable_window():
 
         var_name = label_text.lower().replace(" ", "_")
         entry_var_map[entry] = var_name
+    
 
     prefill_data()
 
@@ -1847,12 +1858,15 @@ def open_variable_window():
             variables[var_name] = value
 
         # Call the function to save user input
-        save_user_input(plc_type.get(), is_core.get(), variables)
+        save_user_input(variable_window, status_var_label, plc_type.get(), is_core.get(), variables)
 
     frame_setvar = tk.Frame(variable_window)
     frame_setvar.grid(row=3, column=0, padx=5, pady=5)
     ttk.Button(frame_setvar, text="Save", command=save).grid(row=0, column=0, pady=10, padx=10, ipadx=5, ipady=5)
     # ttk.Button(frame_setvar, text="Reset", command=reset_to_defaults).grid(row=0, column=1, pady=10, padx=10, ipadx=5, ipady=5)
+
+    status_var_label = ttk.Label(variable_window, text="")
+    status_var_label.place(relx=0.0, rely=0.0, x=200, y=240, anchor="nw")
 
     # Handle window close event to reset the reference
     variable_window.protocol("WM_DELETE_WINDOW", on_variable_window_close)
