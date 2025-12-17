@@ -1034,37 +1034,49 @@ def load_user_input(plc_type, is_core):
 def save_user_input(root, label, plc_type, is_core, variables):
     global variable_write
 
-    if not variables:
-        return
-
-    # Load the existing variables from the JSON file if it exists
-    existing_vars = {}
+    # Load existing overrides
+    data = {}
     if os.path.exists("variables_config.json"):
-        with open("variables_config.json", "r") as json_file:
-            existing_vars = json.load(json_file)
+        with open("variables_config.json", "r") as f:
+            data = json.load(f)
 
-    # Apply overrides
-    for var_name, value in variables.items():
+    tc3_key = "core" if is_core else "no_core"
+
+
+    for var in list(data.keys()):
         if plc_type == "TC2":
-            existing_vars.setdefault(var_name, {})["TC2"] = value
+            if "TC2" in data[var] and var not in variables:
+                data[var].pop("TC2", None)
 
         elif plc_type == "TC3":
-            core_key = "core" if is_core else "no_core"
-            existing_vars.setdefault(var_name, {}).setdefault("TC3", {})[core_key] = value
+            if (
+                "TC3" in data[var]
+                and tc3_key in data[var]["TC3"]
+                and var not in variables
+            ):
+                data[var]["TC3"].pop(tc3_key, None)
 
-    # Cleanup empty branches (important for restore-to-default cases)
-    existing_vars = prune_defaults(existing_vars)
+                if not data[var]["TC3"]:
+                    data[var].pop("TC3", None)
 
-   # Save
-    with open("variables_config.json", "w") as f:
-        json.dump(existing_vars, f, indent=4)
+        # Remove variable if empty
+        if not data[var]:
+            data.pop(var)
 
-    # messagebox.showinfo(
-    #     "Success",
-    #     f"Variables saved for {plc_type} "
-    #     f"{'' if plc_type == 'TC2' else 'with core' if is_core else 'with no core'}"
-    # )
 
+    for var_name, value in variables.items():
+        if plc_type == "TC2":
+            data.setdefault(var_name, {})["TC2"] = value
+        else:
+            data.setdefault(var_name, {}).setdefault("TC3", {})[tc3_key] = value
+
+
+    if data:
+        with open("variables_config.json", "w") as f:
+            json.dump(data, f, indent=4)
+    else:
+        if os.path.exists("variables_config.json"):
+            os.remove("variables_config.json")
     show_status_message(
         root, 
         label, 
