@@ -1,11 +1,15 @@
 {
-    "stop": {
-        "TC2": ".IN_Button_Stop"
+    "disable_horn": {
+        "TC2": "IOLINK_Interface_Output.Dis_Horn"
     },
     "reset": {
-        "TC2": ".IN_Button_Reset"
+        "TC2": "Input.Button_Reset",
+        "TC3": {
+            "no_core": "Load_Handling.ADS_Reset2",
+            "core": "CoreGVL.ADS_Reset2"
+        }
     },
     "run": {
-        "TC2": ".IN_Button_Run"
+        "TC2": "Input.Button_Run"
     }
 }

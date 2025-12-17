@@ -1654,12 +1654,19 @@ def setup_sortable_treeview(treeview, headings, anchor='w', on_sorted=None):
 
 variable_window = None
 
-def open_variable_window_cond():
-    global variable_window
+variable_window_position = None
+
+def open_variable_window_cond(event=None):
+    global variable_window, variable_window_position
 
     if variable_window is not None and variable_window.winfo_exists():
-        variable_window.lift()
-        variable_window.focus_force()
+        geometry = variable_window.geometry() # e.g. "420x400+123+456"
+        pos = geometry.split('+')
+        if len(pos) >= 3:
+            variable_window_position = f"+{pos[1]}+{pos[2]}"
+
+        variable_window.destroy()
+        variable_window = None
     else:
         open_variable_window()
 
@@ -1671,8 +1678,15 @@ def open_variable_window():
 
     window_width = 420
     window_lenght = 310
-    variable_window.geometry(f"{window_width}x{window_lenght}")
+    if variable_window_position:
+        variable_window.geometry(f"{window_width}x{window_lenght}{variable_window_position}")
+    else:
+        variable_window.geometry(f"{window_width}x{window_lenght}")
+
     variable_window.minsize(window_width, window_lenght)
+
+    variable_window.lift()
+    variable_window.focus_force()
 
     # variable_window.resizable(False,False)
 
@@ -1890,7 +1904,7 @@ def open_variable_window():
     # Handle window close event to reset the reference
     variable_window.protocol("WM_DELETE_WINDOW", on_variable_window_close)
 
-def on_variable_window_close():
+def on_variable_window_close(event=None):
     global variable_window
     variable_window.destroy()  # Destroy the window
     variable_window = None  # Reset the reference so it can be reopened
@@ -3169,7 +3183,8 @@ def setup_export_menu_visibility(notebook, rw_tab_frame, menubar, export_menu,
 
 global_shortcuts = [
     ("Ctrl+Shift+Tab", "Change between tabs"),
-    ("F1", "Show shortcuts help")
+    ("F1", "Show shortcuts help"),
+    ("F2", "Show Set Variables Window")
 ]
 
 
@@ -3211,14 +3226,15 @@ def open_shortcuts_window(event=None, tab_text=None):
     if tab_text is None:
         tab_text = notebook.tab(notebook.select(), "text")
 
-    if shortcuts_window is not None and shortcuts_window.winfo_exists():
-        refresh_shortcuts_window(tab_text)
-        shortcuts_window.lift()
-        shortcuts_window.focus_force()
-        return
+    # if shortcuts_window is not None and shortcuts_window.winfo_exists():
+        # refresh_shortcuts_window(tab_text)
+        # shortcuts_window.lift()
+        # shortcuts_window.focus_force()
+        # return
 
     shortcuts_window = tk.Toplevel(root)
     shortcuts_window.title(f"Shortcuts — {tab_text}")
+
 
     window_width = 420
     window_lenght = 470
@@ -3227,6 +3243,9 @@ def open_shortcuts_window(event=None, tab_text=None):
     else:
         shortcuts_window.geometry(f"{window_width}x{window_lenght}")
     shortcuts_window.minsize(window_width, window_lenght)
+
+    shortcuts_window.lift()
+    shortcuts_window.focus_force()
 
     # Add a label for the title
     shortcuts_title_label = ttk.Label(shortcuts_window, text=f"Available Shortcuts — {tab_text}", font=("Segoe UI", 14))
@@ -3631,6 +3650,8 @@ about_menu.add_command(label="Shortcuts    ", command=open_shortcuts_window)
 menu_bar.add_cascade(label=" About", menu=about_menu)
 
 root.bind_all("<F1>", toggle_shortcuts_window)
+
+root.bind_all("<F2>", open_variable_window_cond)
 
 root.config(menu=menu_bar)
 
