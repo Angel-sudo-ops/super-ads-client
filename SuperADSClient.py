@@ -1040,9 +1040,11 @@ def save_user_input(root, label, plc_type, is_core, variables):
         with open("variables_config.json", "r") as f:
             data = json.load(f)
 
+    original_data = copy.deepcopy(data)
+
     tc3_key = "core" if is_core else "no_core"
 
-
+    # Removals
     for var in list(data.keys()):
         if plc_type == "TC2":
             if "TC2" in data[var] and var not in variables:
@@ -1063,12 +1065,16 @@ def save_user_input(root, label, plc_type, is_core, variables):
         if not data[var]:
             data.pop(var)
 
-
+    # Additions
     for var_name, value in variables.items():
         if plc_type == "TC2":
             data.setdefault(var_name, {})["TC2"] = value
         else:
             data.setdefault(var_name, {}).setdefault("TC3", {})[tc3_key] = value
+
+    # --- NO-OP CHECK ---
+    if original_data == data:
+        return
 
 
     if data:
@@ -1077,6 +1083,7 @@ def save_user_input(root, label, plc_type, is_core, variables):
     else:
         if os.path.exists("variables_config.json"):
             os.remove("variables_config.json")
+            
     show_status_message(
         root, 
         label, 
