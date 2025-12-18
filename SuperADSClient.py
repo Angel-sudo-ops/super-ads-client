@@ -1647,6 +1647,21 @@ def setup_sortable_treeview(treeview, headings, anchor='w', on_sorted=None):
             anchor=anchor
         )
 
+###################################################################################################################################################################
+######################################################################### Window helper ###########################################################################
+###################################################################################################################################################################
+
+def get_window_pos_before_close(window):
+    geometry = window.geometry()  # e.g. "420x400+123+456"
+    # Extract just the +x+y part
+    pos = geometry.split('+')
+    if len(pos) >= 3:
+        window.destroy()
+        window = None
+        return f"+{pos[1]}+{pos[2]}"
+    
+###################################################################################################################################################################
+
 
 ####################################################################################################################################################################
 ################################################################ Window To Set Variables ###########################################################################
@@ -1660,13 +1675,7 @@ def open_variable_window_cond(event=None):
     global variable_window, variable_window_position
 
     if variable_window is not None and variable_window.winfo_exists():
-        geometry = variable_window.geometry() # e.g. "420x400+123+456"
-        pos = geometry.split('+')
-        if len(pos) >= 3:
-            variable_window_position = f"+{pos[1]}+{pos[2]}"
-
-        variable_window.destroy()
-        variable_window = None
+        variable_window_position = get_window_pos_before_close(variable_window)
     else:
         open_variable_window()
 
@@ -1905,9 +1914,8 @@ def open_variable_window():
     variable_window.protocol("WM_DELETE_WINDOW", on_variable_window_close)
 
 def on_variable_window_close(event=None):
-    global variable_window
-    variable_window.destroy()  # Destroy the window
-    variable_window = None  # Reset the reference so it can be reopened
+    global variable_window_position
+    variable_window_position = get_window_pos_before_close(variable_window)
 
 
 ####################################################################################################################################################################
@@ -3201,23 +3209,15 @@ shortcuts_frame = None
 shortcuts_title_label = None
 
 shortcuts_window_position = None
-
+        
 def toggle_shortcuts_window(event=None):
     global shortcuts_window, shortcuts_window_position
 
     if shortcuts_window is not None and shortcuts_window.winfo_exists():
-        geometry = shortcuts_window.geometry()  # e.g. "420x400+123+456"
-        # Extract just the +x+y part
-        pos = geometry.split('+')
-        if len(pos) >= 3:
-            shortcuts_window_position = f"+{pos[1]}+{pos[2]}"
-
-        shortcuts_window.destroy()
-        shortcuts_window = None
+        shortcuts_window_position = get_window_pos_before_close(shortcuts_window)
     else:
         tab_text = notebook.tab(notebook.select(), "text")
         open_shortcuts_window(tab_text=tab_text)
-
 
 
 def open_shortcuts_window(event=None, tab_text=None):
@@ -3297,9 +3297,8 @@ def refresh_shortcuts_window(tab_text):
 
 
 def on_shortcuts_window_close():
-    global shortcuts_window
-    shortcuts_window.destroy()
-    shortcuts_window = None
+    global shortcuts_window_position
+    shortcuts_window_position = get_window_pos_before_close(shortcuts_window)
 
     
 ############################################################## Shortcut management #######################################################
