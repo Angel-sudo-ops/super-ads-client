@@ -1,4 +1,4 @@
-('D:\\Documents\\PythonPrograms\\SuperADSClient\\build\\SuperADSClient\\PYZ-00.pyz',
+('D:\\Documents\\PythonPrograms\\SuperADSClient\\build\\superADSClient\\PYZ-00.pyz',
  [('__future__',
    'C:\\Users\\contreras.j\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\__future__.py',
    'PYMODULE'),
