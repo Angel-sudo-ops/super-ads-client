@@ -1683,17 +1683,27 @@ def open_variable_window():
     global variable_window
 
     variable_window = tk.Toplevel(root)
+    variable_window.withdraw()
     variable_window.title("Set Variables")
 
     window_width = 420
     window_lenght = 310
+
+    root.update_idletasks() # Make sure geometry computation is ready before reading it
+
     if variable_window_position:
         variable_window.geometry(f"{window_width}x{window_lenght}{variable_window_position}")
     else:
-        variable_window.geometry(f"{window_width}x{window_lenght}")
+        x = root.winfo_x() + root.winfo_width() + 10
+        y = root.winfo_y()
+
+        variable_window.geometry(f"{window_width}x{window_lenght}+{x}+{y}")
 
     variable_window.minsize(window_width, window_lenght)
 
+    variable_window.iconbitmap(icon_path)
+
+    variable_window.deiconify()
     variable_window.lift()
     variable_window.focus_force()
 
@@ -2029,16 +2039,16 @@ def add_variable(event=None):
 
         if normalized_new_variable.lower() in (var.lower() for var in normalized_existing_variables):
             print("Variable already exists")
-            log_message("Variable already exists", "warning")
+            show_message(status_rwvar_label, "Variable already exists")
         else:
             custom_rw_variables.append(normalized_new_variable)
             save_variables(custom_rw_variables)
             update_variable_menu()
-            print(f"Variable {new_variable} successfully added!")
-            log_message(f"Variable {new_variable} successfully added!", "info")
+            # print(f"Variable {new_variable} successfully added!")
+            show_message(status_rwvar_label, "Variable successfully added!")
     else:
         print("Please enter a valid variable name.")
-        log_message("Please enter a valid variable name.", "error")
+        show_message(status_rwvar_label, "Please enter a valid variable name")
 
 
 def del_variable(event=None):
@@ -2057,13 +2067,13 @@ def del_variable(event=None):
             save_variables(custom_rw_variables)
             update_variable_menu()
             print(f"Variable {removed_var} successfully deleted!")
-            log_message(f"Variable {removed_var} successfully deleted!", "info")
+            show_message(status_rwvar_label, "Variable successfully deleted!")
         else:
             print(f"Variable {variable_to_delete} does not exist in custom list.")
-            log_message("Variable does not exist in custom list.", "warning")
+            show_message(status_rwvar_label, "Variable does not exist in list")
     else:
         print("Please enter a valid variable name to delete.")
-        log_message("Please enter a valid variable name to delete.", "error")
+        show_message(status_rwvar_label, "Please enter a variable")
 
 
 
@@ -2954,6 +2964,16 @@ def log_message(message, showtype="error"):
         case "info":
             messagebox.showinfo("Info", message)
 
+def show_message(label, message):
+    show_status_message(
+        root, 
+        label, 
+        message,
+        duration=1000,
+        start_color="#4682B4",
+        fade_steps=10
+        )
+
 def clear_status():
     """Clear the content of the status widget."""
     # status_widget.delete(1.0, tk.END)  # Clear all content
@@ -3192,7 +3212,7 @@ def setup_export_menu_visibility(notebook, rw_tab_frame, menubar, export_menu,
 global_shortcuts = [
     ("Ctrl+Shift+Tab", "Change between tabs"),
     ("F1", "Show shortcuts help"),
-    ("F2", "Show Set Variables Window")
+    ("F2", "Show Set Variables window")
 ]
 
 
@@ -3233,17 +3253,27 @@ def open_shortcuts_window(event=None, tab_text=None):
         # return
 
     shortcuts_window = tk.Toplevel(root)
+    shortcuts_window.withdraw()
     shortcuts_window.title(f"Shortcuts — {tab_text}")
-
 
     window_width = 420
     window_lenght = 470
+
+    root.update_idletasks()
+
     if shortcuts_window_position:
         shortcuts_window.geometry(f"{window_width}x{window_lenght}{shortcuts_window_position}")
     else:
-        shortcuts_window.geometry(f"{window_width}x{window_lenght}")
+        x = root.winfo_x() + root.winfo_width() + 10
+        y = root.winfo_y()
+
+        shortcuts_window.geometry(f"{window_width}x{window_lenght}+{x}+{y}")
+
     shortcuts_window.minsize(window_width, window_lenght)
 
+    shortcuts_window.iconbitmap(icon_path)
+
+    shortcuts_window.deiconify() # Make window appear again
     shortcuts_window.lift()
     shortcuts_window.focus_force()
 
@@ -3811,6 +3841,10 @@ del_var_btn.grid(row=0, column=2, padx=(2.5,5), pady=5)
 # Extend variable_frame sideways
 variable_frame.grid_columnconfigure(0, weight=1)
 # variable_frame.grid_rowconfigure(0, weight=1)
+
+
+status_rwvar_label = ttk.Label(variable_frame, text="")
+status_rwvar_label.place(relx=1.0, rely=0.0, x=-150, y=-20, anchor="nw")
 
 # Value Input Frame
 value_frame = ttk.LabelFrame(read_write_tab, text="Set Value")

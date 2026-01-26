@@ -132,7 +132,6 @@
     ".Hmi.Lgc.Backup.Temp.FileTypeSelected",
     ".Xml_Save",
     ".Sys_Heading_Error;.Sys_Distance_Error",
-    "AutoReboot.startRequest",
     "AutoReboot.DEBUG_test_condition",
     ".Sys_Navigator_Info.AGV_Pos.x;.Sys_Navigator_Info.AGV_Pos.y;.Sys_Navigator_Info.AGV_Pos.x;.Sys_Navigator_Info.AGV_Pos.h",
     ".Sys_Navigator_Info.AGV_Pos.x;.Sys_Navigator_Info.AGV_Pos.y;.Sys_Navigator_Info.AGV_Pos.h",
@@ -170,5 +169,10 @@
     ".Filo_Bw_Req",
     ".Null_Bw_Req",
     ".Clamp_Bw_Req",
-    ".Sys_RemDst"
+    ".Sys_RemDst",
+    "LibraryInterfaces.LGV.Nav.Info.Quality",
+    "Devices.Pressure.shiftBlindEndChamber.bypassAlarms.sensorError",
+    "PusherMov.pusherActuator.alarms.timeoutFw.filterTimeAtMaxSpeed",
+    "Load_Handling.CurrentPallet.posOnAGV",
+    "InfoMovements.Mov.wagon.curPosition"
 ]

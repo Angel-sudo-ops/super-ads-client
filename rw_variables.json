@@ -134,7 +134,6 @@
     ".Sys_Heading_Error;.Sys_Distance_Error",
     "AutoReboot.startRequest",
     "AutoReboot.DEBUG_test_condition",
-    ".Sys_Navigator_Info.AGV_Pos.x;.Sys_Navigator_Info.AGV_Pos.y;.Sys_Navigator_Info.AGV_Pos.x;.Sys_Navigator_Info.AGV_Pos.h",
     ".Sys_Navigator_Info.AGV_Pos.x;.Sys_Navigator_Info.AGV_Pos.y;.Sys_Navigator_Info.AGV_Pos.h",
     ".CWS_Abs_Diff_Dist_mm_Threshold_dyn",
     ".Ignore_Guidance_Error.ActiveForLateral",
