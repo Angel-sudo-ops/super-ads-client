@@ -1,5 +1,15 @@
 @echo off
 REM ==== Auto-release ====
+
+REM ---------------------------------------------------------
+REM Ensure clean working tree
+REM ---------------------------------------------------------
+git diff --quiet || (
+    echo ERROR: Working tree is not clean.
+    echo Commit or stash changes before preparing a release.
+    exit /b 1
+)
+
 REM Get version number from file
 setlocal
 set /p VERSION=<version.txt
