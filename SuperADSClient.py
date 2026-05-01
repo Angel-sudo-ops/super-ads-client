@@ -2221,25 +2221,27 @@ def get_pyads_type(symbol_info):
     """
     raw_type = symbol_info.symbol_type
     size = symbol_info.array_size
-    t = norm(raw_type)
-
+    t = str(norm(raw_type))
+    
     if t in SYMBOL_TYPE_MAP:
         return SYMBOL_TYPE_MAP[t]
     
-    if t.startswith("STRING"):
-        return pyads.PLCTYPE_STRING
-    if t.startswith("WSTRING"):
+    elif "WSTRING" in t :
         return pyads.PLCTYPE_WSTRING
     
-    # Normalize the type string: Remove array and dimensions, strip whitespace
-    array_match = re.search(r'ARRAY\s*\[.*?\]\s*OF\s*(\w+)', t)
+    elif "STRING" in t:
+        return pyads.PLCTYPE_STRING
+    
+    else:
+        # Normalize the type string: Remove array and dimensions, strip whitespace
+        array_match = re.search(r'ARRAY\s*\[.*?\]\s*OF\s*(\w+)', t)
 
-    if array_match:
-        # Extract the base type from the array declaration
-        base_type = norm(array_match.group(1))
-        return SYMBOL_TYPE_MAP.get(base_type) or (pyads.PLCTYPE_BYTE * size)
-
-    return size_fallback(size)
+        if array_match:
+            # Extract the base type from the array declaration
+            base_type = norm(array_match.group(1))
+            return SYMBOL_TYPE_MAP.get(base_type) or (pyads.PLCTYPE_BYTE * size)
+        else:
+            return size_fallback(size)
 
 
 def check_type(value):

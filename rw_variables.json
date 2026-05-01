@@ -169,5 +169,14 @@
     ".Filo_Bw_Req",
     ".Null_Bw_Req",
     ".Clamp_Bw_Req",
-    ".Sys_RemDst"
+    ".Sys_RemDst",
+    "AlarmsBuffers.criticalAlarmBuffer[0].description",
+    "AlarmsBuffers.infoAlarmBuffer[0].adsPath",
+    "AlarmsBuffers.warningAlarmBuffer[0].adsPath",
+    "AlarmsInterface.numCritical",
+    "AlarmsInterface.numError",
+    "AlarmsInterface.numWarning",
+    "AlarmsInterface.numInfo",
+    "AlarmsBuffers.criticalAlarmBuffer[0].adsPath",
+    "AlarmsBuffers.errorAlarmBuffer[0].adsPath"
 ]
