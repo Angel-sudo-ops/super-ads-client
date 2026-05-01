@@ -7,7 +7,8 @@ a = Analysis(
     binaries=[],
     datas=[
         ('plc.ico', '.'), 
-        ('version.txt', '.')
+        ('version.txt', '.'),
+        ('myutils', 'myutils'),
     ],
     hiddenimports=[],
     hookspath=[],

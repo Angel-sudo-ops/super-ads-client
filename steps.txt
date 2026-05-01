@@ -1,0 +1,5 @@
+prepare_release.bat
+
+pyinstaller "".spec
+
+release.bat

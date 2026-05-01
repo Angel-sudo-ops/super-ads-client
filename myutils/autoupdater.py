@@ -9,14 +9,14 @@ import time
 
 TIMEOUT = 5  # seconds for HTTP requests
 
-def check_for_updates_async(root, current_version, version_url, download_url, app_name=None):
+def check_for_updates_async(root, current_version, version_url, download_url, changelog_url, app_name=None):
     def worker():
         try:
             display_name = app_name or get_app_display_name()
             latest_version = fetch_latest_version(version_url)
             if version.parse(latest_version) > version.parse(current_version):
                 # Messagebox must run in the main thread
-                root.after(0, lambda: ask_and_update(root, current_version, latest_version, download_url, display_name))
+                root.after(0, lambda: ask_and_update(root, current_version, latest_version, download_url, changelog_url, display_name))
             else:
                 print(f"[Updater] Already at latest version ({latest_version})")
                 return
@@ -45,7 +45,33 @@ def fetch_latest_version(version_url):
     return response.text.strip()
 
 
-def ask_and_update(root, current_version, latest_version, download_url, app_name):
+def fetch_changelog(changelog_url):
+    try:
+        r = requests.get(changelog_url, timeout=5)
+        if r.status_code == 200:
+            return r.text.splitlines()
+    except Exception as e:
+        print(f"[Updater] Failed to fetch changelog: {e}")
+    return []
+
+def extract_relevant_changes(lines, current_version):
+    result = []
+    collecting = False
+
+    for line in lines:
+        if line.startswith("[") and line.endswith("]"):
+            version = line[1:-1]
+            if version == current_version:
+                break
+            collecting = True
+
+        if collecting:
+            result.append(line)
+
+    return result
+
+
+def ask_and_update(root, current_version, latest_version, download_url, changelog_url, app_name):
     def ask():
         answer = messagebox.askyesno(
             "Update Available",
@@ -53,15 +79,29 @@ def ask_and_update(root, current_version, latest_version, download_url, app_name
             parent=root
         )
         if answer:
+            raw_changelog = fetch_changelog(changelog_url)
+
+            relevant_changelog = extract_relevant_changes(
+                raw_changelog,
+                current_version
+            )
+
             if root:
                 root.destroy()
-            download_and_prepare_batch(current_version, latest_version, download_url, app_name)
+
+            download_and_prepare_batch(
+                current_version, 
+                latest_version, 
+                download_url,
+                app_name,
+                changelog=relevant_changelog)
+            
             sys.exit(0)
 
     root.after(0, ask)
 
 
-def download_and_prepare_batch(current_version, latest_version, download_url, app_name):
+def download_and_prepare_batch(current_version, latest_version, download_url, app_name, changelog):
     try:
         if getattr(sys, 'frozen', False):
             # Running as a PyInstaller .exe
@@ -96,11 +136,9 @@ def download_and_prepare_batch(current_version, latest_version, download_url, ap
                         bar = "#" * filled_length + "-" * (bar_length - filled_length)
                         print(f"\rDownloading... [{bar}] {percent:3d}%", end="", flush=True)
 
-        print("\n[Updater] Download complete.")
-
         old_version_name = f"{os.path.splitext(current_exe_name)[0]}_{current_version}.exe"
         batch_path = os.path.join(current_dir, "run_updater.bat")
-
+        
         with open(batch_path, 'w', encoding='utf-8') as batch:
             batch.write("@echo off\n")
             batch.write("title Application Updater\n")
@@ -158,8 +196,23 @@ def download_and_prepare_batch(current_version, latest_version, download_url, ap
             batch.write("echo ={:^{width}}=\n".format("You can now run the new version:", width=box_width - 2))
             batch.write(f"echo = {exe_display} =\n")
             batch.write("echo " + "=" * box_width + "\n")
-            batch.write("echo.\n")
-            
+
+            if changelog:
+                batch.write("echo.\n")
+                batch.write("echo " + "=" * box_width + "\n")
+                batch.write("echo WHAT'S NEW:\n")
+                batch.write("echo " + "=" * box_width + "\n")
+
+                for line in changelog:
+                    if not line.strip():
+                        batch.write("echo(\n")
+                    else:
+                        safe_line = line.replace("&", "^&")
+                        batch.write(f"echo {safe_line}\n")
+
+                batch.write("echo " + "=" * box_width + "\n")
+
+            batch.write("echo(\n")
             batch.write("echo Press any key to exit... \n")
             batch.write("pause >nul\n")
             # batch.write("echo This window will close automatically in 10 seconds...\n")
@@ -215,3 +268,6 @@ def get_app_version():
             return f.read().strip()
     except FileNotFoundError:
         return "Unknown"
+    
+
+#maybe just show commits since last version??
