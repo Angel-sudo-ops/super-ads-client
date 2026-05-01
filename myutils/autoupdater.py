@@ -59,8 +59,9 @@ def extract_relevant_changes(lines, current_version):
     collecting = False
 
     for line in lines:
-        if line.startswith("[") and line.endswith("]"):
-            version = line[1:-1]
+        stripped_line = line.strip()
+        if stripped_line.startswith("[") and stripped_line.endswith("]"):
+            version = stripped_line[1:-1]
             if version == current_version:
                 break
             collecting = True
@@ -85,6 +86,13 @@ def ask_and_update(root, current_version, latest_version, download_url, changelo
                 raw_changelog,
                 current_version
             )
+
+            # debug
+            # log_path = os.path.join(os.path.dirname(sys.executable), "updater_debug.log")
+            # with open(log_path, "w") as f:
+            #     f.write(f"current_version: '{current_version}'\n")
+            #     f.write(f"raw_changelog: {raw_changelog}\n")
+            #     f.write(f"relevant_changelog: {relevant_changelog}\n")
 
             if root:
                 root.destroy()

@@ -110,7 +110,7 @@ del prev_tag.tmp 2>nul
 REM ---------------------------------------------------------
 REM Generate changelog
 REM ---------------------------------------------------------
-echo [%NEW_VERSION%] > changelog.new
+echo [%NEW_VERSION%]> changelog.new
 
 if defined PREV_TAG (
     git log %PREV_TAG%..HEAD --pretty=format:"- %%s" | findstr /v /i "export .exe bump version" >> changelog.new
