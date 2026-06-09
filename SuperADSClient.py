@@ -702,7 +702,7 @@ def background_connect(plc_data):
             connection_in_progress = False
 
             # Automatically detect core variable
-            check_for_core_variable("CoreGVL.ADS_Run") # NEEDS TO BE CHANGED
+            check_for_core_variable("CoreGVL.flexSeg") # NEEDS TO BE CHANGED
             # Call update_buttons once to start the loop
             
             set_ui_state("connected")
@@ -4069,3 +4069,6 @@ root.mainloop()
 # Add variables to variable_read var when horn is different than the default
 # Variables run and disable_horn are the only ones read. So we can mix up variable_read variable with the input from the user, well only for the horn.
 # For example here [".ADS_DisableHorn", "IOLINK_Interface_Output.Dis_Horn"],
+
+
+# make a visual differentiattor for variables that are stored in the app and the rest of course are the ones in the list

@@ -94,7 +94,7 @@ git rev-parse %TAG% >nul 2>&1 && (
 REM ---------------------------------------------------------
 REM Write version.txt
 REM ---------------------------------------------------------
-echo %NEW_VERSION% > version.txt
+echo %NEW_VERSION%> version.txt
 
 REM ---------------------------------------------------------
 REM Determine previous tag (if any)

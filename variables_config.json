@@ -1,0 +1,12 @@
+{
+    "reset": {
+        "TC3": {
+            "core": "CoreGVL.ADS_Client_Reset"
+        }
+    },
+    "run": {
+        "TC3": {
+            "core": "CoreGVL.ADS_Client_Run"
+        }
+    }
+}

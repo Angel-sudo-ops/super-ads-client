@@ -256,5 +256,11 @@
     "AlarmsInterface.numWarning",
     "AlarmsInterface.numInfo",
     "AlarmsBuffers.criticalAlarmBuffer[0].adsPath",
-    "AlarmsBuffers.errorAlarmBuffer[0].adsPath"
+    "AlarmsBuffers.errorAlarmBuffer[0].adsPath",
+    "LibraryInterfaces.LGV.Guid.PathFol.Cur_Seg_Data",
+    "LiftMov.lift.maxSpeedPerc.risingLoaded",
+    "LiftMov.lift.maxSpeedPerc.risingLoaded;LiftMov.lift.maxSpeedPerc.risingUnloaded;LiftMov.lift.maxSpeedPerc.droppingLoaded;LiftMov.lift.maxSpeedPerc.droppingUnloaded",
+    "Operation.warehouseLoad.step",
+    "Operation.current.InChannelExit",
+    "Devices.Pressure.clamps.value"
 ]

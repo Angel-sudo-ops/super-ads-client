@@ -178,5 +178,10 @@
     "AlarmsInterface.numWarning",
     "AlarmsInterface.numInfo",
     "AlarmsBuffers.criticalAlarmBuffer[0].adsPath",
-    "AlarmsBuffers.errorAlarmBuffer[0].adsPath"
+    "AlarmsBuffers.errorAlarmBuffer[0].adsPath",
+    "Devices.Pressure.clamps.value",
+    "LibraryInterfaces.LGV.Status.SelectorInZero",
+    "ClampsMov.clamps.curFeedbackSpeed",
+    "ClampsMov.clamps.curFeedbackSpeed;ClampsMov.clamps.curSpeed",
+    "ClampsMov.clampsActuator.alarms.speedNull.filterTime"
 ]

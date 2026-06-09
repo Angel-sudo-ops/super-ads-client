@@ -1,5 +1,23 @@
 {
     "man_auto": {
-        "TC2": ".Sys_MCD_Mode"
+        "TC2": ".Sys_MCD_Mode",
+        "TC3": {
+            "core": "CoreGVL.ADS_Cient_MCD_Mode"
+        }
+    },
+    "reset": {
+        "TC3": {
+            "core": "CoreGVL.ADS_Client_Reset"
+        }
+    },
+    "run": {
+        "TC3": {
+            "core": "CoreGVL.ADS_Client_Run"
+        }
+    },
+    "stop": {
+        "TC3": {
+            "core": "CoreGVL.ADS_Client_Stop"
+        }
     }
 }
