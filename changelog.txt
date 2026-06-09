@@ -1,3 +1,7 @@
+[2.5.5.8]
+- change variable to detect lgv with core (use CoreGVL.flexSeg)
+- bugfix when extracting changelog
+ 
 [2.5.5.7] 
 - adjust release.bat, exit if clean working tree not clean
  
