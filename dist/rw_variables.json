@@ -262,5 +262,8 @@
     "LiftMov.lift.maxSpeedPerc.risingLoaded;LiftMov.lift.maxSpeedPerc.risingUnloaded;LiftMov.lift.maxSpeedPerc.droppingLoaded;LiftMov.lift.maxSpeedPerc.droppingUnloaded",
     "Operation.warehouseLoad.step",
     "Operation.current.InChannelExit",
-    "Devices.Pressure.clamps.value"
+    "Devices.Pressure.clamps.value",
+    "MovementsParameters.liftpar.minHeightWithWagonInside",
+    "SpareVariables.boolSpare[9];SpareVariables.boolSpare[10]",
+    "Operation.warehouseUnload.pushingInputs.timeIsStable"
 ]

@@ -4030,6 +4030,16 @@ if getattr(sys, 'frozen', False) and not updated:  # Only in PyInstaller .exe
             changelog_url="https://github.com/sudojac/super-ads-client/releases/latest/download/changelog.txt"
         ))
 
+
+
+
+
+try:
+    import pyi_splash
+    pyi_splash.close()
+except ImportError:
+    pass
+
 ################################################################### Main loop ##########################################################################
 
 root.mainloop()
