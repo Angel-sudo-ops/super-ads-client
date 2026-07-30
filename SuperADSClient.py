@@ -16,6 +16,7 @@ import functools
 import csv
 import openpyxl
 from openpyxl.utils import get_column_letter
+import logging
 
 from myutils.autoupdater import check_for_updates_async, get_app_version
 from myutils.connectivity import is_host_reachable
@@ -4031,7 +4032,12 @@ if getattr(sys, 'frozen', False) and not updated:  # Only in PyInstaller .exe
         ))
 
 
+# logging
 
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
 
 
 try:
